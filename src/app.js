@@ -530,7 +530,7 @@ function playerModalHtml() {
   const editing = Boolean(player.id);
   return `<div class="modal-backdrop" data-action="close-modal"><form class="card modal" data-form="player" aria-modal="true" role="dialog">
     <div class="section-title"><div><h2>${editing ? 'Профіль гравця' : 'Новий гравець'}</h2><p>Фото стискається локально перед збереженням</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div>
-    <div class="avatar-editor">${avatar(player, 'large')}<div><label class="btn" for="avatar-file">Обрати фото</label><input id="avatar-file" class="visually-hidden" type="file" accept="image/*" data-input="avatar"><p class="field-hint">До 512×512 px, WebP/JPEG. Фото не відправляється в мережу.</p></div></div>
+    <div class="avatar-editor">${avatar(player, 'large')}<div><div class="avatar-source-actions"><label class="btn primary" for="avatar-camera">📷 Зробити фото</label><input id="avatar-camera" class="visually-hidden" type="file" accept="image/*" capture="environment" data-input="avatar-camera"><label class="btn" for="avatar-gallery">Обрати з галереї</label><input id="avatar-gallery" class="visually-hidden" type="file" accept="image/*" data-input="avatar-gallery"></div><p class="field-hint">Камера може запросити дозвіл. Знімок обрізається до квадрата, стискається до 512×512 px і не відправляється в мережу.</p></div></div>
     <div class="stack">
       <div class="field"><label for="player-name">Ім’я *</label><input id="player-name" class="input" name="name" value="${esc(player.name || '')}" maxlength="60" required autofocus></div>
       <div class="field"><label for="player-nickname">Нік / позивний</label><input id="player-nickname" class="input" name="nickname" value="${esc(player.nickname || '')}" maxlength="40"></div>
@@ -1216,9 +1216,9 @@ async function handleChange(element) {
     const profile = playerById(element.value);
     if (profile) seat.name = profile.name;
     render();
-  } else if (element.dataset.input === 'avatar' && element.files?.[0]) {
+  } else if (['avatar-camera', 'avatar-gallery'].includes(element.dataset.input) && element.files?.[0]) {
     try {
-      toast('Обробляю фото…');
+      toast(element.dataset.input === 'avatar-camera' ? 'Обробляю знімок…' : 'Обробляю фото…');
       app.modal.player.avatar = await compressImage(element.files[0]);
       render();
       toast('Фото готове');

@@ -369,6 +369,7 @@ img { display: block; max-width: 100%; }
 .modal > p { margin: 0 0 16px; color: var(--muted); line-height: 1.45; }
 .modal-actions { margin-top: 18px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .avatar-editor { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 14px; margin: 14px 0; }
+.avatar-source-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .seat-sheet-head { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 12px; }
 .seat-sheet-head h2 { margin: 0; }
 .seat-action-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
@@ -462,6 +463,8 @@ img { display: block; max-width: 100%; }
   .phase-strip { min-height: 48px; }
   .control-card { padding: 10px; }
   .game-side { display: none; }
+  .avatar-editor { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+  .avatar-source-actions { justify-content: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

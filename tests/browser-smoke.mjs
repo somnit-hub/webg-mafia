@@ -58,6 +58,11 @@ await wait(400);
 
 await click('[data-nav="players"]');
 await click('[data-action="new-player"]');
+const cameraControl = await evaluate(`({
+  cameraInput: Boolean(document.querySelector('#avatar-camera')),
+  captureMode: document.querySelector('#avatar-camera')?.getAttribute('capture'),
+  galleryInput: Boolean(document.querySelector('#avatar-gallery'))
+})`);
 await evaluate(`document.querySelector('#player-name').value = 'Тестова Гравчиня'`);
 await click('.modal button[type="submit"]');
 await wait(200);
@@ -89,7 +94,7 @@ const nomination = await evaluate(`({
   latestLog: document.querySelector('.quick-log')?.innerText.split('\\n').slice(0, 2)
 })`);
 
-const result = { profile, firstDay, nomination, browserErrors };
+const result = { cameraControl, profile, firstDay, nomination, browserErrors };
 console.log(JSON.stringify(result, null, 2));
 
 if (process.env.SMOKE_SCREENSHOT) {
@@ -99,6 +104,7 @@ if (process.env.SMOKE_SCREENSHOT) {
 }
 
 if (firstDay.hash !== '#game' || firstDay.seats !== 10 || firstDay.phase !== 'День 1') process.exitCode = 1;
+if (!cameraControl.cameraInput || cameraControl.captureMode !== 'environment' || !cameraControl.galleryInput) process.exitCode = 1;
 if (profile.cards !== 1 || profile.modalOpen) process.exitCode = 1;
 if (nomination.candidates.length !== 1 || nomination.modalOpen || browserErrors.length) process.exitCode = 1;
 socket.close();

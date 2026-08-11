@@ -1,0 +1,15 @@
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local environment and logs
+.env
+.env.*
+*.log
+node_modules/
+
+# Local test artifacts
+coverage/
+test-results/

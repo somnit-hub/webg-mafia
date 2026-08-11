@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#0d0d10" />
+<title>Спортивна Мафія 10 — ведучий гри</title>
+<style>
+:root{
+  --bg:#0b0b0d;--panel:#131318;--panel2:#19191f;--line:#2a2a32;--text:#f4f1ea;--muted:#9b99a3;
+  --red:#d64848;--red2:#7d232a;--black:#070709;--gold:#d7b56d;--green:#58b37a;--blue:#6b8fd6;
+  --shadow:0 18px 60px rgba(0,0,0,.28);--radius:18px;
+}
+*{box-sizing:border-box} html,body{margin:0;min-height:100%;background:radial-gradient(circle at 50% -10%,#251a1c 0,#0b0b0d 38%,#09090b 100%);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input,select{font:inherit} button{cursor:pointer}
+body{min-height:100vh;min-height:100dvh}
+.app{max-width:1440px;margin:auto;min-height:100vh;padding:22px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:12px}.brandmark{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#2f1417,#101014);border:1px solid #593037;box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}
+.brandmark:before{content:"M";font:700 16px Georgia,serif;color:var(--gold)}
+.brand h1{font-size:16px;letter-spacing:.16em;text-transform:uppercase;margin:0}.brand small{display:block;color:var(--muted);font-size:12px;letter-spacing:.02em;margin-top:2px}
+.top-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.btn{border:1px solid var(--line);background:#17171c;color:var(--text);border-radius:12px;padding:10px 14px;transition:.15s;min-height:42px}.btn:hover{background:#202027;border-color:#383842}.btn:active{transform:translateY(1px)}
+.btn.primary{background:linear-gradient(180deg,#9b2d37,#74232b);border-color:#b03a46}.btn.primary:hover{background:linear-gradient(180deg,#aa3540,#7e272f)}
+.btn.gold{background:linear-gradient(180deg,#d6b36b,#ae8945);border-color:#e6c888;color:#17120a;font-weight:800}.btn.ghost{background:transparent}.btn.danger{border-color:#71323a;background:#2b1519;color:#ffd9dd}.btn.success{border-color:#2f6848;background:#15261d;color:#d7ffe4}.btn.small{padding:7px 10px;min-height:34px;border-radius:10px;font-size:13px}.btn.icon{width:42px;padding:0;display:grid;place-items:center}.btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.card{background:linear-gradient(180deg,rgba(24,24,30,.96),rgba(16,16,20,.96));border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.hero{padding:30px;display:grid;grid-template-columns:1.2fr .8fr;gap:26px;align-items:stretch}
+.kicker{font-size:12px;letter-spacing:.18em;color:var(--gold);text-transform:uppercase;font-weight:800}.hero h2{font-size:clamp(34px,5vw,66px);line-height:.95;margin:12px 0 16px;max-width:760px;letter-spacing:-.04em}.hero h2 span{color:#d55359}.lead{color:#c5c2c8;max-width:720px;line-height:1.6;font-size:16px}.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+.rulebox{padding:22px;background:linear-gradient(145deg,#181319,#111116);border:1px solid #39272c;border-radius:16px;display:flex;flex-direction:column;justify-content:space-between}.rulegrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px}.stat{background:#0f0f13;border:1px solid #282830;border-radius:14px;padding:14px}.stat b{font-size:22px;display:block}.stat span{font-size:12px;color:var(--muted)}
+.section{padding:22px;margin-top:16px}.section-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}.section-title h3{margin:0;font-size:18px}.section-title p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.players-input{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.field{display:flex;flex-direction:column;gap:6px}.field label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.input,.select{width:100%;border:1px solid var(--line);background:#0d0d11;color:var(--text);padding:11px 12px;border-radius:12px;outline:none}.input:focus,.select:focus{border-color:#6d4c52;box-shadow:0 0 0 3px rgba(145,57,70,.12)}
+.settings-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);background:#101015;border-radius:14px;padding:12px}.switch{position:relative;width:44px;height:24px;border-radius:99px;background:#30303a;border:0;padding:0}.switch:after{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;border-radius:50%;background:#aaa;transition:.16s}.switch.on{background:#7d2932}.switch.on:after{left:23px;background:#fff}
+.reveal-wrap{max-width:760px;margin:6vh auto}.reveal-head{text-align:center;margin-bottom:18px}.reveal-head h2{font-size:32px;margin:8px 0}.pass-card{padding:34px;text-align:center;min-height:470px;display:flex;flex-direction:column;justify-content:center;align-items:center;position:relative;overflow:hidden}.pass-card:before{content:"";position:absolute;inset:-40%;background:radial-gradient(circle,rgba(170,53,63,.13),transparent 45%);pointer-events:none}.seat-badge{width:72px;height:72px;border-radius:50%;display:grid;place-items:center;border:1px solid #5a343a;background:#171219;font-size:30px;font-weight:900;color:var(--gold);margin-bottom:18px}.pass-card h3{font-size:28px;margin:0}.pass-card p{max-width:520px;color:var(--muted);line-height:1.55}.role-card{width:min(420px,100%);border-radius:20px;padding:28px;border:1px solid #3b3b45;background:#111116;box-shadow:0 30px 80px rgba(0,0,0,.35);margin:16px 0}.role-card.red{border-color:#66363b;background:linear-gradient(145deg,#241419,#111116)}.role-card.black{border-color:#34343b;background:linear-gradient(145deg,#09090b,#16161b)}.role-icon{font-size:42px}.role-name{font-size:30px;font-weight:900;margin:7px 0}.role-team{font-size:12px;text-transform:uppercase;letter-spacing:.18em;color:var(--muted)}
+.game-layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}.game-main{min-width:0}.phasebar{padding:18px;display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:16px;position:sticky;top:10px;z-index:20;backdrop-filter:blur(15px);background:rgba(18,18,23,.88)}
+.phase-left{display:flex;align-items:center;gap:12px;min-width:0}.phase-dot{width:12px;height:12px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 6px rgba(215,181,109,.08)}.phase-dot.night{background:#7187bd}.phase-left h2{font-size:17px;margin:0}.phase-left p{font-size:12px;color:var(--muted);margin:3px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.alive-count{font-size:13px;color:var(--muted);white-space:nowrap}
+.table-card{padding:18px}.seats-grid{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:10px}.seat{position:relative;min-height:174px;border:1px solid var(--line);background:linear-gradient(180deg,#17171d,#101014);border-radius:15px;padding:13px;display:flex;flex-direction:column;transition:.15s;overflow:hidden}.seat:hover{border-color:#3d3d48}.seat.active-speaker{border-color:#9f6c3e;box-shadow:0 0 0 2px rgba(215,181,109,.08),0 16px 30px rgba(0,0,0,.16)}.seat.nominated{border-color:#874047}.seat.dead{opacity:.48;filter:saturate(.4)}.seat.dead:after{content:"ВИБУВ";position:absolute;right:-31px;top:18px;transform:rotate(38deg);background:#56252c;color:#ffd9dc;font-size:9px;font-weight:900;letter-spacing:.12em;padding:4px 36px}.seat-head{display:flex;justify-content:space-between;gap:6px}.seat-num{font-size:22px;font-weight:950;color:var(--gold)}.faults{display:flex;gap:3px;align-items:center}.fault-dot{width:7px;height:7px;border-radius:50%;border:1px solid #6b5558;background:transparent}.fault-dot.on{background:#d34a56;border-color:#d34a56}.seat-name{font-weight:800;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.role-mini{font-size:11px;color:var(--muted);margin-top:3px}.seat-spacer{flex:1}.seat-actions{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:10px}.seat-actions .btn{font-size:11px;padding:7px 8px;min-height:32px}.nom-tag{font-size:10px;margin-top:7px;color:#ffb7bd}.restricted{font-size:10px;color:#e7c079;margin-top:4px}
+.control-card{padding:20px;margin-top:16px}.control-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:18px}.speaker-block{border-right:1px solid var(--line);padding-right:18px}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}.speaker-name{font-size:26px;font-weight:900;margin:5px 0}.timer{font-variant-numeric:tabular-nums;font-size:clamp(62px,8vw,104px);line-height:.9;letter-spacing:-.05em;font-weight:200;margin:20px 0}.timer.danger{color:#ff777e}.timer-controls{display:flex;gap:8px;flex-wrap:wrap}.queue{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}.queue-chip{font-size:11px;border:1px solid var(--line);border-radius:9px;padding:5px 7px;color:var(--muted)}.queue-chip.current{color:#17120a;background:var(--gold);border-color:var(--gold);font-weight:800}.queue-chip.done{opacity:.4}
+.nom-list{display:flex;flex-direction:column;gap:8px;margin-top:10px}.nom-item{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:12px;background:#101014;padding:10px 12px}.empty{border:1px dashed #33333c;border-radius:14px;padding:20px;text-align:center;color:var(--muted);font-size:13px}.helper{font-size:12px;color:var(--muted);line-height:1.5}.control-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.side{position:sticky;top:10px;display:flex;flex-direction:column;gap:16px}.side .card{padding:18px}.side h3{font-size:15px;margin:0 0 12px}.summary-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #23232a;font-size:13px}.summary-row:last-child{border-bottom:0}.summary-row span{color:var(--muted)}
+.secret-row{display:flex;flex-wrap:wrap;gap:6px}.secret-chip{font-size:11px;border:1px solid #33333c;border-radius:9px;padding:6px 8px;background:#0d0d11}.secret-chip.black{border-color:#47474e}.secret-chip.red{border-color:#65333a;color:#ffd2d5}
+.log{max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:8px;padding-right:4px}.log-item{font-size:12px;color:#bebac1;border-left:2px solid #383842;padding:3px 0 3px 9px;line-height:1.45}.log-item b{color:#eee}.log-time{color:#77737d;margin-right:5px}
+.night-card{padding:28px;text-align:center}.night-icon{width:70px;height:70px;border-radius:50%;display:grid;place-items:center;background:#111522;border:1px solid #30394f;margin:0 auto 14px;font-size:28px}.night-card h2{font-size:28px;margin:7px 0}.night-card p{color:var(--muted);max-width:660px;margin:0 auto 20px;line-height:1.6}.target-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;max-width:760px;margin:16px auto}.target{border:1px solid var(--line);border-radius:12px;background:#111116;color:var(--text);padding:11px 8px;min-height:58px}.target:hover{border-color:#555562}.target.selected{border-color:var(--gold);box-shadow:0 0 0 2px rgba(215,181,109,.1)}.target.dead{opacity:.25;pointer-events:none}.target b{display:block;font-size:18px;color:var(--gold)}.night-result{max-width:440px;margin:16px auto;border:1px solid #444451;background:#0e0e12;border-radius:16px;padding:18px}.night-result.good{border-color:#764049;background:#211317}.night-result.bad{border-color:#42424c;background:#0b0b0e}.night-result strong{font-size:22px;display:block;margin-top:4px}.privacy{font-size:11px;color:#8b8790;margin-top:8px}
+.vote-wrap{padding:22px}.vote-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:16px}.vote-card{border:1px solid var(--line);border-radius:16px;background:#111116;padding:16px;text-align:center}.vote-card h4{margin:0 0 4px;font-size:16px}.vote-card .num{font-size:46px;font-weight:200;font-variant-numeric:tabular-nums;margin:10px 0}.stepper{display:flex;justify-content:center;gap:8px}.stepper .btn{width:42px}.vote-total{text-align:center;color:var(--muted);font-size:13px;margin-top:14px}.tie-banner{border:1px solid #634a2d;background:#211b12;color:#f5d79c;border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:13px}.yesno{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:620px;margin:18px auto}.yesno .vote-card{padding:22px}
+.overlay{position:fixed;inset:0;background:rgba(3,3,5,.78);backdrop-filter:blur(10px);z-index:100;display:grid;place-items:center;padding:18px}.modal{width:min(620px,100%);max-height:90vh;overflow:auto;padding:24px}.modal h2{margin:0 0 8px}.modal p{color:var(--muted);line-height:1.55}.modal-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:18px}
+.gameover{text-align:center}.winner-symbol{font-size:58px}.winner-red{color:#ff777e}.winner-black{color:#ddd}.roles-end{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;text-align:left;margin-top:18px}.end-row{border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px;display:flex;justify-content:space-between;gap:10px}.end-row span{color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#eee;color:#111;padding:10px 14px;border-radius:12px;font-size:13px;font-weight:700;z-index:200;opacity:0;pointer-events:none;transition:.2s;box-shadow:0 15px 40px rgba(0,0,0,.35)}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.muted{color:var(--muted)}.hide{display:none!important}.divider{height:1px;background:var(--line);margin:16px 0}.kbd{border:1px solid #3c3c45;background:#0b0b0e;border-radius:6px;padding:1px 5px;font-size:10px;color:#bcb8bf}
+@media(max-width:1050px){.game-layout{grid-template-columns:1fr}.side{position:static;display:grid;grid-template-columns:1fr 1fr}.seats-grid{grid-template-columns:repeat(5,1fr)}}
+@media(max-width:800px){.app{padding:12px}.hero{grid-template-columns:1fr;padding:22px}.players-input{grid-template-columns:repeat(2,1fr)}.settings-grid{grid-template-columns:repeat(2,1fr)}.seats-grid{grid-template-columns:repeat(2,1fr)}.seat{min-height:150px}.control-grid{grid-template-columns:1fr}.speaker-block{border-right:0;border-bottom:1px solid var(--line);padding-right:0;padding-bottom:18px}.side{grid-template-columns:1fr}.target-grid{grid-template-columns:repeat(2,1fr)}.phasebar{top:4px}.topbar{align-items:flex-start}.brand small{display:none}.timer{font-size:76px}.roles-end{grid-template-columns:1fr}}
+@media(max-width:480px){.players-input,.settings-grid{grid-template-columns:1fr}.hero h2{font-size:42px}.rulegrid{grid-template-columns:1fr 1fr}.section{padding:16px}.top-actions .label{display:none}.phasebar{padding:14px}.phase-left p{max-width:200px}.seats-grid{gap:8px}.seat{padding:11px}.seat-name{font-size:13px}.control-card{padding:16px}.yesno{grid-template-columns:1fr}.pass-card{padding:22px;min-height:440px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<script>
+(()=>{
+'use strict';
+const STORAGE_KEY='sportMafia10UA_v1';
+const roleDeck=[
+  {key:'sheriff',label:'Шериф',team:'red',icon:'★',desc:'Щоночі перевіряєте одного гравця й дізнаєтесь, чи належить він до чорної команди.'},
+  {key:'don',label:'Дон',team:'black',icon:'◆',desc:'Очолюєте чорну команду. Щоночі можете перевірити одного гравця в пошуках Шерифа.'},
+  {key:'mafia',label:'Мафія',team:'black',icon:'●',desc:'Ви — чорна команда. На нульовій ночі познайомтесь із Доном та іншим гравцем Мафії.'},
+  {key:'mafia',label:'Мафія',team:'black',icon:'●',desc:'Ви — чорна команда. На нульовій ночі познайомтесь із Доном та іншим гравцем Мафії.'},
+  ...Array.from({length:6},()=>({key:'citizen',label:'Мирний житель',team:'red',icon:'○',desc:'Ваша зброя — логіка, промова та голос. Знайдіть і виведіть усю чорну команду.'}))
+];
+const defaultSettings={speech:60,tieSpeech:30,lastWord:60,nightCheck:15,sound:true,firstDaySingleNoVote:true,lastGetsRemainder:true,penaltyMode:'tournament'};
+let state=createInitialState();
+let timerHandle=null, toastHandle=null;
+let undoStack=[];
+
+function createInitialState(){
+  return {version:1,screen:'setup',players:Array.from({length:10},(_,i)=>({id:i+1,name:`Гравець ${i+1}`,role:null,status:'alive',faults:0,nominatedBy:null,noVote:false,speechRestriction:false,restrictionDay:null,shortSpeechDay:null})),settings:{...defaultSettings},revealIndex:0,revealOpen:false,day:1,phase:'zeroNight',subphase:'mafiaMeet',speakerIndex:0,nominations:[],vote:{counts:{},round:0,tied:[],previousTieKey:'',yes:0,no:0},night:{step:0,target:null,donCheck:null,sheriffCheck:null,resultOpen:false},timer:{remaining:60,running:false,purpose:'speech'},history:[],rolesVisible:false,gameOver:null,modal:null};
+}
+function clone(v){return JSON.parse(JSON.stringify(v))}
+function safeGet(){try{return localStorage.getItem(STORAGE_KEY)}catch(e){return null}}
+function safeRemove(){try{localStorage.removeItem(STORAGE_KEY)}catch(e){}}
+function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({...state,timer:{...state.timer,running:false}}))}catch(e){}}
+function load(){try{const raw=safeGet();if(!raw)return false;const s=JSON.parse(raw);if(s&&s.version===1){state=s;state.timer.running=false;return true}}catch(e){}return false}
+function pushUndo(){undoStack.push(clone({...state,timer:{...state.timer,running:false},modal:null}));if(undoStack.length>25)undoStack.shift()}
+function commit({undo=false,log=null}={}){if(undo)pushUndo();if(log)addLog(log);save();render()}
+function addLog(text,secret=false){state.history.unshift({text,secret,at:new Date().toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'})});if(state.history.length>100)state.history.length=100}
+function toast(msg){const el=document.getElementById('toast');if(!el)return;el.textContent=msg;el.classList.add('show');clearTimeout(toastHandle);toastHandle=setTimeout(()=>el.classList.remove('show'),1800)}
+function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function alivePlayers(){return state.players.filter(p=>p.status==='alive')}
+function voterCount(){return alivePlayers().filter(p=>!(state.settings.penaltyMode==='club'&&p.noVote)).length}
+function getPlayer(id){return state.players.find(p=>p.id===Number(id))}
+function roleOf(p){return roleDeck.find(r=>r.key===p.role)||null}
+function teamOf(p){const r=roleOf(p);return r?r.team:null}
+function blackAlive(){return alivePlayers().filter(p=>teamOf(p)==='black').length}
+function redAlive(){return alivePlayers().filter(p=>teamOf(p)==='red').length}
+function speakerOrder(){
+  const start=((state.day-1)%10)+1, ids=[];
+  for(let i=0;i<10;i++){const id=((start-1+i)%10)+1;const p=getPlayer(id);if(p&&p.status==='alive')ids.push(id)}
+  return ids;
+}
+function currentSpeaker(){const o=speakerOrder();return getPlayer(o[Math.min(state.speakerIndex,o.length-1)])}
+function isRestrictedNow(p){return !!(p&&p.restrictionDay&&state.day>=p.restrictionDay)}
+function isShortSpeechNow(p){return !!(p&&p.shortSpeechDay&&state.day>=p.shortSpeechDay)}
+function timerBaseForSpeaker(p){
+  if(!p)return state.settings.speech;
+  if(state.settings.penaltyMode==='tournament'&&isRestrictedNow(p))return 10;
+  if(state.settings.penaltyMode==='club'&&isShortSpeechNow(p))return 30;
+  return state.settings.speech;
+}
+function formatTime(sec){const s=Math.max(0,sec|0);return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`}
+function setTimer(seconds,purpose='speech'){stopTimer();state.timer={remaining:Number(seconds)||0,running:false,purpose};}
+function startTimer(){if(state.timer.running)return;state.timer.running=true;clearInterval(timerHandle);timerHandle=setInterval(()=>{if(!state.timer.running)return;state.timer.remaining=Math.max(0,state.timer.remaining-1);if(state.timer.remaining<=0){stopTimer();beep();toast('Час вичерпано')}render(false);},1000);render(false)}
+function stopTimer(){state.timer.running=false;clearInterval(timerHandle);timerHandle=null}
+function beep(){if(!state.settings.sound)return;try{const ac=new (window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=740;g.gain.value=.05;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.13)}catch(e){}}
+function checkVictory(){
+  if(state.gameOver)return true;
+  const b=blackAlive(),r=redAlive();
+  if(b===0){state.gameOver='red';state.phase='gameOver';stopTimer();addLog('Гру завершено: перемога мирного міста.');return true}
+  if(b>=r){state.gameOver='black';state.phase='gameOver';stopTimer();addLog('Гру завершено: чорна команда досягла паритету.');return true}
+  return false;
+}
+function eliminatePlayer(id,reason,lastWord=true){state.afterNightKill=false;state.multiLastWords=[];const p=getPlayer(id);if(!p||p.status!=='alive')return;p.status='dead';p.eliminatedReason=reason;p.nominatedBy=null;state.nominations=state.nominations.filter(x=>x!==p.id);addLog(`#${p.id} ${p.name} вибуває (${reason}).`);if(checkVictory())return;if(lastWord){state.phase='lastWord';state.subphase='lastWord';state.lastWordPlayer=p.id;setTimer(state.settings.lastWord,'lastWord')}else{goNight()}}
+function goDay(){
+  state.day+= state.phase==='zeroNight'?0:1;
+  state.phase='day';state.subphase='speeches';state.speakerIndex=0;state.nominations=[];state.vote={counts:{},round:0,tied:[],previousTieKey:'',yes:0,no:0};
+  state.players.forEach(p=>{p.nominatedBy=null});
+  const p=currentSpeaker();if(p&&p.speechRestriction)p._restrictionUsed=true;setTimer(timerBaseForSpeaker(p),'speech');addLog(`Починається День ${state.day}.`);save();render();
+}
+function goNight(){
+  if(checkVictory()){save();render();return}
+  state.phase='night';state.subphase='night';state.nominations=[];state.players.forEach(p=>p.nominatedBy=null);state.night={step:0,target:null,donCheck:null,sheriffCheck:null,resultOpen:false};setTimer(state.settings.nightCheck,'night');addLog(`Настає Ніч ${state.day}.`);save();render();
+}
+function consumeSpeechPenalty(p){if(!p)return;if(state.settings.penaltyMode==='tournament'&&isRestrictedNow(p))p.restrictionDay=null;if(state.settings.penaltyMode==='club'&&isShortSpeechNow(p))p.shortSpeechDay=null}
+function nextSpeaker(){
+  const order=speakerOrder();if(!order.length)return;
+  const outgoing=currentSpeaker();consumeSpeechPenalty(outgoing);
+  if(state.speakerIndex<order.length-1){state.speakerIndex++;const p=currentSpeaker();setTimer(timerBaseForSpeaker(p),'speech');save();render();}
+  else{state.subphase='dayEnd';stopTimer();save();render()}
+}
+function assignRoles(){
+  const deck=shuffle(roleDeck.map(r=>r.key));state.players.forEach((p,i)=>{p.role=deck[i];p.status='alive';p.faults=0;p.nominatedBy=null;p.noVote=false;p.speechRestriction=false;p.restrictionDay=null;p.shortSpeechDay=null;delete p._restrictionUsed;delete p.eliminatedReason});
+}
+function beginNewGame(){assignRoles();state.screen='reveal';state.revealIndex=0;state.revealOpen=false;state.day=1;state.phase='zeroNight';state.subphase='mafiaMeet';state.history=[];state.gameOver=null;state.rolesVisible=false;state.modal=null;undoStack=[];addLog('Створено нову гру та випадково розподілено ролі.',true);save();render()}
+function beginModerator(){state.screen='game';state.phase='zeroNight';state.subphase='mafiaMeet';state.day=1;setTimer(state.settings.nightCheck,'night');addLog('Нульова ніч: чорна команда знайомиться та домовляється.');save();render()}
+function setupScreen(){
+ return `<div class="app">
+  ${topbar(false)}
+  <section class="card hero">
+    <div><div class="kicker">Турнірний формат • 10 гравців</div><h2>Спортивна<br><span>Мафія 10</span></h2><p class="lead">Односторінковий помічник ведучого: ролі, нульова ніч, черга промов, таймери, виставлення, голосування, автокатастрофа, нічні перевірки, фоли та протокол гри. Працює локально без сервера.</p>
+      <div class="hero-actions"><button class="btn gold" data-action="newGame">Створити партію</button><button class="btn" data-action="fillNames">Заповнити номери</button>${safeGet()?'<button class="btn ghost" data-action="resume">Продовжити збережену</button>':''}</div>
+    </div>
+    <div class="rulebox"><div><div class="kicker">Склад столу</div><div class="rulegrid"><div class="stat"><b>7</b><span>червоних</span></div><div class="stat"><b>3</b><span>чорних</span></div><div class="stat"><b>1</b><span>Шериф</span></div><div class="stat"><b>1</b><span>Дон</span></div></div></div><p class="helper">Базовий профіль: 6 мирних + Шериф проти 2 мафій + Дона. Мафія перемагає при чисельному паритеті з червоними.</p></div>
+  </section>
+  <section class="card section"><div class="section-title"><div><h3>Гравці та місця</h3><p>Номер місця залишається фіксованим протягом партії.</p></div><button class="btn small" data-action="shuffleNames">Перемішати посадку</button></div>
+    <div class="players-input">${state.players.map(p=>`<div class="field"><label>Місце ${p.id}</label><input class="input" data-name-id="${p.id}" value="${esc(p.name)}" maxlength="24"></div>`).join('')}</div>
+  </section>
+  <section class="card section"><div class="section-title"><div><h3>Регламент</h3><p>Найуживаніші параметри спортивної класики можна змінити під ваш клуб.</p></div></div>
+    <div class="settings-grid">
+      ${numField('Промова, сек','speech',state.settings.speech)}${numField('Автокатастрофа, сек','tieSpeech',state.settings.tieSpeech)}${numField('Останнє слово, сек','lastWord',state.settings.lastWord)}${numField('Нічна перевірка, сек','nightCheck',state.settings.nightCheck)}
+    </div>
+    <div class="divider"></div>
+    <div class="settings-grid">
+      ${toggle('singleToggle','1 кандидат у День 1 — без голосування',state.settings.firstDaySingleNoVote)}
+      ${toggle('remainderToggle','Невіддані голоси → останньому',state.settings.lastGetsRemainder)}
+      ${toggle('soundToggle','Звуковий сигнал таймера',state.settings.sound)}
+      <div class="field"><label>Фоли</label><select class="select" data-setting="penaltyMode"><option value="tournament" ${state.settings.penaltyMode==='tournament'?'selected':''}>Турнірний: 3-й без промови, 4-й вихід</option><option value="club" ${state.settings.penaltyMode==='club'?'selected':''}>Клубний: 2-й −30 с, 3-й без голосу, 4-й вихід</option></select></div>
+    </div>
+  </section>
+ </div>`;
+}
+function numField(label,key,value){return `<div class="field"><label>${label}</label><input class="input" type="number" min="5" max="180" step="5" data-setting="${key}" value="${value}"></div>`}
+function toggle(action,label,on){return `<div class="toggle-row"><span style="font-size:13px">${label}</span><button class="switch ${on?'on':''}" data-action="${action}" aria-label="${label}"></button></div>`}
+function topbar(game=true){return `<div class="topbar"><div class="brand"><div class="brandmark"></div><div><h1>Мафія 10</h1><small>спортивний стіл</small></div></div><div class="top-actions">${game?`<button class="btn small ghost" data-action="undo" ${undoStack.length?'':'disabled'}>↶ <span class="label">Скасувати</span></button><button class="btn small ghost" data-action="openSettings">⚙ <span class="label">Налаштування</span></button>`:''}</div></div>`}
+function revealScreen(){
+ const p=state.players[state.revealIndex],role=roleOf(p),last=state.revealIndex===9;
+ return `<div class="app reveal-wrap">${topbar(false)}<div class="reveal-head"><div class="kicker">Таємна роздача • ${state.revealIndex+1}/10</div><h2>Передайте пристрій гравцю №${p.id}</h2><p class="muted">Екран має бачити лише цей гравець.</p></div>
+ <div class="card pass-card">${!state.revealOpen?`<div class="seat-badge">${p.id}</div><h3>${esc(p.name)}</h3><p>Переконайтесь, що інші не бачать екран. Натисніть кнопку нижче, щоб відкрити свою роль.</p><button class="btn gold" data-action="showRole">Показати мою роль</button>`:
+ `<div class="role-card ${role.team}"><div class="role-team">${role.team==='black'?'Чорна команда':'Червона команда'}</div><div class="role-icon">${role.icon}</div><div class="role-name">${role.label}</div><p>${role.desc}</p></div><p>${role.team==='black'?'Не показуйте екран іншим. Своїх партнерів ви побачите під час нульової ночі.':'Не повідомляйте роль сусідам. У спортивній мафії роль вибулого гравця також не розкривається.'}</p><button class="btn primary" data-action="hideRoleNext">${last?'Сховати роль і перейти до ведучого':'Сховати та передати далі'}</button>`}</div></div>`
+}
+function playerSeat(p){
+ const isSpeaker=state.phase==='day'&&state.subphase==='speeches'&&currentSpeaker()?.id===p.id;
+ const nominated=state.nominations.includes(p.id);const role=roleOf(p);
+ return `<div class="seat ${p.status==='dead'?'dead':''} ${isSpeaker?'active-speaker':''} ${nominated?'nominated':''}">
+  <div class="seat-head"><div class="seat-num">${p.id}</div><div class="faults" title="Фоли">${[1,2,3,4].map(n=>`<i class="fault-dot ${p.faults>=n?'on':''}"></i>`).join('')}</div></div>
+  <div class="seat-name">${esc(p.name)}</div><div class="role-mini">${state.rolesVisible&&role?role.label:(teamOf(p)&&state.rolesVisible?(teamOf(p)==='black'?'Чорний':'Червоний'):'роль прихована')}</div>
+  ${isRestrictedNow(p)&&p.status==='alive'?'<div class="restricted">⚠ лише 10 с на виставлення</div>':''}${isShortSpeechNow(p)&&p.status==='alive'?'<div class="restricted">⚠ наступна промова 30 с</div>':''}${p.noVote&&p.status==='alive'?'<div class="restricted">⚠ без права голосу</div>':''}${nominated?'<div class="nom-tag">На голосуванні</div>':''}<div class="seat-spacer"></div>
+  ${p.status==='alive'?`<div class="seat-actions">${state.phase==='day'&&state.subphase==='speeches'?`<button class="btn small" data-action="nominate" data-id="${p.id}" ${isSpeaker?'disabled':''}>Висунути</button>`:'<span></span>'}<button class="btn small icon" data-action="fault" data-id="${p.id}" title="Додати фол">!</button></div>`:''}
+ </div>`
+}
+function gameScreen(){
+ return `<div class="app">${topbar(true)}<div class="game-layout"><main class="game-main">${phaseBar()}${mainPhase()}</main>${sidePanel()}</div>${modalHtml()}</div>`
+}
+function phaseBar(){
+ let title='',sub='',night=false;
+ if(state.phase==='zeroNight'){title='Нульова ніч';sub='Чорна команда знайомиться та узгоджує план';night=true}
+ else if(state.phase==='day'){title=`День ${state.day}`;sub=state.subphase==='speeches'?'Промови по колу':state.subphase==='dayEnd'?'Підготовка до голосування':'Голосування'}
+ else if(state.phase==='vote'){title=`День ${state.day} • Голосування`;sub='Кандидати у порядку виставлення'}
+ else if(state.phase==='tie'){title='Автокатастрофа';sub='30 секунд кандидатам та повторне голосування'}
+ else if(state.phase==='allTieVote'){title='Автокатастрофа • фінал';sub='Чи мають усі кандидати залишити стіл?'}
+ else if(state.phase==='lastWord'){title='Останнє слово';sub=`Гравець №${state.lastWordPlayer} залишає стіл`}
+ else if(state.phase==='night'){title=`Ніч ${state.day}`;sub=nightStepTitle();night=true}
+ else if(state.phase==='gameOver'){title='Партію завершено';sub=state.gameOver==='red'?'Перемогло мирне місто':'Перемогла чорна команда'}
+ return `<div class="card phasebar"><div class="phase-left"><i class="phase-dot ${night?'night':''}"></i><div><h2>${title}</h2><p>${sub}</p></div></div><div class="alive-count">За столом: <b>${alivePlayers().length}</b>${state.rolesVisible?` · 🔴 ${redAlive()} · ⚫ ${blackAlive()}`:''}</div></div>`
+}
+function mainPhase(){
+ if(state.phase==='zeroNight')return zeroNightHtml();
+ if(state.phase==='day')return dayHtml();
+ if(state.phase==='vote')return voteHtml(false);
+ if(state.phase==='tie')return tieHtml();
+ if(state.phase==='allTieVote')return allTieVoteHtml();
+ if(state.phase==='lastWord')return lastWordHtml();
+ if(state.phase==='night')return nightHtml();
+ if(state.phase==='gameOver')return gameOverHtml();
+ return '';
+}
+function tableHtml(){return `<div class="card table-card"><div class="seats-grid">${state.players.map(playerSeat).join('')}</div></div>`}
+function zeroNightHtml(){return `<div class="card night-card"><div class="night-icon">◐</div><div class="kicker">Нульова ніч</div><h2>Мафія прокидається</h2><p>Дон і двоє гравців Мафії відкривають очі, знайомляться та без слів домовляються про порядок відстрілу. У цю ніч ніхто не вибуває.</p><div class="secret-row" style="justify-content:center;margin:18px 0">${state.rolesVisible?state.players.filter(p=>teamOf(p)==='black').map(p=>`<span class="secret-chip black">#${p.id} ${esc(p.name)} · ${roleOf(p).label}</span>`).join(''):'<span class="helper">Ролі приховані. Ведучий може відкрити їх у правій панелі.</span>'}</div><button class="btn gold" data-action="zeroToDay">Завершити нульову ніч → День 1</button></div>${tableHtml()}`}
+function dayHtml(){
+ const order=speakerOrder(),p=currentSpeaker(),end=state.subphase==='dayEnd';
+ return `${tableHtml()}<div class="card control-card">${!end?`<div class="control-grid"><div class="speaker-block"><div class="eyebrow">Говорить зараз</div><div class="speaker-name">№${p?.id} · ${esc(p?.name||'—')}</div>${isRestrictedNow(p)?'<div class="tie-banner">3-й фол: лише 10 секунд, щоб виставити кандидатуру або сказати «пас».</div>':''}${isShortSpeechNow(p)?'<div class="tie-banner">2-й фол: ця промова скорочена до 30 секунд.</div>':''}<div class="timer ${state.timer.remaining<=10?'danger':''}">${formatTime(state.timer.remaining)}</div><div class="timer-controls"><button class="btn primary" data-action="timerToggle">${state.timer.running?'Пауза':'Старт'}</button><button class="btn" data-action="timerReset">Скинути</button><button class="btn" data-action="timerMinus">−5 с</button><button class="btn" data-action="timerPlus">+5 с</button><button class="btn gold" data-action="nextSpeaker">Наступний →</button></div><div class="queue">${order.map((id,i)=>`<span class="queue-chip ${i===state.speakerIndex?'current':''} ${i<state.speakerIndex?'done':''}">#${id}</span>`).join('')}</div></div><div><div class="eyebrow">Виставлені кандидатури</div><div class="nom-list">${nominationList()}</div><p class="helper">Кандидатури голосуються в тому самому порядку, в якому їх прийняв ведучий. Один гравець може виставити лише одну кандидатуру за день.</p></div></div>`:
+ `<div style="text-align:center;padding:12px"><div class="kicker">Коло промов завершено</div><h2 style="margin:8px 0 4px">${state.nominations.length?`Кандидатів: ${state.nominations.length}`:'Кандидатів немає'}</h2><p class="helper">${state.nominations.length?'Перевірте порядок виставлення та переходьте до голосування.':'Місто переходить у ніч без денного вибуття.'}</p><div class="nom-list" style="max-width:540px;margin:15px auto">${nominationList()}</div><div class="control-actions" style="justify-content:center"><button class="btn" data-action="backToSpeeches">Повернутися до промов</button><button class="btn gold" data-action="startVote">${state.nominations.length?'Почати голосування':'Перейти в ніч'}</button></div></div>`}</div>`
+}
+function nominationList(){if(!state.nominations.length)return '<div class="empty">Поки що нікого не виставлено</div>';return state.nominations.map((id,i)=>{const p=getPlayer(id);return `<div class="nom-item"><span><b>${i+1}. №${p.id}</b> · ${esc(p.name)}</span><button class="btn small ghost" data-action="removeNom" data-id="${p.id}">×</button></div>`}).join('')}
+function voteHtml(isTie){
+ const candidates=isTie?state.vote.tied:state.nominations,alive=voterCount(),used=candidates.reduce((s,id)=>s+(Number(state.vote.counts[id])||0),0);
+ return `<div class="card vote-wrap">${isTie?'<div class="tie-banner">Повторне голосування лише між гравцями, які поділили максимальну кількість голосів.</div>':''}<div class="section-title"><div><h3>${isTie?'Повторне голосування':'Голосування міста'}</h3><p>Фіксуйте кількість рук за кожного кандидата.</p></div><button class="btn small" data-action="resetVotes">Скинути голоси</button></div><div class="vote-grid">${candidates.map((id,i)=>{const p=getPlayer(id),n=state.vote.counts[id]||0;return `<div class="vote-card"><div class="eyebrow">Кандидат ${i+1}</div><h4>№${p.id} · ${esc(p.name)}</h4><div class="num">${n}</div><div class="stepper"><button class="btn icon" data-action="voteMinus" data-id="${id}">−</button><button class="btn icon primary" data-action="votePlus" data-id="${id}">+</button></div>${state.settings.lastGetsRemainder&&i===candidates.length-1?'<button class="btn small ghost" style="margin-top:10px" data-action="fillRemainder">Додати решту</button>':''}</div>`}).join('')}</div><div class="vote-total">Зафіксовано <b>${used}</b> із <b>${alive}</b> доступних голосів ${state.settings.lastGetsRemainder?'· решта може відійти останньому кандидату':''}</div><div class="control-actions" style="justify-content:center"><button class="btn" data-action="cancelVote">Назад</button><button class="btn gold" data-action="finishVote">Підбити підсумок</button></div></div>`
+}
+function tieHtml(){
+ if(state.subphase==='tieVote')return voteHtml(true);
+ const ids=state.vote.tied,p=getPlayer(ids[Math.min(state.speakerIndex,ids.length-1)]),last=state.speakerIndex>=ids.length-1;
+ return `<div class="card control-card"><div class="tie-banner">Нічия за максимальною кількістю голосів. Кожен кандидат отримує коротку додаткову промову.</div><div style="text-align:center"><div class="eyebrow">Додаткова промова ${state.speakerIndex+1}/${ids.length}</div><div class="speaker-name">№${p.id} · ${esc(p.name)}</div><div class="timer ${state.timer.remaining<=5?'danger':''}">${formatTime(state.timer.remaining)}</div><div class="timer-controls" style="justify-content:center"><button class="btn primary" data-action="timerToggle">${state.timer.running?'Пауза':'Старт'}</button><button class="btn" data-action="timerReset">Скинути</button><button class="btn gold" data-action="nextTieSpeaker">${last?'До переголосування':'Наступний →'}</button></div></div></div>`
+}
+function allTieVoteHtml(){
+ const total=state.vote.yes+state.vote.no,alive=voterCount();
+ return `<div class="card vote-wrap"><div class="tie-banner">Повторна нічия між тими самими кандидатами. Вирішальне питання: чи мають усі вони залишити стіл?</div><div style="text-align:center"><h2>Підняти всіх: ${state.vote.tied.map(id=>'№'+id).join(', ')}?</h2><p class="helper">Для виведення потрібна більшість голосів «ЗА». За рівності або більшості «ПРОТИ» кандидати залишаються.</p></div><div class="yesno"><div class="vote-card"><h4>ЗА</h4><div class="num">${state.vote.yes}</div><div class="stepper"><button class="btn icon" data-action="yesMinus">−</button><button class="btn icon success" data-action="yesPlus">+</button></div></div><div class="vote-card"><h4>ПРОТИ</h4><div class="num">${state.vote.no}</div><div class="stepper"><button class="btn icon" data-action="noMinus">−</button><button class="btn icon danger" data-action="noPlus">+</button></div></div></div><div class="vote-total">Зафіксовано ${total} із ${alive} доступних голосів</div><div class="control-actions" style="justify-content:center"><button class="btn gold" data-action="finishAllTie">Підбити підсумок</button></div></div>`
+}
+function lastWordHtml(){const p=getPlayer(state.lastWordPlayer);const nextLabel=state.multiLastWords&&state.multiLastWords.length?'Наступне останнє слово →':state.afterNightKill?'Завершити → наступний день':'Завершити → ніч';return `${tableHtml()}<div class="card control-card" style="text-align:center"><div class="eyebrow">Останнє слово</div><div class="speaker-name">№${p?.id} · ${esc(p?.name||'—')}</div><div class="timer ${state.timer.remaining<=10?'danger':''}">${formatTime(state.timer.remaining)}</div><div class="timer-controls" style="justify-content:center"><button class="btn primary" data-action="timerToggle">${state.timer.running?'Пауза':'Старт'}</button><button class="btn" data-action="timerReset">Скинути</button><button class="btn gold" data-action="lastWordDone">${nextLabel}</button></div></div>`}
+function nightStepTitle(){return ['Місто засинає','Мафія стріляє','Дон шукає Шерифа','Шериф перевіряє місто','Місто прокидається'][state.night.step]||'Ніч'}
+function nightHtml(){
+ const step=state.night.step;
+ if(step===0)return nightShell('☾','Місто засинає','Усі живі гравці надягають маски. Ведучий перевіряє тишу та посадку.','Далі: стрільба мафії','nightNext');
+ if(step===1)return nightShootHtml();
+ if(step===2)return nightCheckHtml('don');
+ if(step===3)return nightCheckHtml('sheriff');
+ return nightWakeHtml();
+}
+function nightShell(icon,title,text,button,action){return `<div class="card night-card"><div class="night-icon">${icon}</div><div class="kicker">Ніч ${state.day}</div><h2>${title}</h2><p>${text}</p><button class="btn gold" data-action="${action}">${button}</button></div>${tableHtml()}`}
+function targetButtons(selected){return `<div class="target-grid">${state.players.map(p=>`<button class="target ${p.status==='dead'?'dead':''} ${selected===p.id?'selected':''}" data-action="nightTarget" data-id="${p.id}"><b>${p.id}</b>${esc(p.name)}</button>`).join('')}</div>`}
+function nightShootHtml(){return `<div class="card night-card"><div class="night-icon">⌁</div><div class="kicker">Ніч ${state.day}</div><h2>Мафія стріляє</h2><p>Після нічної стрільби зафіксуйте результат. Якщо чорна команда не влучила узгоджено — оберіть «Промах».</p>${targetButtons(state.night.target)}<div class="control-actions" style="justify-content:center"><button class="btn" data-action="nightMiss">Промах</button><button class="btn gold" data-action="nightShotDone" ${state.night.target===null?'disabled':''}>Зафіксувати постріл</button></div></div>`}
+function nightCheckHtml(kind){
+ const isDon=kind==='don',selected=isDon?state.night.donCheck:state.night.sheriffCheck,active=alivePlayers().some(p=>p.role===(isDon?'don':'sheriff'));
+ if(!active){return `<div class="card night-card"><div class="night-icon">${isDon?'◆':'★'}</div><div class="kicker">Ніч ${state.day}</div><h2>${isDon?'Дон шукає Шерифа':'Шериф перевіряє місто'}</h2><p>Ця роль уже вибула. Ведучий усе одно оголошує фазу та витримує коротку паузу, щоб не розкривати інформацію столу.</p><button class="btn gold" data-action="nightCheckSkip">Продовжити ніч</button></div>`}
+ let result='';if(selected&&state.night.resultOpen){const p=getPlayer(selected);const hit=isDon?p.role==='sheriff':teamOf(p)==='black';result=`<div class="night-result ${hit?'good':'bad'}"><div class="eyebrow">Результат перевірки</div><strong>${isDon?(hit?'ЦЕ ШЕРИФ':'НЕ ШЕРИФ'):(hit?'ЧОРНИЙ':'ЧЕРВОНИЙ')}</strong><div class="privacy">Після сигналу гравцеві сховайте результат.</div></div>`}
+ return `<div class="card night-card"><div class="night-icon">${isDon?'◆':'★'}</div><div class="kicker">Ніч ${state.day}</div><h2>${isDon?'Дон шукає Шерифа':'Шериф перевіряє місто'}</h2><p>${isDon?'Дон показує номер одного гравця. Додаток підкаже ведучому, чи знайдено Шерифа.':'Шериф показує номер одного гравця. Додаток підкаже ведучому колір команди.'}</p>${targetButtons(selected)}${result}<div class="control-actions" style="justify-content:center">${selected&&!state.night.resultOpen?'<button class="btn primary" data-action="openNightResult">Показати результат ведучому</button>':''}${selected&&state.night.resultOpen?'<button class="btn" data-action="hideNightResult">Сховати результат</button>':''}<button class="btn gold" data-action="nightCheckDone" ${selected?'':'disabled'}>Далі</button></div></div>`
+}
+function nightWakeHtml(){
+ const target=state.night.target===-1?null:getPlayer(state.night.target),shot=state.night.target===-1?'Промах. Усі залишаються за столом.':target?`Вночі вибуває гравець №${target.id} · ${esc(target.name)}.`:'Результат пострілу не задано.';
+ return `<div class="card night-card"><div class="night-icon">☀</div><div class="kicker">Ранок</div><h2>Місто прокидається</h2><p>${shot}</p><button class="btn gold" data-action="wakeCity">${target?'Оголосити вибуття':'Почати наступний день'}</button></div>${tableHtml()}`
+}
+function gameOverHtml(){return `<div class="card modal gameover" style="margin:40px auto;max-width:760px"><div class="winner-symbol ${state.gameOver==='red'?'winner-red':'winner-black'}">${state.gameOver==='red'?'★':'◆'}</div><div class="kicker">Фінал партії</div><h2>${state.gameOver==='red'?'Перемога мирного міста':'Перемога чорної команди'}</h2><p>${state.gameOver==='red'?'Усі гравці чорної команди вибули.':'Кількість чорних зрівнялася з кількістю червоних — досягнуто паритет.'}</p><div class="roles-end">${state.players.map(p=>`<div class="end-row"><span>№${p.id} ${esc(p.name)}</span><b>${roleOf(p)?.label||'—'}</b></div>`).join('')}</div><div class="control-actions" style="justify-content:center;margin-top:20px"><button class="btn" data-action="copyProtocol">Скопіювати протокол</button><button class="btn gold" data-action="rematch">Нова партія з цими гравцями</button></div></div>`}
+function sidePanel(){
+ const roleSummary=state.rolesVisible?state.players.map(p=>{const r=roleOf(p);return `<span class="secret-chip ${r?.team||''}">#${p.id} ${r?.label||'—'}</span>`}).join(''):'<span class="helper">Приховано від столу</span>';
+ return `<aside class="side"><section class="card"><div class="section-title" style="margin-bottom:8px"><div><h3>Панель ведучого</h3></div><button class="btn small" data-action="toggleRoles">${state.rolesVisible?'Сховати ролі':'Показати ролі'}</button></div><div class="secret-row">${roleSummary}</div><div class="divider"></div><div class="summary-row"><span>День</span><b>${state.day}</b></div><div class="summary-row"><span>Живих</span><b>${alivePlayers().length}/10</b></div><div class="summary-row"><span>Кандидатів</span><b>${state.nominations.length}</b></div><div class="summary-row"><span>Автозбереження</span><b>увімкнено</b></div></section>
+ <section class="card"><div class="section-title" style="margin-bottom:10px"><div><h3>Протокол</h3></div><button class="btn small ghost" data-action="copyProtocol">Копіювати</button></div><div class="log">${state.history.length?state.history.filter(x=>state.rolesVisible||!x.secret).slice(0,30).map(x=>`<div class="log-item"><span class="log-time">${x.at}</span>${esc(x.text)}</div>`).join(''):'<div class="empty">Подій ще немає</div>'}</div></section></aside>`
+}
+function modalHtml(){
+ if(!state.modal)return '';
+ if(state.modal==='settings')return `<div class="overlay"><div class="card modal"><h2>Налаштування партії</h2><p>Таймери можна змінювати і під час гри. Зміни застосуються до наступної відповідної фази.</p><div class="settings-grid">${numField('Промова, сек','speech',state.settings.speech)}${numField('Автокатастрофа, сек','tieSpeech',state.settings.tieSpeech)}${numField('Останнє слово, сек','lastWord',state.settings.lastWord)}${numField('Перевірка, сек','nightCheck',state.settings.nightCheck)}</div><div class="divider"></div>${toggle('soundToggle','Звуковий сигнал',state.settings.sound)}<div class="modal-actions"><button class="btn danger" data-action="resetGame">Завершити й скинути</button><button class="btn gold" data-action="closeModal">Готово</button></div></div></div>`;
+ if(state.modal.type==='confirmFourthFault'){const p=getPlayer(state.modal.id);return `<div class="overlay"><div class="card modal"><h2>Четвертий фол</h2><p>Гравець №${p.id} ${esc(p.name)} має залишити стіл без останнього слова. Підтвердити?</p><div class="modal-actions"><button class="btn" data-action="closeModal">Скасувати</button><button class="btn danger" data-action="confirmFourthFault" data-id="${p.id}">Вивести зі столу</button></div></div></div>`}
+ return '';
+}
+function protocolText(){
+ const lines=[`СПОРТИВНА МАФІЯ 10`,`Дата: ${new Date().toLocaleString('uk-UA')}`,``,...state.players.map(p=>`#${p.id} ${p.name} — ${roleOf(p)?.label||'—'} — ${p.status==='alive'?'за столом':`вибув (${p.eliminatedReason||'—'})`}`),``,`ПРОТОКОЛ:`,...state.history.slice().reverse().map(x=>`${x.at} — ${x.text}`)];return lines.join('\n')
+}
+function render(doSave=false){
+ if(doSave)save();const app=document.getElementById('app');app.innerHTML=state.screen==='setup'?setupScreen():state.screen==='reveal'?revealScreen():gameScreen();
+}
+function action(a,el){
+ switch(a){
+  case 'newGame': beginNewGame(); break;
+  case 'fillNames': state.players.forEach(p=>p.name=`Гравець ${p.id}`);save();render();break;
+  case 'shuffleNames': {const names=shuffle(state.players.map(p=>p.name));state.players.forEach((p,i)=>p.name=names[i]);save();render();break}
+  case 'resume': if(load()){state.screen=state.screen||'game';render()} break;
+  case 'singleToggle': state.settings.firstDaySingleNoVote=!state.settings.firstDaySingleNoVote;save();render();break;
+  case 'remainderToggle': state.settings.lastGetsRemainder=!state.settings.lastGetsRemainder;save();render();break;
+  case 'soundToggle': state.settings.sound=!state.settings.sound;save();render();break;
+  case 'showRole': state.revealOpen=true;render();break;
+  case 'hideRoleNext': if(state.revealIndex<9){state.revealIndex++;state.revealOpen=false;save();render()}else beginModerator();break;
+  case 'zeroToDay': pushUndo();state.phase='day';state.subphase='speeches';state.day=1;state.speakerIndex=0;setTimer(timerBaseForSpeaker(currentSpeaker()),'speech');addLog('День 1: починається коло промов.');save();render();break;
+  case 'timerToggle': state.timer.running?stopTimer():startTimer();render(false);break;
+  case 'timerReset': {let sec=state.settings.speech;if(state.timer.purpose==='tie')sec=state.settings.tieSpeech;if(state.timer.purpose==='lastWord')sec=state.settings.lastWord;if(state.timer.purpose==='night')sec=state.settings.nightCheck;if(state.timer.purpose==='speech')sec=timerBaseForSpeaker(currentSpeaker());setTimer(sec,state.timer.purpose);render(false);break}
+  case 'timerMinus': state.timer.remaining=Math.max(0,state.timer.remaining-5);render(false);break;
+  case 'timerPlus': state.timer.remaining+=5;render(false);break;
+  case 'nextSpeaker': pushUndo();nextSpeaker();break;
+  case 'nominate': nominate(Number(el.dataset.id));break;
+  case 'removeNom': removeNom(Number(el.dataset.id));break;
+  case 'backToSpeeches': state.subphase='speeches';state.speakerIndex=Math.max(0,speakerOrder().length-1);setTimer(timerBaseForSpeaker(currentSpeaker()),'speech');save();render();break;
+  case 'startVote': startVote();break;
+  case 'votePlus': adjustVote(Number(el.dataset.id),1);break;
+  case 'voteMinus': adjustVote(Number(el.dataset.id),-1);break;
+  case 'resetVotes': state.vote.counts={};save();render();break;
+  case 'fillRemainder': fillRemainder();break;
+  case 'cancelVote': if(state.phase==='tie'){state.subphase='tieSpeech';setTimer(state.settings.tieSpeech,'tie')}else{state.phase='day';state.subphase='dayEnd'}save();render();break;
+  case 'finishVote': finishVote();break;
+  case 'nextTieSpeaker': nextTieSpeaker();break;
+  case 'yesPlus': state.vote.yes=Math.min(voterCount(),state.vote.yes+1);render();break;
+  case 'yesMinus': state.vote.yes=Math.max(0,state.vote.yes-1);render();break;
+  case 'noPlus': state.vote.no=Math.min(voterCount(),state.vote.no+1);render();break;
+  case 'noMinus': state.vote.no=Math.max(0,state.vote.no-1);render();break;
+  case 'finishAllTie': finishAllTie();break;
+  case 'lastWordDone': pushUndo();completeLastWord();break;
+  case 'nightNext': pushUndo();state.night.step++;setTimer(state.settings.nightCheck,'night');save();render();break;
+  case 'nightTarget': nightTarget(Number(el.dataset.id));break;
+  case 'nightMiss': pushUndo();state.night.target=-1;addLog(`Ніч ${state.day}: мафія промахнулася.`);state.night.step=2;save();render();break;
+  case 'nightShotDone': {pushUndo();const p=getPlayer(state.night.target);addLog(`Ніч ${state.day}: постріл у №${p.id} ${p.name}.`,true);state.night.step=2;save();render();break}
+  case 'openNightResult': state.night.resultOpen=true;render();break;
+  case 'hideNightResult': state.night.resultOpen=false;render();break;
+  case 'nightCheckDone': pushUndo();finishNightCheck();break;
+  case 'nightCheckSkip': pushUndo();state.night.resultOpen=false;state.night.step++;save();render();break;
+  case 'wakeCity': wakeCity();break;
+  case 'fault': addFault(Number(el.dataset.id));break;
+  case 'confirmFourthFault': confirmFourthFault(Number(el.dataset.id));break;
+  case 'toggleRoles': state.rolesVisible=!state.rolesVisible;render();break;
+  case 'undo': undo();break;
+  case 'openSettings': state.modal='settings';render();break;
+  case 'closeModal': state.modal=null;render();break;
+  case 'resetGame': safeRemove();stopTimer();state=createInitialState();undoStack=[];render();break;
+  case 'copyProtocol': copyProtocol();break;
+  case 'rematch': rematch();break;
+ }
+}
+function nominate(id){const target=getPlayer(id),speaker=currentSpeaker();if(!target||target.status!=='alive'||!speaker)return;if(id===speaker.id){toast('Себе виставляти не можна');return}if(state.nominations.includes(id)){toast('Цей гравець уже виставлений');return}if(state.players.some(p=>p.nominatedBy===speaker.id)){toast('Поточний гравець уже виставив кандидатуру');return}pushUndo();state.nominations.push(id);target.nominatedBy=speaker.id;addLog(`#${speaker.id} виставляє #${target.id} на голосування.`);save();render()}
+function removeNom(id){pushUndo();const p=getPlayer(id);if(p)p.nominatedBy=null;state.nominations=state.nominations.filter(x=>x!==id);addLog(`Кандидатуру #${id} знято ведучим.`);save();render()}
+function startVote(){
+ if(!state.nominations.length){pushUndo();goNight();return}
+ if(state.day===1&&state.nominations.length===1&&state.settings.firstDaySingleNoVote){pushUndo();addLog('День 1: одна кандидатура — голосування не проводиться.');goNight();return}
+ if(state.nominations.length===1){pushUndo();const id=state.nominations[0];addLog(`Єдина кандидатура #${id} отримує голоси столу.`);eliminatePlayer(id,'денне голосування',true);save();render();return}
+ pushUndo();state.phase='vote';state.subphase='vote';state.vote.counts={};state.vote.round=0;stopTimer();save();render();
+}
+function adjustVote(id,delta){const candidates=state.phase==='tie'?state.vote.tied:state.nominations;if(!candidates.includes(id))return;const alive=voterCount();const current=Number(state.vote.counts[id])||0;const total=candidates.reduce((s,x)=>s+(Number(state.vote.counts[x])||0),0);if(delta>0&&total>=alive)return;state.vote.counts[id]=Math.max(0,current+delta);save();render()}
+function fillRemainder(){const candidates=state.phase==='tie'?state.vote.tied:state.nominations,alive=voterCount(),last=candidates[candidates.length-1],other=candidates.slice(0,-1).reduce((s,id)=>s+(Number(state.vote.counts[id])||0),0);state.vote.counts[last]=Math.max(0,alive-other);save();render()}
+function finishVote(){
+ const candidates=state.phase==='tie'?state.vote.tied:state.nominations,alive=voterCount();
+ let used=candidates.reduce((s,id)=>s+(Number(state.vote.counts[id])||0),0);
+ if(state.settings.lastGetsRemainder&&used<alive){const last=candidates[candidates.length-1];state.vote.counts[last]=(state.vote.counts[last]||0)+(alive-used);used=alive}
+ if(used>alive){toast('Голосів більше, ніж живих гравців');return}if(used<alive){toast(`Не зафіксовано ${alive-used} голосів`);return}
+ pushUndo();
+ const max=Math.max(...candidates.map(id=>state.vote.counts[id]||0));const top=candidates.filter(id=>(state.vote.counts[id]||0)===max);
+ addLog(`Голосування: ${candidates.map(id=>`#${id} — ${state.vote.counts[id]||0}`).join(', ')}.`);
+ if(top.length===1){eliminatePlayer(top[0],'денне голосування',true);save();render();return}
+ const key=top.slice().sort((a,b)=>a-b).join('-');
+ if(state.phase==='tie'&&key===state.vote.previousTieKey){state.vote.tied=top;state.phase='allTieVote';state.subphase='allTieVote';state.vote.yes=0;state.vote.no=0;addLog(`Повторна нічия між ${top.map(id=>'#'+id).join(', ')}.`);save();render();return}
+ state.vote.previousTieKey=key;state.vote.tied=top;state.vote.round++;state.vote.counts={};state.phase='tie';state.subphase='tieSpeech';state.speakerIndex=0;setTimer(state.settings.tieSpeech,'tie');addLog(`Автокатастрофа: ${top.map(id=>'#'+id).join(', ')}.`);save();render();
+}
+function nextTieSpeaker(){const ids=state.vote.tied;if(state.speakerIndex<ids.length-1){state.speakerIndex++;setTimer(state.settings.tieSpeech,'tie')}else{state.subphase='tieVote';state.vote.counts={};stopTimer()}save();render()}
+function finishAllTie(){const alive=voterCount(),used=state.vote.yes+state.vote.no;if(used<alive){toast(`Не зафіксовано ${alive-used} голосів`);return}if(used>alive){toast('Забагато голосів');return}pushUndo();if(state.vote.yes>state.vote.no){const ids=[...state.vote.tied];addLog(`Більшість ЗА вихід усіх: ${ids.map(id=>'#'+id).join(', ')}.`);for(const id of ids){const p=getPlayer(id);if(p&&p.status==='alive'){p.status='dead';p.eliminatedReason='автокатастрофа';addLog(`#${id} ${p.name} вибуває (автокатастрофа).`)}}if(checkVictory()){save();render();return}state.phase='lastWord';state.subphase='lastWord';state.multiLastWords=ids;state.lastWordPlayer=ids.shift();state.multiLastWords=ids;setTimer(state.settings.lastWord,'lastWord');save();render()}else{addLog('Більшість не підтримала вихід усіх кандидатів.');goNight()}}
+function startNextDay(){state.afterNightKill=false;state.day++;state.phase='day';state.subphase='speeches';state.speakerIndex=0;state.nominations=[];state.players.forEach(p=>p.nominatedBy=null);state.vote={counts:{},round:0,tied:[],previousTieKey:'',yes:0,no:0};const p=currentSpeaker();setTimer(timerBaseForSpeaker(p),'speech');addLog(`Починається День ${state.day}.`);save();render()}
+function completeLastWord(){
+  if(state.multiLastWords&&state.multiLastWords.length){state.lastWordPlayer=state.multiLastWords.shift();setTimer(state.settings.lastWord,'lastWord');save();render();return}
+  state.multiLastWords=[];
+  if(state.afterNightKill){startNextDay();return}
+  goNight();
+}
+function nightTarget(id){const p=getPlayer(id);if(!p||p.status!=='alive')return;if(state.night.step===1)state.night.target=id;else if(state.night.step===2){state.night.donCheck=id;state.night.resultOpen=false}else if(state.night.step===3){state.night.sheriffCheck=id;state.night.resultOpen=false}save();render()}
+function finishNightCheck(){const isDon=state.night.step===2,id=isDon?state.night.donCheck:state.night.sheriffCheck;if(!id)return;const p=getPlayer(id),hit=isDon?p.role==='sheriff':teamOf(p)==='black';addLog(`${isDon?'Дон':'Шериф'} перевіряє #${id}: ${isDon?(hit?'Шериф':'не Шериф'):(hit?'чорний':'червоний')}.`,true);state.night.resultOpen=false;state.night.step++;save();render()}
+function wakeCity(){
+ pushUndo();const id=state.night.target;if(id===-1||id===null){startNextDay();return}
+ const p=getPlayer(id);if(p&&p.status==='alive'){p.status='dead';p.eliminatedReason='нічний постріл';addLog(`#${p.id} ${p.name} вибуває після нічного пострілу.`);if(checkVictory()){save();render();return}state.phase='lastWord';state.lastWordPlayer=p.id;state.afterNightKill=true;setTimer(state.settings.lastWord,'lastWord');save();render()}
+}
+function addFault(id){const p=getPlayer(id);if(!p||p.status!=='alive')return;pushUndo();p.faults=Math.min(4,p.faults+1);addLog(`#${p.id} отримує ${p.faults}-й фол.`);const speakingNow=state.phase==='day'&&state.subphase==='speeches'&&currentSpeaker()?.id===p.id;if(state.settings.penaltyMode==='club'&&p.faults===2)p.shortSpeechDay=state.day+(speakingNow?1:0);if(state.settings.penaltyMode==='club'&&p.faults===3)p.noVote=true;if(state.settings.penaltyMode==='tournament'&&p.faults===3)p.restrictionDay=state.day+(speakingNow?1:0);if(p.faults>=4){state.modal={type:'confirmFourthFault',id:p.id}}save();render()}
+function confirmFourthFault(id){state.modal=null;const p=getPlayer(id);if(!p)return;p.status='dead';p.eliminatedReason='4-й фол';addLog(`#${p.id} залишає стіл без останнього слова через 4-й фол.`);if(checkVictory()){save();render();return}const order=speakerOrder();if(state.phase==='day'&&state.subphase==='speeches'&&state.speakerIndex>=order.length){state.speakerIndex=Math.max(0,order.length-1)}save();render()}
+function undo(){if(!undoStack.length){toast('Немає дії для скасування');return}stopTimer();state=undoStack.pop();state.timer.running=false;save();render();toast('Останню дію скасовано')}
+async function copyProtocol(){const text=protocolText();try{await navigator.clipboard.writeText(text);toast('Протокол скопійовано')}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('Протокол скопійовано')}}
+function rematch(){const names=state.players.map(p=>p.name);state=createInitialState();state.players.forEach((p,i)=>p.name=names[i]);beginNewGame()}
+
+document.addEventListener('click',e=>{const el=e.target.closest('[data-action]');if(!el)return;action(el.dataset.action,el)});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.nameId){const p=getPlayer(t.dataset.nameId);if(p){p.name=t.value||`Гравець ${p.id}`;save()}}if(t.dataset.setting){const key=t.dataset.setting;if(key==='penaltyMode')state.settings[key]=t.value;else state.settings[key]=Math.max(5,Math.min(180,Number(t.value)||defaultSettings[key]));save()}});
+document.addEventListener('keydown',e=>{if(state.screen!=='game'||state.modal)return;if(e.code==='Space'&&(state.phase==='day'||state.phase==='tie'||state.phase==='lastWord')){e.preventDefault();state.timer.running?stopTimer():startTimer()}if(e.key==='ArrowRight'&&state.phase==='day'&&state.subphase==='speeches')nextSpeaker()});
+window.addEventListener('beforeunload',save);
+render();
+})();
+</script>
+</body>
+</html>

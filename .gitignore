@@ -1,0 +1,17 @@
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local environment and logs
+.env
+.env.*
+*.log
+node_modules/
+.firebase/
+.tmp-chrome-*/
+
+# Local test artifacts
+coverage/
+test-results/

@@ -1,0 +1,356 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function hasVerifiedEmail() {
+      return signedIn()
+        && request.auth.token.email is string
+        && request.auth.token.email_verified == true;
+    }
+
+    function validMember(uid) {
+      return request.resource.data.keys().hasOnly([
+          'uid', 'communityId', 'displayName', 'nickname', 'club',
+          'description', 'photoURL', 'photoDataURL', 'discoverable', 'profileUpdatedAt',
+          'schemaVersion', 'createdAt', 'updatedAt', 'lastSeenAt'
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.communityId == 'enjoy'
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 60
+        && request.resource.data.nickname is string
+        && request.resource.data.nickname.size() <= 40
+        && request.resource.data.club is string
+        && request.resource.data.club.size() <= 100
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 600
+        && request.resource.data.photoURL is string
+        && request.resource.data.photoURL.size() <= 2048
+        && (request.resource.data.photoURL == ''
+          || request.resource.data.photoURL.matches('https://lh[0-9]+[.]googleusercontent[.]com/.*'))
+        && request.resource.data.photoDataURL is string
+        && request.resource.data.photoDataURL.size() <= 350000
+        && (request.resource.data.photoDataURL == ''
+          || request.resource.data.photoDataURL.matches('^data:image/(webp|jpeg|png);base64,.*$'))
+        && request.resource.data.discoverable is bool
+        && request.resource.data.profileUpdatedAt is string
+        && request.resource.data.profileUpdatedAt.size() <= 40
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.lastSeenAt is timestamp;
+    }
+
+    function validManualPlayer(playerId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'communityId', 'ownerUid', 'ownerName', 'localPlayerId',
+          'displayName', 'nickname', 'club', 'description', 'photoDataURL',
+          'profileUpdatedAt', 'schemaVersion', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.id == playerId
+        && request.resource.data.communityId == 'enjoy'
+        && request.resource.data.ownerUid is string
+        && request.resource.data.ownerUid.size() > 0
+        && request.resource.data.ownerUid.size() <= 128
+        && request.resource.data.ownerName is string
+        && request.resource.data.ownerName.size() > 0
+        && request.resource.data.ownerName.size() <= 60
+        && request.resource.data.localPlayerId is string
+        && request.resource.data.localPlayerId.size() > 0
+        && request.resource.data.localPlayerId.size() <= 128
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 60
+        && request.resource.data.nickname is string
+        && request.resource.data.nickname.size() <= 40
+        && request.resource.data.club is string
+        && request.resource.data.club.size() <= 100
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 600
+        && request.resource.data.photoDataURL is string
+        && request.resource.data.photoDataURL.size() <= 350000
+        && (request.resource.data.photoDataURL == ''
+          || request.resource.data.photoDataURL.matches('^data:image/(webp|jpeg|png);base64,.*$'))
+        && request.resource.data.profileUpdatedAt is string
+        && request.resource.data.profileUpdatedAt.size() <= 40
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function validFinishedGame(uid, gameId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'communityId', 'ownerUid', 'hostName', 'title', 'venue',
+          'startedAt', 'endedAt', 'gameUpdatedAt', 'status', 'winner',
+          'durationSeconds', 'day', 'seats', 'history', 'schemaVersion',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.id == gameId
+        && request.resource.data.communityId == 'enjoy'
+        && request.resource.data.ownerUid == uid
+        && request.resource.data.hostName is string
+        && request.resource.data.hostName.size() > 0
+        && request.resource.data.hostName.size() <= 60
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 80
+        && request.resource.data.venue is string
+        && request.resource.data.venue.size() <= 100
+        && request.resource.data.startedAt is string
+        && request.resource.data.startedAt.size() <= 40
+        && request.resource.data.endedAt is string
+        && request.resource.data.endedAt.size() > 0
+        && request.resource.data.endedAt.size() <= 40
+        && request.resource.data.gameUpdatedAt is string
+        && request.resource.data.gameUpdatedAt.size() > 0
+        && request.resource.data.gameUpdatedAt.size() <= 40
+        && request.resource.data.status == 'finished'
+        && request.resource.data.winner in ['red', 'black']
+        && request.resource.data.durationSeconds is int
+        && request.resource.data.durationSeconds >= 0
+        && request.resource.data.durationSeconds <= 31536000
+        && request.resource.data.day is int
+        && request.resource.data.day >= 1
+        && request.resource.data.day <= 100
+        && request.resource.data.seats is list
+        && request.resource.data.seats.size() == 10
+        && request.resource.data.history is list
+        && request.resource.data.history.size() <= 500
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function validLiveSeat(seat, number) {
+      return seat.keys().hasOnly([
+          'number', 'name', 'status', 'faults', 'eliminatedReason', 'noVote'
+        ])
+        && seat.number == number
+        && seat.name is string
+        && seat.name.size() > 0
+        && seat.name.size() <= 60
+        && seat.status in ['alive', 'dead']
+        && seat.faults is int
+        && seat.faults >= 0
+        && seat.faults <= 4
+        && seat.eliminatedReason is string
+        && seat.eliminatedReason.size() <= 160
+        && seat.noVote is bool;
+    }
+
+    function validSeatNumbers(values) {
+      return values is list
+        && values.size() <= 10
+        && (values.size() < 1 || (values[0] is int && values[0] >= 1 && values[0] <= 10))
+        && (values.size() < 2 || (values[1] is int && values[1] >= 1 && values[1] <= 10))
+        && (values.size() < 3 || (values[2] is int && values[2] >= 1 && values[2] <= 10))
+        && (values.size() < 4 || (values[3] is int && values[3] >= 1 && values[3] <= 10))
+        && (values.size() < 5 || (values[4] is int && values[4] >= 1 && values[4] <= 10))
+        && (values.size() < 6 || (values[5] is int && values[5] >= 1 && values[5] <= 10))
+        && (values.size() < 7 || (values[6] is int && values[6] >= 1 && values[6] <= 10))
+        && (values.size() < 8 || (values[7] is int && values[7] >= 1 && values[7] <= 10))
+        && (values.size() < 9 || (values[8] is int && values[8] >= 1 && values[8] <= 10))
+        && (values.size() < 10 || (values[9] is int && values[9] >= 1 && values[9] <= 10));
+    }
+
+    function validLiveGame(uid, gameId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'communityId', 'ownerUid', 'hostName', 'title', 'venue',
+          'startedAt', 'gameUpdatedAt', 'status', 'phase', 'subphase', 'day',
+          'seats', 'nominations', 'tied', 'speakerIndex', 'speakerOrder',
+          'lastWordSeat', 'nightStep', 'timer', 'schemaVersion',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.id == gameId
+        && request.resource.data.communityId == 'enjoy'
+        && request.resource.data.ownerUid == uid
+        && request.resource.data.hostName is string
+        && request.resource.data.hostName.size() > 0
+        && request.resource.data.hostName.size() <= 60
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 80
+        && request.resource.data.venue is string
+        && request.resource.data.venue.size() <= 100
+        && request.resource.data.startedAt is string
+        && request.resource.data.startedAt.size() > 0
+        && request.resource.data.startedAt.size() <= 40
+        && request.resource.data.gameUpdatedAt is string
+        && request.resource.data.gameUpdatedAt.size() > 0
+        && request.resource.data.gameUpdatedAt.size() <= 40
+        && request.resource.data.status == 'active'
+        && request.resource.data.phase in [
+          'reveal', 'zeroNight', 'day', 'vote', 'tieSpeech', 'tieVote',
+          'allTie', 'lastWord', 'night'
+        ]
+        && request.resource.data.subphase is string
+        && request.resource.data.subphase.size() <= 40
+        && request.resource.data.day is int
+        && request.resource.data.day >= 1
+        && request.resource.data.day <= 100
+        && request.resource.data.seats is list
+        && request.resource.data.seats.size() == 10
+        && validLiveSeat(request.resource.data.seats[0], 1)
+        && validLiveSeat(request.resource.data.seats[1], 2)
+        && validLiveSeat(request.resource.data.seats[2], 3)
+        && validLiveSeat(request.resource.data.seats[3], 4)
+        && validLiveSeat(request.resource.data.seats[4], 5)
+        && validLiveSeat(request.resource.data.seats[5], 6)
+        && validLiveSeat(request.resource.data.seats[6], 7)
+        && validLiveSeat(request.resource.data.seats[7], 8)
+        && validLiveSeat(request.resource.data.seats[8], 9)
+        && validLiveSeat(request.resource.data.seats[9], 10)
+        && validSeatNumbers(request.resource.data.nominations)
+        && validSeatNumbers(request.resource.data.tied)
+        && request.resource.data.speakerIndex is int
+        && request.resource.data.speakerIndex >= 0
+        && request.resource.data.speakerIndex <= 9
+        && validSeatNumbers(request.resource.data.speakerOrder)
+        && request.resource.data.lastWordSeat is int
+        && request.resource.data.lastWordSeat >= 0
+        && request.resource.data.lastWordSeat <= 10
+        && request.resource.data.nightStep is int
+        && request.resource.data.nightStep >= 0
+        && request.resource.data.nightStep <= 4
+        && request.resource.data.timer is map
+        && request.resource.data.timer.keys().hasOnly([
+          'remaining', 'running', 'purpose', 'endsAt'
+        ])
+        && request.resource.data.timer.remaining is int
+        && request.resource.data.timer.remaining >= 0
+        && request.resource.data.timer.remaining <= 3600
+        && request.resource.data.timer.running is bool
+        && request.resource.data.timer.purpose is string
+        && request.resource.data.timer.purpose.size() <= 24
+        && request.resource.data.timer.endsAt is int
+        && request.resource.data.timer.endsAt >= 0
+        && request.resource.data.timer.endsAt <= 9999999999999
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function validPlayerLink(linkId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'communityId', 'ownerUid', 'ownerName', 'localPlayerId',
+          'email', 'playerName', 'nickname', 'status', 'claimedUid',
+          'schemaVersion', 'createdAt', 'updatedAt', 'acceptedAt'
+        ])
+        && request.resource.data.id == linkId
+        && request.resource.data.communityId == 'enjoy'
+        && request.resource.data.ownerUid is string
+        && request.resource.data.ownerUid.size() > 0
+        && request.resource.data.ownerUid.size() <= 128
+        && request.resource.data.ownerName is string
+        && request.resource.data.ownerName.size() > 0
+        && request.resource.data.ownerName.size() <= 60
+        && request.resource.data.localPlayerId is string
+        && request.resource.data.localPlayerId.size() > 0
+        && request.resource.data.localPlayerId.size() <= 128
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 3
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$')
+        && request.resource.data.playerName is string
+        && request.resource.data.playerName.size() > 0
+        && request.resource.data.playerName.size() <= 60
+        && request.resource.data.nickname is string
+        && request.resource.data.nickname.size() <= 40
+        && request.resource.data.status in ['pending', 'accepted']
+        && request.resource.data.claimedUid is string
+        && request.resource.data.claimedUid.size() <= 128
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && ((request.resource.data.status == 'pending'
+            && request.resource.data.claimedUid == ''
+            && request.resource.data.acceptedAt == null)
+          || (request.resource.data.status == 'accepted'
+            && request.resource.data.claimedUid.size() > 0
+            && request.resource.data.acceptedAt is timestamp));
+    }
+
+    match /communities/enjoy/members/{uid} {
+      allow get: if signedIn() && (resource.data.discoverable == true || owns(uid));
+      allow list: if signedIn() && resource.data.discoverable == true;
+      allow create: if owns(uid) && validMember(uid);
+      allow update: if owns(uid)
+        && validMember(uid)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if owns(uid);
+    }
+
+    match /communities/enjoy/manualPlayers/{playerId} {
+      allow get, list: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && validManualPlayer(playerId);
+      allow update: if signedIn()
+        && validManualPlayer(playerId)
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.ownerName == resource.data.ownerName
+        && request.resource.data.localPlayerId == resource.data.localPlayerId
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if signedIn();
+    }
+
+    match /communities/enjoy/playerLinks/{linkId} {
+      allow get, list: if signedIn()
+        && (resource.data.ownerUid == request.auth.uid
+          || (hasVerifiedEmail() && resource.data.email == request.auth.token.email));
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && validPlayerLink(linkId)
+        && request.resource.data.status == 'pending';
+      allow update: if validPlayerLink(linkId)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && ((resource.data.ownerUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'ownerName', 'email', 'playerName', 'nickname', 'updatedAt'
+            ]))
+          || (hasVerifiedEmail()
+            && resource.data.email == request.auth.token.email
+            && resource.data.status == 'pending'
+            && request.resource.data.status == 'accepted'
+            && request.resource.data.claimedUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'claimedUid', 'acceptedAt', 'updatedAt'
+            ])));
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /communities/enjoy/games/{gameId} {
+      allow get, list: if signedIn();
+      allow create: if signedIn()
+        && validFinishedGame(request.auth.uid, gameId);
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && validFinishedGame(request.auth.uid, gameId)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /communities/enjoy/liveGames/{gameId} {
+      allow get, list: if signedIn();
+      allow create: if signedIn()
+        && validLiveGame(request.auth.uid, gameId);
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && validLiveGame(request.auth.uid, gameId)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+  }
+}

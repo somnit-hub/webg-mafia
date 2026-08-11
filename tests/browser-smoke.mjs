@@ -1,0 +1,1221 @@
+/*
+ * Minimal dependency-free browser smoke test.
+ * Start Chrome with --remote-debugging-port=PORT and the app open, then run:
+ * node tests/browser-smoke.mjs http://127.0.0.1:PORT
+ */
+const endpoint = process.argv[2];
+if (!endpoint) throw new Error('Передайте адресу Chrome DevTools, наприклад http://127.0.0.1:9224');
+
+const targets = await fetch(`${endpoint}/json`).then(response => response.json());
+const target = targets.find(item => item.type === 'page' && item.url.includes('127.0.0.1'));
+if (!target) throw new Error('Вкладку застосунку не знайдено');
+
+const socket = new WebSocket(target.webSocketDebuggerUrl);
+const pending = new Map();
+const browserErrors = [];
+let requestId = 0;
+
+socket.addEventListener('message', event => {
+  const message = JSON.parse(event.data);
+  if (message.id && pending.has(message.id)) {
+    pending.get(message.id)(message);
+    pending.delete(message.id);
+  }
+  if (message.method === 'Runtime.exceptionThrown') browserErrors.push(message.params.exceptionDetails.text);
+  if (message.method === 'Log.entryAdded' && message.params.entry.level === 'error') browserErrors.push(message.params.entry.text);
+});
+
+await new Promise((resolve, reject) => {
+  socket.addEventListener('open', resolve, { once: true });
+  socket.addEventListener('error', reject, { once: true });
+});
+
+function send(method, params = {}) {
+  return new Promise(resolve => {
+    const id = ++requestId;
+    pending.set(id, resolve);
+    socket.send(JSON.stringify({ id, method, params }));
+  });
+}
+
+async function evaluate(expression) {
+  const response = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+  if (response.result?.exceptionDetails) {
+    throw new Error(response.result.exceptionDetails.exception?.description || response.result.exceptionDetails.text);
+  }
+  return response.result?.result?.value;
+}
+
+const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+async function click(selector) {
+  await evaluate(`(element => { if (!element) throw new Error('Не знайдено ${selector}'); element.click(); return true; })(document.querySelector(${JSON.stringify(selector)}))`);
+  await wait(100);
+}
+
+async function captureScreenshot(path) {
+  if (!path) return;
+  const capture = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(path, Buffer.from(capture.result.data, 'base64'));
+}
+
+async function inspectModalFrame() {
+  return evaluate(`(() => {
+    const dialog = document.querySelector('.modal');
+    const backdrop = dialog?.closest('.modal-backdrop');
+    if (!dialog || !backdrop) return { exists: false };
+    const rect = dialog.getBoundingClientRect();
+    const style = getComputedStyle(dialog);
+    const actions = dialog.querySelector('.modal-actions');
+    return {
+      exists: true,
+      focused: document.activeElement === dialog,
+      scrollTop: dialog.scrollTop,
+      top: Math.round(rect.top),
+      left: Math.round(rect.left),
+      rightGap: Math.round(innerWidth - rect.right),
+      bottomWithinViewport: rect.bottom <= innerHeight - 6,
+      backdropAlign: getComputedStyle(backdrop).alignItems,
+      bordered: ['borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth'].every(property => parseFloat(style[property]) >= 1),
+      scrollable: ['auto', 'scroll'].includes(style.overflowY),
+      stickyActions: !actions || getComputedStyle(actions).position === 'sticky'
+    };
+  })()`);
+}
+
+function isUnifiedModal(frame) {
+  return frame.exists && frame.focused && frame.scrollTop === 0 && frame.top >= 6 && frame.top <= 8 && frame.left === 6 && frame.rightGap === 6 && frame.bottomWithinViewport && frame.backdropAlign === 'start' && frame.bordered && frame.scrollable && frame.stickyActions;
+}
+
+async function inspectAppChrome() {
+  return evaluate(`(() => {
+    const header = document.querySelector('.shell-header');
+    const navigation = document.querySelector('.bottom-nav');
+    const tabPage = document.querySelector('main.tab-page');
+    const items = [...(navigation?.querySelectorAll('.nav-item') || [])];
+    const widths = items.map(item => item.getBoundingClientRect().width);
+    return {
+      route: location.hash,
+      headerHeight: Math.round(header?.getBoundingClientRect().height || 0),
+      headerWidth: Math.round(header?.getBoundingClientRect().width || 0),
+      logoSize: Math.round(header?.querySelector('.brand-mark')?.getBoundingClientRect().width || 0),
+      profileSize: Math.round(header?.querySelector('.profile-btn')?.getBoundingClientRect().height || 0),
+      installVisible: Boolean(header?.querySelector('[data-action="install"]')),
+      tabPage: Boolean(tabPage),
+      pageGap: parseFloat(getComputedStyle(tabPage).rowGap),
+      navHeight: Math.round(navigation?.getBoundingClientRect().height || 0),
+      navItems: items.length,
+      labels: items.map(item => item.textContent.trim()),
+      activeLabel: navigation?.querySelector('[aria-current="page"]')?.textContent.trim(),
+      activeCount: navigation?.querySelectorAll('[aria-current="page"]').length || 0,
+      smallestIcon: Math.round(Math.min(...items.map(item => item.querySelector('svg').getBoundingClientRect().width))),
+      widthSpread: widths.length ? Math.round(Math.max(...widths) - Math.min(...widths)) : 0
+    };
+  })()`);
+}
+
+function isUnifiedAppChrome(frame, baseline) {
+  return frame.headerHeight === baseline.headerHeight && frame.headerWidth === baseline.headerWidth && frame.logoSize === baseline.logoSize && frame.profileSize === baseline.profileSize && frame.installVisible === baseline.installVisible && frame.tabPage && frame.pageGap <= 8 && frame.navHeight === 72 && frame.navItems === 5 && frame.activeCount === 1 && frame.smallestIcon >= 26 && frame.widthSpread <= 1 && JSON.stringify(frame.labels) === JSON.stringify(baseline.labels);
+}
+
+await send('Runtime.enable');
+await send('Log.enable');
+await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+await wait(400);
+
+const authenticatedHost = await evaluate(`({
+  name: document.querySelector('.profile-btn > span:last-child')?.textContent,
+  avatar: Boolean(document.querySelector('.profile-btn .avatar'))
+})`);
+const enjoyBrand = await evaluate(`({
+  headerBrandAbsent: !document.querySelector('.brand-copy'),
+  documentTitle: document.title,
+  heroWordmarkAbsent: !document.querySelector('.hero .enjoy-wordmark'),
+  heroTitle: document.querySelector('.hero h1')?.textContent.trim().replace(/\\s+/g, ' '),
+  coffeeIcon: Boolean(document.querySelector('.hero-cup')),
+  sheriffBadge: document.querySelector('.brand-mark')?.tagName === 'IMG' && document.querySelector('.brand-mark')?.src.endsWith('/assets/logo-mafia.webp'),
+  favicon: document.querySelector('link[rel="icon"]')?.href,
+  brandMarkSize: Math.round(document.querySelector('.brand-mark')?.getBoundingClientRect().width || 0),
+  brandArtworkSize: getComputedStyle(document.querySelector('.brand-mark')).objectFit,
+  heroIndexAbsent: !document.querySelector('.hero-index'),
+  addressAbsent: !document.querySelector('.hero')?.textContent.includes('Юлії Здановської'),
+  instagramAbsent: !document.querySelector('.hero .cafe-icon-link[href*="instagram.com"]'),
+  mapsAbsent: !document.querySelector('.hero .cafe-icon-link[href*="google.com/maps"]'),
+  socialIcons: document.querySelectorAll('.hero-title-row .cafe-icon-link').length,
+  externalArrowsAbsent: ![...document.querySelectorAll('a, button')].some(element => element.textContent.includes('↗')),
+  sharedArchive: document.querySelector('.section-title .help')?.dataset.tooltip,
+  redundantDescription: Boolean(document.querySelector('.hero > p')),
+  redundantAudienceLabel: Boolean(document.querySelector('.hero > .eyebrow'))
+})`);
+const homeChrome = await inspectAppChrome();
+await captureScreenshot(process.env.SMOKE_HOME_SCREENSHOT);
+const mobileLayout = await evaluate(`(() => {
+  const homeActions = [...document.querySelectorAll('.home-fab-group .mobile-fab')];
+  const homeGroup = document.querySelector('.home-fab-group').getBoundingClientRect();
+  const navigation = document.querySelector('.bottom-nav').getBoundingClientRect();
+  return ({
+  viewport: innerWidth,
+  scrollWidth: document.documentElement.scrollWidth,
+  pagePadding: parseFloat(getComputedStyle(document.querySelector('.page')).paddingLeft),
+  stackGap: parseFloat(getComputedStyle(document.querySelector('.tab-page')).rowGap),
+  numericFont: getComputedStyle(document.querySelector('.stat-card b')).fontFamily,
+  homeStatsCentered: [...document.querySelectorAll('.home-stat-grid .stat-card')].every(card => getComputedStyle(card).textAlign === 'center' && getComputedStyle(card).alignItems === 'center'),
+  homeStatsBackground: getComputedStyle(document.querySelector('.home-stat-grid .stat-card')).backgroundColor,
+  navHeight: Math.round(document.querySelector('.bottom-nav').getBoundingClientRect().height),
+  smallestNavIcon: Math.round(Math.min(...[...document.querySelectorAll('.bottom-nav .nav-item svg')].map(icon => icon.getBoundingClientRect().width))),
+  headerAvatarVisible: getComputedStyle(document.querySelector('.profile-btn .avatar')).display !== 'none',
+  headerAvatarFills: (() => {
+    const button = document.querySelector('.profile-btn').getBoundingClientRect();
+    const avatar = document.querySelector('.profile-btn .avatar').getBoundingClientRect();
+    return button.width - avatar.width <= 2 && button.height - avatar.height <= 2;
+  })(),
+  shortestPrimaryAction: Math.min(...homeActions.map(button => button.getBoundingClientRect().height)),
+  smallestHomeActionFont: Math.min(...[...document.querySelectorAll('.hero .actions .btn')].map(button => parseFloat(getComputedStyle(button).fontSize))),
+  smallestTextButtonFont: Math.min(...[...document.querySelectorAll('.btn')].filter(button => button.textContent.trim()).map(button => parseFloat(getComputedStyle(button).fontSize))),
+  installIconOnly: Boolean(document.querySelector('[data-action="install"] svg')) && !document.querySelector('[data-action="install"]')?.textContent.trim(),
+  installLabel: document.querySelector('[data-action="install"]')?.getAttribute('aria-label'),
+  installSize: document.querySelector('[data-action="install"]')?.getBoundingClientRect().width,
+  heroActionsHidden: getComputedStyle(document.querySelector('.hero .actions')).display === 'none',
+  homeQuickActionCount: homeActions.length,
+  homeQuickActionsSquare: homeActions.every(button => Math.round(button.getBoundingClientRect().width) === 68 && Math.round(button.getBoundingClientRect().height) === 68),
+  homeQuickActionsCentered: Math.abs((homeGroup.left + homeGroup.width / 2) - innerWidth / 2) <= 1,
+  homeQuickActionsAboveNavigation: homeGroup.bottom <= navigation.top - 10,
+  addPlayerFirst: Boolean(homeActions[0]?.querySelector('.add-player-fab-icon .fab-plus')) && homeActions[0]?.getAttribute('aria-label') === 'Додати гравця',
+  createGameSecond: Boolean(homeActions[1]?.querySelector('svg')) && homeActions[1]?.getAttribute('aria-label') === 'Створити гру',
+  addPlayerGold: homeActions[0]?.classList.contains('primary-fab') && getComputedStyle(homeActions[0]).backgroundColor === 'rgb(216, 170, 88)',
+  createGameRed: homeActions[1]?.classList.contains('danger-fab') && getComputedStyle(homeActions[1]).backgroundColor === 'rgb(141, 49, 52)'
+  });
+})()`);
+const headerMediaControls = await evaluate(`({
+  bluetooth: Boolean(document.querySelector('[data-action="open-media-panel"] svg')),
+  androidSettingsLink: document.querySelector('.android-bluetooth-link')?.getAttribute('href'),
+  play: Boolean(document.querySelector('[data-action="media-play"] svg')),
+  pause: Boolean(document.querySelector('[data-action="media-pause"] svg')),
+  playInitiallyDisabled: document.querySelector('[data-action="media-play"]')?.disabled,
+  pauseInitiallyDisabled: document.querySelector('[data-action="media-pause"]')?.disabled,
+  controls: [...document.querySelectorAll('.header-media-controls .header-media-btn')].filter(button => button.getBoundingClientRect().width > 0).length,
+  smallest: Math.round(Math.min(...[...document.querySelectorAll('.header-media-btn')].filter(button => button.getBoundingClientRect().width > 0).map(button => button.getBoundingClientRect().width))),
+  centerOffset: (() => { const box = document.querySelector('.header-media-controls').getBoundingClientRect(); return Math.abs((box.left + box.right) / 2 - innerWidth / 2); })(),
+  bluetoothBesideProfile: (() => { const bluetooth = document.querySelector('.browser-bluetooth-btn').getBoundingClientRect(); const profile = document.querySelector('.profile-btn').getBoundingClientRect(); return bluetooth.right <= profile.left && profile.left - bluetooth.right <= 6; })(),
+  profileGroupRightGap: (() => { const box = document.querySelector('.header-profile-actions').getBoundingClientRect(); return Math.round(innerWidth - box.right); })()
+})`);
+await click('[data-action="open-media-panel"]');
+const mediaModalFrame = await inspectModalFrame();
+const mediaPanel = await evaluate(`({
+  title: document.querySelector('#media-panel-title')?.textContent,
+  audioInput: document.querySelector('#music-file')?.accept,
+  externalControlWarning: [...document.querySelectorAll('.media-panel-section .help')].some(button => button.dataset.tooltip?.includes('Spotify') && button.dataset.tooltip.includes('керувати не може')),
+  systemBluetoothGuidance: document.querySelector('.media-modal')?.textContent.includes('системних налаштуваннях телефона'),
+  iosControlCenterGuidance: document.querySelector('.ios-bluetooth-guide')?.textContent.includes('Центр керування') && document.querySelector('.ios-bluetooth-guide')?.textContent.includes('Параметри → Bluetooth'),
+  bluetoothState: Boolean(document.querySelector('.media-panel-section .ui-state .state-icon svg')),
+  chooserPresentWhenSupported: !('bluetooth' in navigator) || Boolean(document.querySelector('[data-action="bluetooth-request"]'))
+})`);
+await evaluate(`(() => {
+  const sampleRate = 8000;
+  const samples = sampleRate * 2;
+  const buffer = new ArrayBuffer(44 + samples * 2);
+  const view = new DataView(buffer);
+  const write = (offset, value) => [...value].forEach((character, index) => view.setUint8(offset + index, character.charCodeAt(0)));
+  write(0, 'RIFF'); view.setUint32(4, 36 + samples * 2, true); write(8, 'WAVE'); write(12, 'fmt ');
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); write(36, 'data'); view.setUint32(40, samples * 2, true);
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([buffer], 'Enjoy smoke.wav', { type: 'audio/wav' }));
+  const input = document.querySelector('#music-file');
+  Object.defineProperty(input, 'files', { value: transfer.files, configurable: true });
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+})()`);
+await wait(150);
+const preparedMedia = await evaluate(`({
+  track: document.querySelector('.media-panel-section:nth-child(2) .state-copy b')?.textContent,
+  localOnly: document.querySelector('.media-note')?.textContent.includes('не завантажується'),
+  playEnabled: !document.querySelector('.media-modal [data-action="media-play"]')?.disabled,
+  clearButton: Boolean(document.querySelector('[data-action="media-clear"]'))
+})`);
+await captureScreenshot(process.env.SMOKE_MEDIA_SCREENSHOT);
+await click('.media-modal [data-action="close-modal"]');
+await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 568, deviceScaleFactor: 1, mobile: true });
+await wait(100);
+const compactLayout = await evaluate(`({ viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth, headerWidth: document.querySelector('.shell-header').getBoundingClientRect().width, actionsRight: Math.round(document.querySelector('.header-actions').getBoundingClientRect().right) })`);
+await captureScreenshot(process.env.SMOKE_COMPACT_SCREENSHOT);
+await send('Emulation.setDeviceMetricsOverride', { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true });
+await wait(100);
+const tabletLayout = await evaluate(`({
+  viewport: innerWidth,
+  scrollWidth: document.documentElement.scrollWidth,
+  headerHeight: Math.round(document.querySelector('.shell-header').getBoundingClientRect().height),
+  navHeight: Math.round(document.querySelector('.bottom-nav').getBoundingClientRect().height),
+  navItems: document.querySelectorAll('.bottom-nav .nav-item').length,
+  smallestNavIcon: Math.round(Math.min(...[...document.querySelectorAll('.bottom-nav .nav-item svg')].map(icon => icon.getBoundingClientRect().width)))
+})`);
+await captureScreenshot(process.env.SMOKE_TABLET_SCREENSHOT);
+await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
+await wait(100);
+const desktopLayout = await evaluate(`(() => {
+  const header = document.querySelector('.shell-header').getBoundingClientRect();
+  const navElement = document.querySelector('.bottom-nav');
+  const navigation = navElement.getBoundingClientRect();
+  const navStyle = getComputedStyle(navElement);
+  const items = [...navElement.querySelectorAll('.nav-item')].map(item => item.getBoundingClientRect());
+  return {
+    viewport: innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    headerTop: Math.round(header.top),
+    headerBottom: Math.round(header.bottom),
+    navTop: Math.round(navigation.top),
+    itemWidthSpread: Math.round(Math.max(...items.map(item => item.width)) - Math.min(...items.map(item => item.width))),
+    navRightGap: Math.round(navigation.right - parseFloat(navStyle.paddingRight) - items.at(-1).right)
+  };
+})()`);
+await captureScreenshot(process.env.SMOKE_DESKTOP_SCREENSHOT);
+await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+await wait(100);
+const ownerDatabases = await evaluate(`indexedDB.databases().then(rows => rows.map(row => row.name))`);
+await click('[data-action="edit-host-profile"]');
+const hostProfileModalFrame = await inspectModalFrame();
+const hostProfileControls = await evaluate(`({
+  email: document.querySelector('.identity-field span')?.textContent,
+  camera: document.querySelector('#host-avatar-camera')?.getAttribute('capture'),
+  cameraIcon: Boolean(document.querySelector('label[for="host-avatar-camera"] .camera-button-icon')),
+  cameraEmojiAbsent: !document.querySelector('label[for="host-avatar-camera"]')?.textContent.includes('📷'),
+  gallery: Boolean(document.querySelector('#host-avatar-gallery')),
+  deleteButton: Boolean(document.querySelector('.host-profile-modal .account-delete-btn[data-action="delete-account"]')),
+  deleteIconOnly: Boolean(document.querySelector('.host-profile-modal .account-delete-btn svg')) && !document.querySelector('.host-profile-modal .account-delete-btn')?.textContent.trim(),
+  deleteInIdentity: Boolean(document.querySelector('.host-profile-modal .identity-field .account-delete-btn')),
+  deleteAbsentFromHeader: !document.querySelector('.host-profile-modal .section-title .account-delete-btn'),
+  languageCount: document.querySelectorAll('.host-profile-modal [data-language]').length,
+  languageOrder: [...document.querySelectorAll('.host-profile-modal [data-language]')].map(button => button.textContent.trim()),
+  discoverable: document.querySelector('[name="discoverable"]')?.checked,
+  inputFontSize: parseFloat(getComputedStyle(document.querySelector('#host-display-name')).fontSize),
+  inputAutofocus: document.querySelector('#host-display-name').hasAttribute('autofocus'),
+  descriptionPlaceholder: document.querySelector('#host-description')?.placeholder,
+  dialogFocused: document.activeElement === document.querySelector('.host-profile-modal'),
+  dialogScrollTop: document.querySelector('.host-profile-modal').scrollTop,
+  sheetTop: Math.round(document.querySelector('.modal').getBoundingClientRect().top),
+  sheetLeft: Math.round(document.querySelector('.modal').getBoundingClientRect().left),
+  sheetBottom: Math.round(document.querySelector('.modal').getBoundingClientRect().bottom),
+  sheetRightGap: Math.round(innerWidth - document.querySelector('.modal').getBoundingClientRect().right),
+  viewportBottom: innerHeight
+})`);
+await captureScreenshot(process.env.SMOKE_PROFILE_SCREENSHOT);
+await evaluate(`document.querySelector('#host-display-name').value = 'Ведучий Smoke'`);
+await evaluate(`document.querySelector('#host-nickname').value = 'Smoke Нік'`);
+await evaluate(`(async () => {
+  const image = await fetch('./assets/favicon-64.png').then(response => response.blob());
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([image], 'profile.png', { type: image.type }));
+  const input = document.querySelector('#host-avatar-gallery');
+  input.files = transfer.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+})()`);
+await wait(500);
+const hostAvatarDraft = await evaluate(`({
+  namePreserved: document.querySelector('#host-display-name')?.value,
+  nicknamePreserved: document.querySelector('#host-nickname')?.value,
+  customPreview: document.querySelector('.host-profile-modal .avatar-editor img')?.src.startsWith('data:image/')
+})`);
+await click('[data-form="host-profile"] button[type="submit"]');
+const editedHostName = await evaluate(`document.querySelector('.profile-btn > span:last-child')?.textContent`);
+const savedHostAvatar = await evaluate(`new Promise((resolve, reject) => {
+  const request = indexedDB.open('mafia-desk-local-smoke-test');
+  request.onerror = () => reject(request.error);
+  request.onsuccess = () => {
+    const row = request.result.transaction('settings').objectStore('settings').get('hostProfile');
+    row.onerror = () => reject(row.error);
+    row.onsuccess = () => resolve({
+      header: document.querySelector('.profile-btn .avatar')?.src.startsWith('data:image/'),
+      stored: row.result?.value?.avatar?.startsWith('data:image/')
+    });
+  };
+})`);
+await click('[href="#settings"]');
+const settingsChrome = await inspectAppChrome();
+const settingsActionLayout = await evaluate(`(() => {
+  const measure = selector => {
+    const row = document.querySelector(selector);
+    const buttons = [...row.querySelectorAll(':scope > .btn')].filter(button => button.offsetParent !== null);
+    const rowRect = row.getBoundingClientRect();
+    const firstRect = buttons[0].getBoundingClientRect();
+    const lastRect = buttons.at(-1).getBoundingClientRect();
+    return {
+      count: buttons.length,
+      fillsWidth: Math.abs((lastRect.right - firstRect.left) - rowRect.width) <= 2,
+      singleButtonFills: buttons.length !== 1 || Math.abs(firstRect.width - rowRect.width) <= 2
+    };
+  };
+  return { drive: measure('.drive-actions'), observer: measure('.observer-actions') };
+})()`);
+const themeOptions = await evaluate(`document.querySelectorAll('[data-theme-choice]').length`);
+const languageOptions = await evaluate(`({
+  count: document.querySelectorAll('main [data-language]').length,
+  order: [...document.querySelectorAll('main [data-language]')].map(button => button.textContent.trim()),
+  selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language
+})`);
+await click('main [data-language="en"]');
+const englishLanguage = await evaluate(`({
+  lang: document.documentElement.lang,
+  stored: localStorage.getItem('mafia-desk-language'),
+  title: document.querySelector('.page-head h1')?.textContent,
+  nav: [...document.querySelectorAll('.bottom-nav .nav-item')].map(item => item.textContent.trim()),
+  field: [...document.querySelectorAll('.field-label')].find(item => item.textContent.includes('App language'))?.textContent.trim(),
+  selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language
+})`);
+await click('main [data-language="fr"]');
+const frenchLanguage = await evaluate(`({ lang: document.documentElement.lang, title: document.querySelector('.page-head h1')?.textContent, more: document.querySelector('.bottom-nav [aria-current="page"]')?.textContent.trim(), selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language })`);
+await click('main [data-language="ru"]');
+const russianLanguage = await evaluate(`({ lang: document.documentElement.lang, title: document.querySelector('.page-head h1')?.textContent, more: document.querySelector('.bottom-nav [aria-current="page"]')?.textContent.trim(), selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language })`);
+await click('main [data-language="uk"]');
+const restoredUkrainianLanguage = await evaluate(`({ lang: document.documentElement.lang, stored: localStorage.getItem('mafia-desk-language'), title: document.querySelector('.page-head h1')?.textContent, selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language })`);
+const settingsHeaderBrandAbsent = await evaluate(`!document.querySelector('.brand-copy') && !document.querySelector('.shell-header')?.textContent.includes('ENJOY /')`);
+const enjoyInfo = await evaluate(`({
+  descriptionAbsent: !document.querySelector('.enjoy-info-copy p'),
+  instagramIcon: Boolean(document.querySelector('.enjoy-info-card a[href*="instagram.com"] .instagram-app-icon')),
+  mapsIcon: Boolean(document.querySelector('.enjoy-info-card a[href*="google.com/maps"] .maps-app-icon')),
+  iconOnly: [...document.querySelectorAll('.enjoy-info-card .cafe-icon-link')].every(link => !link.textContent.trim() && link.querySelector('svg')),
+  wordmarkAbsent: !document.querySelector('.enjoy-info-card .enjoy-wordmark'),
+  smallestLink: Math.round(Math.min(...[...document.querySelectorAll('.enjoy-info-card .cafe-icon-link')].map(link => link.getBoundingClientRect().width))),
+  cardHeight: Math.round(document.querySelector('.enjoy-info-card')?.getBoundingClientRect().height || 0)
+})`);
+const manualJsonTransferAbsent = await evaluate(`!document.querySelector('[data-action="export-data"], [data-action="import-data"], #import-file')`);
+const settingsTechnicalTermsAbsent = await evaluate(`!/(?:firestore|firebase)/i.test(document.querySelector('#app').textContent) && [...document.querySelectorAll('#app [data-tooltip]')].every(element => !/(?:firestore|firebase)/i.test(element.dataset.tooltip))`);
+const darkPalette = await evaluate(`({ active: document.documentElement.dataset.theme, bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(), text: getComputedStyle(document.documentElement).getPropertyValue('--text').trim(), art: getComputedStyle(document.documentElement).getPropertyValue('--body-art').trim(), card: getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim() })`);
+await click('[data-theme-choice="light"]');
+const lightPalette = await evaluate(`({ active: document.documentElement.dataset.theme, bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(), text: getComputedStyle(document.documentElement).getPropertyValue('--text').trim(), art: getComputedStyle(document.documentElement).getPropertyValue('--body-art').trim(), card: getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim() })`);
+await captureScreenshot(process.env.SMOKE_LIGHT_SCREENSHOT);
+await click('[data-theme-choice="cafe"]');
+const cafeTheme = await evaluate(`({
+  active: document.documentElement.dataset.theme,
+  bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
+  text: getComputedStyle(document.documentElement).getPropertyValue('--text').trim(),
+  art: getComputedStyle(document.documentElement).getPropertyValue('--body-art').trim(),
+  card: getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim(),
+  cached: localStorage.getItem('mafia-desk-theme'),
+  pressed: document.querySelector('[data-theme-choice="cafe"]')?.getAttribute('aria-pressed'),
+  themeColor: document.querySelector('meta[name="theme-color"]')?.content
+})`);
+const rulesLinks = await evaluate(`({
+  count: document.querySelectorAll('.rules-links a').length,
+  ukrainian: document.querySelector('.rules-links a[href*="imafia.org/game-rules"]')?.href,
+  international: document.querySelector('.rules-links a[href*="fiim.world/fiim-rules"]')?.href,
+  externalSafety: [...document.querySelectorAll('.rules-links a')].every(link => link.target === '_blank' && link.rel.includes('noopener')),
+  arrowsAbsent: ![...document.querySelectorAll('a, button')].some(element => element.textContent.includes('↗'))
+})`);
+const compactHelp = await evaluate(`({
+  count: document.querySelectorAll('.help[data-tooltip]').length,
+  visiblePageDescriptions: document.querySelectorAll('.page-head p').length,
+  visibleSectionDescriptions: document.querySelectorAll('.section-title p').length,
+  visibleFieldHints: document.querySelectorAll('.field-hint').length,
+  circular: (() => {
+    const button = document.querySelector('.page-head .help');
+    const style = getComputedStyle(button);
+    return Math.abs(button.getBoundingClientRect().width - button.getBoundingClientRect().height) < 1 && style.borderRadius === '50%';
+  })()
+})`);
+await click('.page-head .help');
+const helpPopover = await evaluate(`(() => {
+  const pop = document.querySelector('.tooltip-pop');
+  const rect = pop?.getBoundingClientRect();
+  return {
+    visible: Boolean(pop),
+    role: pop?.getAttribute('role'),
+    text: pop?.textContent,
+    insideViewport: Boolean(rect && rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight)
+  };
+})()`);
+await click('[data-action="delete-account"]');
+const accountDeleteModalFrame = await inspectModalFrame();
+const accountDeletion = await evaluate(`({
+  trashIconOnly: Boolean(document.querySelector('.account-delete-btn svg')) && !document.querySelector('.account-delete-btn')?.textContent.trim(),
+  trashButtonSize: document.querySelector('.account-delete-btn')?.getBoundingClientRect().height,
+  dialog: Boolean(document.querySelector('.account-delete-modal[role="alertdialog"]')),
+  title: document.querySelector('#delete-account-title')?.textContent,
+  retentionCopyAbsent: !document.querySelector('.account-delete-modal')?.textContent.includes('Залишаться без змін') && !document.querySelector('.account-delete-modal')?.textContent.includes('резервна копія у Google Drive'),
+  confirm: document.querySelector('[data-action="confirm-delete-account"]')?.textContent,
+  focused: document.activeElement === document.querySelector('.account-delete-modal'),
+  scrollTop: document.querySelector('.account-delete-modal')?.scrollTop,
+  top: Math.round(document.querySelector('.account-delete-modal')?.getBoundingClientRect().top || 0),
+  left: Math.round(document.querySelector('.account-delete-modal')?.getBoundingClientRect().left || 0),
+  rightGap: Math.round(innerWidth - (document.querySelector('.account-delete-modal')?.getBoundingClientRect().right || innerWidth)),
+  bottomWithinViewport: document.querySelector('.account-delete-modal')?.getBoundingClientRect().bottom <= innerHeight - 6,
+  backdropAlign: getComputedStyle(document.querySelector('.account-delete-backdrop')).alignItems,
+  bordered: ['borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth'].every(property => parseFloat(getComputedStyle(document.querySelector('.account-delete-modal'))[property]) >= 1)
+})`);
+await captureScreenshot(process.env.SMOKE_DELETE_ACCOUNT_SCREENSHOT);
+await click('.account-delete-modal [data-action="close-modal"]');
+await click('.page-head h1');
+if (process.env.SMOKE_THEME_SCREENSHOT) {
+  await captureScreenshot(process.env.SMOKE_THEME_SCREENSHOT);
+}
+await click('[data-theme-choice="dark"]');
+
+await click('[href="#stats"]');
+const statsChrome = await inspectAppChrome();
+const statsPanelDefault = await evaluate(`({
+  expanded: document.querySelector('[data-action="toggle-panel"][data-panel="statsRoles"]')?.getAttribute('aria-expanded'),
+  hidden: document.querySelector('#panel-statsRoles')?.hidden,
+  graphPresent: Boolean(document.querySelector('#panel-statsRoles .bar-chart'))
+})`);
+await click('[data-action="toggle-panel"][data-panel="statsRoles"]');
+const statsPanelExpanded = await evaluate(`({
+  expanded: document.querySelector('[data-action="toggle-panel"][data-panel="statsRoles"]')?.getAttribute('aria-expanded'),
+  hidden: document.querySelector('#panel-statsRoles')?.hidden,
+  focused: document.activeElement?.dataset.panel
+})`);
+await click('[data-action="toggle-panel"][data-panel="statsRoles"]');
+const emptySharedStats = await evaluate(`({
+  title: document.querySelector('.page-head h1')?.textContent,
+  description: document.querySelector('.page-head .help')?.dataset.tooltip,
+  archiveTitle: [...document.querySelectorAll('.section-title h2')].find(element => element.textContent.includes('архів'))?.textContent,
+  blackRate: document.querySelectorAll('.stat-card b')[2]?.textContent,
+  summaryCentered: [...document.querySelectorAll('.stats-summary-grid .stat-card')].length === 4 && [...document.querySelectorAll('.stats-summary-grid .stat-card')].every(card => getComputedStyle(card).textAlign === 'center' && getComputedStyle(card).alignItems === 'center'),
+  technicalTermsAbsent: !/(?:firestore|firebase)/i.test(document.querySelector('#app').textContent) && [...document.querySelectorAll('#app [data-tooltip]')].every(element => !/(?:firestore|firebase)/i.test(element.dataset.tooltip)),
+  unifiedStates: document.querySelectorAll('.ui-state').length >= 3 && [...document.querySelectorAll('.ui-state')].every(state => state.querySelector('.state-icon svg') && state.querySelector('.state-copy')),
+  emptyStates: document.querySelectorAll('.ui-state.state-empty').length >= 2
+})`);
+await captureScreenshot(process.env.SMOKE_STATS_SCREENSHOT);
+
+await click('[href="#players"]');
+const playersChrome = await inspectAppChrome();
+const telegramImportAbsent = await evaluate(`({
+  input: !document.querySelector('#telegram-import-file'),
+  action: !document.querySelector('[data-action="import-telegram"]'),
+  modal: !document.querySelector('[data-form="telegram-import"]')
+})`);
+await evaluate(`(async () => {
+  const timestamp = new Date().toISOString();
+  const payload = {
+    schema: 1,
+    players: Array.from({ length: 12 }, (_, index) => ({
+      id: 'fixture-player-' + (index + 1),
+      name: 'Гравець ' + (index + 1),
+      nickname: '',
+      contact: 'Enjoy',
+      notes: '',
+      avatar: index === 0 ? "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3Cpath fill='%23c33' d='M0 0h1v1H0z'/%3E%3C/svg%3E" : '',
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })),
+    games: [],
+    settings: []
+  };
+  const { importDatabase } = await import('./src/db.js');
+  await importDatabase(payload, { replace: false });
+  return true;
+})()`);
+await evaluate(`location.reload()`);
+await wait(700);
+await click('.players-fab-group [data-action="new-player"]');
+const playerModalFrame = await inspectModalFrame();
+await captureScreenshot(process.env.SMOKE_PLAYER_MODAL_SCREENSHOT);
+const cameraControl = await evaluate(`({
+  cameraInput: Boolean(document.querySelector('#avatar-camera')),
+  captureMode: document.querySelector('#avatar-camera')?.getAttribute('capture'),
+  vectorIcon: Boolean(document.querySelector('label[for="avatar-camera"] .camera-button-icon')),
+  emojiAbsent: !document.querySelector('label[for="avatar-camera"]')?.textContent.includes('📷'),
+  galleryInput: Boolean(document.querySelector('#avatar-gallery')),
+  emailInputType: document.querySelector('#player-email')?.type,
+  emailHelp: document.querySelector('label[for="player-email"] .help')?.dataset.tooltip
+})`);
+await evaluate(`document.querySelector('#player-name').value = 'Тестова Гравчиня'`);
+await evaluate(`document.querySelector('#player-nickname').value = 'Тестовий Нік'`);
+await evaluate(`document.querySelector('#player-email').value = 'PLAYER.TEST@EXAMPLE.COM'`);
+await click('.modal button[type="submit"]');
+await wait(200);
+const profile = await evaluate(`({ cards: document.querySelectorAll('.player-card').length, modalOpen: Boolean(document.querySelector('.modal')), pendingGoogleLink: [...document.querySelectorAll('.player-card')].some(card => card.textContent.includes('Очікує Google')) })`);
+if (await evaluate(`Boolean(document.querySelector('[data-action="clear-next-game"]'))`)) await click('[data-action="clear-next-game"]');
+const lineupIds = await evaluate(`(() => {
+  const buttons = [...document.querySelectorAll('[data-action="toggle-next-player"]')];
+  const preferred = buttons.find(button => button.closest('.player-card')?.textContent.includes('Тестовий Нік'));
+  return [preferred, ...buttons.filter(button => button !== preferred)].slice(0, 12).map(button => button.dataset.id);
+})()`);
+for (const id of lineupIds) {
+  await evaluate(`(id => [...document.querySelectorAll('[data-action="toggle-next-player"]')].find(button => button.dataset.id === id)?.click())(${JSON.stringify(id)})`);
+  await wait(40);
+}
+const lineupSelection = await evaluate(`({
+  selected: document.querySelectorAll('.queue-player-btn.selected').length,
+  status: document.querySelector('.lineup-head b')?.textContent,
+  chips: document.querySelectorAll('.lineup-chip').length,
+  waitingChips: document.querySelectorAll('.lineup-chip.waiting').length,
+  positions: [...document.querySelectorAll('.queue-player-btn.selected small')].map(item => Number(item.textContent))
+})`);
+const playersLayout = await evaluate(`(() => {
+  const group = document.querySelector('.players-fab-group');
+  const actions = [...group.querySelectorAll('.mobile-fab')];
+  const rect = group.getBoundingClientRect();
+  const navigation = document.querySelector('.bottom-nav').getBoundingClientRect();
+  return {
+    viewport: innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    topActionHidden: getComputedStyle(document.querySelector('.page-head > .actions')).display === 'none',
+    searchActionHidden: getComputedStyle(document.querySelector('.search-row > .btn')).display === 'none',
+    textSeatingHidden: getComputedStyle(document.querySelector('.lineup-actions [data-action="prepare-next-game"]')).display === 'none',
+    fabVisible: getComputedStyle(group).display !== 'none',
+    actionCount: actions.length,
+    fabSquare: actions.every(button => Math.round(button.getBoundingClientRect().width) === 68 && Math.round(button.getBoundingClientRect().height) === 68),
+    addPlayerIcon: Boolean(actions[0]?.querySelector('.add-player-fab-icon .fab-plus')),
+    seatingIcon: Boolean(actions[1]?.querySelector('.seating-fab-icon')),
+    addPlayerGold: actions[0]?.classList.contains('primary-fab'),
+    seatingRed: actions[1]?.classList.contains('danger-fab'),
+    fabCentered: Math.abs((rect.left + rect.width / 2) - innerWidth / 2) <= 1,
+    fabAboveNavigation: rect.bottom <= navigation.top - 10,
+    labels: actions.map(button => button.getAttribute('aria-label'))
+  };
+})()`);
+await captureScreenshot(process.env.SMOKE_PLAYERS_SCREENSHOT);
+await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 568, deviceScaleFactor: 1, mobile: true });
+await wait(100);
+const playersCompactLayout = await evaluate(`({
+  viewport: innerWidth,
+  scrollWidth: document.documentElement.scrollWidth,
+  statusRight: Math.round(document.querySelector('.directory-status').getBoundingClientRect().right),
+  refreshWidth: Math.round(document.querySelector('.directory-status .btn').getBoundingClientRect().width),
+  smallestQueueButton: Math.round(Math.min(...[...document.querySelectorAll('.queue-player-btn')].map(button => button.getBoundingClientRect().height))),
+  fabRight: Math.round(document.querySelector('.players-fab-group').getBoundingClientRect().right),
+  fabLeft: Math.round(document.querySelector('.players-fab-group').getBoundingClientRect().left)
+})`);
+await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+await wait(100);
+
+await click('.players-fab-group [data-action="prepare-next-game"]');
+const setupChrome = await inspectAppChrome();
+const setupPanelsDefault = await evaluate(`Object.fromEntries(['setupGame', 'setupTimers', 'setupRules', 'setupSeating'].map(panel => {
+  const toggle = document.querySelector('[data-action="toggle-panel"][data-panel="' + panel + '"]');
+  return [panel, { expanded: toggle?.getAttribute('aria-expanded'), hidden: document.querySelector('#panel-' + panel)?.hidden }];
+}))`);
+const setupPanelOrder = await evaluate(`[...document.querySelectorAll('main > .collapsible-panel')].map(panel => panel.dataset.panel)`);
+await click('[data-action="toggle-panel"][data-panel="setupRules"]');
+const setupRulesLinks = await evaluate(`({
+  expanded: document.querySelector('[data-action="toggle-panel"][data-panel="setupRules"]')?.getAttribute('aria-expanded'),
+  hidden: document.querySelector('#panel-setupRules')?.hidden,
+  count: document.querySelectorAll('#panel-setupRules .rules-links a').length,
+  ukrainian: document.querySelector('#panel-setupRules a[href*="imafia.org/game-rules"]')?.href,
+  international: document.querySelector('#panel-setupRules a[href*="fiim.world/fiim-rules"]')?.href,
+  externalSafety: [...document.querySelectorAll('#panel-setupRules .rules-links a')].every(link => link.target === '_blank' && link.rel.includes('noopener')),
+  arrowsAbsent: ![...document.querySelectorAll('a, button')].some(element => element.textContent.includes('↗'))
+})`);
+const setupTypography = await evaluate(`({
+  heading: getComputedStyle(document.querySelector('.page-head h1')).fontFamily,
+  panel: getComputedStyle(document.querySelector('.collapsible-toggle h2')).fontFamily,
+  field: getComputedStyle(document.querySelector('.input')).fontFamily,
+  foulHelp: [...document.querySelectorAll('.field .help')].find(button => button.getAttribute('aria-label')?.includes('Система фолів'))?.dataset.tooltip
+})`);
+await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 568, deviceScaleFactor: 1, mobile: true });
+await wait(100);
+const setupCompactLayout = await evaluate(`({
+  viewport: innerWidth,
+  scrollWidth: document.documentElement.scrollWidth,
+  moveButtons: document.querySelectorAll('.seat-move-btn').length,
+  smallestMoveButton: Math.round(Math.min(...[...document.querySelectorAll('.seat-move-btn')].map(button => button.getBoundingClientRect().height))),
+  playerPickers: document.querySelectorAll('.seat-player-picker').length,
+  smallestPlayerPicker: Math.round(Math.min(...[...document.querySelectorAll('.seat-player-picker')].map(picker => picker.getBoundingClientRect().height))),
+  pickerIcons: document.querySelectorAll('.seat-player-picker > svg').length,
+  seatAvatars: document.querySelectorAll('.seat-inline-avatar').length,
+  generatedAvatars: document.querySelectorAll('.seat-inline-avatar.generated-avatar').length,
+  profileAvatars: document.querySelectorAll('.seat-inline-avatar:not(.generated-avatar)').length,
+  avatarSources: [...document.querySelectorAll('.seat-inline-avatar')].map(image => image.getAttribute('src')),
+  uniqueGeneratedAvatars: (() => {
+    const sources = [...document.querySelectorAll('.seat-inline-avatar.generated-avatar')].map(image => image.getAttribute('src'));
+    return new Set(sources).size === sources.length;
+  })(),
+  avatarsFill: [...document.querySelectorAll('.seat-inline-avatar')].every(image => {
+    const imageRect = image.getBoundingClientRect();
+    return getComputedStyle(image).objectFit === 'cover' && Math.abs(imageRect.width - imageRect.height) <= 1 && Math.round(imageRect.width) === 40;
+  }),
+  avatarBetweenPickerAndName: [...document.querySelectorAll('.seat-setup-row')].every(row => row.children[1]?.classList.contains('seat-player-picker') && row.children[2]?.classList.contains('seat-inline-avatar') && row.children[3]?.classList.contains('seat-name-input')),
+  nameInputs: document.querySelectorAll('.seat-name-input').length,
+  collapsedPanelMaxHeight: Math.round(Math.max(...[...document.querySelectorAll('.collapsible-panel[data-panel^="setup"]:not(.expanded)')].map(panel => panel.getBoundingClientRect().height))),
+  collapsedToggleMinHeight: Math.round(Math.min(...[...document.querySelectorAll('.collapsible-panel[data-panel^="setup"]:not(.expanded) .collapsible-toggle')].map(toggle => toggle.getBoundingClientRect().height))),
+  maxRowHeight: Math.round(Math.max(...[...document.querySelectorAll('.seat-setup-row')].map(row => row.getBoundingClientRect().height))),
+  rowBordersAbsent: [...document.querySelectorAll('.seat-setup-row')].every(row => getComputedStyle(row).borderTopWidth === '0px'),
+  rowBackgroundsTransparent: [...document.querySelectorAll('.seat-setup-row')].every(row => getComputedStyle(row).backgroundColor === 'rgba(0, 0, 0, 0)'),
+  rowGap: Math.round(parseFloat(getComputedStyle(document.querySelector('.seat-setup')).rowGap)),
+  nativeSelectsCompact: [...document.querySelectorAll('.seat-profile-select')].every(select => getComputedStyle(select).opacity === '0' && getComputedStyle(select).position === 'absolute'),
+  footerActionsHidden: getComputedStyle(document.querySelector('.panel-footer-actions')).display === 'none',
+  floatingActions: (() => {
+    const group = document.querySelector('.setup-fab-group');
+    const actions = [...group.querySelectorAll('.mobile-fab')];
+    const rects = actions.map(button => button.getBoundingClientRect());
+    const groupRect = group.getBoundingClientRect();
+    const navigation = document.querySelector('.bottom-nav').getBoundingClientRect();
+    return {
+      visible: getComputedStyle(group).display !== 'none',
+      count: actions.length,
+      square: rects.every(rect => Math.round(rect.width) === 68 && Math.round(rect.height) === 68),
+      centered: Math.abs((groupRect.left + groupRect.width / 2) - innerWidth / 2) <= 2,
+      aboveNavigation: groupRect.bottom <= navigation.top,
+      addPlayerIcon: Boolean(actions[0]?.querySelector('.add-player-fab-icon .fab-plus')),
+      dealRolesIcon: Boolean(actions[1]?.querySelector('.deal-roles-fab-icon .role-card-mark')),
+      addLabel: actions[0]?.getAttribute('aria-label'),
+      dealLabel: actions[1]?.getAttribute('aria-label'),
+      addPlayerGold: actions[0]?.classList.contains('primary-fab') && getComputedStyle(actions[0]).backgroundColor === 'rgb(216, 170, 88)',
+      dangerColor: getComputedStyle(actions[1]).backgroundColor
+    };
+  })()
+})`);
+await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+await wait(100);
+await evaluate('scrollTo(0, 0)');
+await wait(50);
+await captureScreenshot(process.env.SMOKE_SETUP_SCREENSHOT);
+await click('[data-action="toggle-panel"][data-panel="setupGame"]');
+const setupGameExpanded = await evaluate(`({
+  expanded: document.querySelector('[data-action="toggle-panel"][data-panel="setupGame"]')?.getAttribute('aria-expanded'),
+  hidden: document.querySelector('#panel-setupGame')?.hidden,
+  focused: document.activeElement?.dataset.panel
+})`);
+await click('[data-action="toggle-panel"][data-panel="setupGame"]');
+const setupTimersCollapsed = setupPanelsDefault.setupTimers;
+await click('[data-action="toggle-panel"][data-panel="setupSeating"]');
+const setupSeatingCollapsed = await evaluate(`({
+  expanded: document.querySelector('[data-action="toggle-panel"][data-panel="setupSeating"]')?.getAttribute('aria-expanded'),
+  hidden: document.querySelector('#panel-setupSeating')?.hidden
+})`);
+await click('[data-action="toggle-panel"][data-panel="setupSeating"]');
+const randomTable = await evaluate(`({
+  selected: [...document.querySelectorAll('[data-seat-profile]')].filter(select => select.value).length,
+  unique: new Set([...document.querySelectorAll('[data-seat-profile]')].map(select => select.value).filter(Boolean)).size,
+  venue: document.querySelector('#game-venue')?.value,
+  title: document.querySelector('#game-title')?.value,
+  reroll: Boolean(document.querySelector('[data-action="random-table"]:not(:disabled)')),
+  nicknameFirstOption: [...document.querySelectorAll('[data-seat-profile] option')].find(option => option.textContent.startsWith('Тестовий Нік'))?.textContent
+})`);
+const queuedTable = await evaluate(`({
+  profileIds: [...document.querySelectorAll('[data-seat-profile]')].map(select => select.value),
+  followsSelection: [...document.querySelectorAll('[data-seat-profile]')].every((select, index) => select.value === ${JSON.stringify(lineupIds)}[index])
+})`);
+const seatingOptionFilter = await evaluate(`(() => {
+  const selects = [...document.querySelectorAll('[data-seat-profile]')];
+  const assigned = selects.map(select => select.value).filter(Boolean);
+  const occurrences = new Map();
+  selects.forEach(select => [...select.options].filter(option => option.value).forEach(option => occurrences.set(option.value, (occurrences.get(option.value) || 0) + 1)));
+  return {
+    currentPlayerPreserved: selects.every(select => !select.value || [...select.options].some(option => option.value === select.value && option.selected)),
+    occupiedHiddenElsewhere: selects.every(select => [...select.options].every(option => !option.value || option.value === select.value || !assigned.includes(option.value))),
+    eachAssignedShownOnce: assigned.every(profileId => occurrences.get(profileId) === 1),
+    unassignedRemainAvailable: [...occurrences.entries()].some(([profileId, count]) => !assigned.includes(profileId) && count === selects.length)
+  };
+})()`);
+const temporaryOriginalProfile = await evaluate(`document.querySelector('[data-seat-profile="10"]').value`);
+await evaluate(`(() => {
+  const select = document.querySelector('[data-seat-profile="10"]');
+  select.value = '';
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+})()`);
+await wait(100);
+const generatedGuestName = await evaluate(`document.querySelector('[data-seat-name="10"]')?.value`);
+await evaluate(`(() => {
+  const input = document.querySelector('[data-seat-name="10"]');
+  input.value = 'Ручний Гість';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+})()`);
+await click('[data-action="move-setup-seat"][data-seat="10"]');
+await click('[data-action="move-setup-to"][data-to="9"]');
+const manualGuestAfterMove = await evaluate(`document.querySelector('[data-seat-name="9"]')?.value`);
+await click('[data-action="move-setup-seat"][data-seat="9"]');
+await click('[data-action="move-setup-to"][data-to="10"]');
+await evaluate(`(profileId => {
+  const select = document.querySelector('[data-seat-profile="10"]');
+  select.value = profileId;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+})(${JSON.stringify(temporaryOriginalProfile)})`);
+await wait(100);
+const temporaryGuestNames = {
+  generated: generatedGuestName,
+  replacesNumberedPlaceholder: Boolean(generatedGuestName) && !/^Гравець \d+$/.test(generatedGuestName),
+  singleWord: Boolean(generatedGuestName) && /^\S+$/u.test(generatedGuestName),
+  manualNameSurvivesMove: manualGuestAfterMove === 'Ручний Гість'
+};
+const moveBefore = await evaluate(`[document.querySelector('[data-seat-profile="1"]').value, document.querySelector('[data-seat-profile="5"]').value]`);
+await click('[data-action="move-setup-seat"][data-seat="1"]');
+const setupMoveModalFrame = await inspectModalFrame();
+const moveDialog = await evaluate(`({
+  title: document.querySelector('.setup-move-modal h2')?.textContent,
+  targets: document.querySelectorAll('[data-action="move-setup-to"]').length,
+  currentDisabled: document.querySelector('[data-action="move-setup-to"][data-to="1"]')?.disabled
+})`);
+await click('[data-action="move-setup-to"][data-to="5"]');
+const moveAfter = await evaluate(`[document.querySelector('[data-seat-profile="1"]').value, document.querySelector('[data-seat-profile="5"]').value]`);
+await click('[data-action="move-setup-seat"][data-seat="5"]');
+await click('[data-action="move-setup-to"][data-to="1"]');
+const moveRestored = await evaluate(`[document.querySelector('[data-seat-profile="1"]').value, document.querySelector('[data-seat-profile="5"]').value]`);
+const seatMove = {
+  dialog: moveDialog,
+  swapped: moveAfter[0] === moveBefore[1] && moveAfter[1] === moveBefore[0],
+  restored: moveRestored[0] === moveBefore[0] && moveRestored[1] === moveBefore[1]
+};
+const nicknameSeat = await evaluate(`(() => {
+  const selects = [...document.querySelectorAll('[data-seat-profile]')];
+  const targetOption = selects.flatMap(select => [...select.options]).find(option => option.textContent.startsWith('Тестовий Нік'));
+  const current = selects.find(select => select.value === targetOption.value);
+  return { currentSeat: Number(current?.dataset.seatProfile || 0) };
+})()`);
+if (nicknameSeat.currentSeat && nicknameSeat.currentSeat !== 1) {
+  await click(`[data-action="move-setup-seat"][data-seat="${nicknameSeat.currentSeat}"]`);
+  await click('[data-action="move-setup-to"][data-to="1"]');
+}
+const roleDealButton = await evaluate(`({
+  label: document.querySelector('.panel-footer-actions [data-action="start-game"]')?.textContent.trim(),
+  danger: document.querySelector('.panel-footer-actions [data-action="start-game"]')?.classList.contains('danger'),
+  backgroundImage: getComputedStyle(document.querySelector('.panel-footer-actions [data-action="start-game"]')).backgroundImage,
+  backgroundColor: getComputedStyle(document.querySelector('.panel-footer-actions [data-action="start-game"]')).backgroundColor,
+  legacyButtons: document.querySelectorAll('.btn.gold, .btn.ghost').length,
+  primaryBackground: getComputedStyle(document.querySelector('.setup-rules-panel .btn.primary')).backgroundColor,
+  secondaryBackground: getComputedStyle(document.querySelector('[data-action="shuffle-seats"]')).backgroundColor
+})`);
+const preferredSeatAvatar = await evaluate(`document.querySelector('[data-seat-name="1"]')?.previousElementSibling?.getAttribute('src')`);
+await click('.setup-fab-group [data-action="start-game"]');
+await wait(250);
+const preferredSeatName = await evaluate(`document.querySelector('.reveal-card h1')?.textContent`);
+const roleReadyLayout = await evaluate(`(() => {
+  const card = document.querySelector('.reveal-card');
+  const progress = card.querySelector('.reveal-progress').getBoundingClientRect();
+  const player = card.querySelector('.reveal-player').getBoundingClientRect();
+  const avatar = card.querySelector('.reveal-avatar');
+  const avatarRect = avatar?.getBoundingClientRect();
+  const actionButton = card.querySelector('.reveal-actions .btn');
+  const actions = card.querySelector('.reveal-actions').getBoundingClientRect();
+  const rect = card.getBoundingClientRect();
+  return {
+    ready: card.classList.contains('role-ready'),
+    progressFirst: progress.top < player.top,
+    actionsLast: actions.top > player.bottom,
+    seat: card.querySelector('.reveal-seat strong')?.textContent,
+    avatar: avatar?.getAttribute('src'),
+    avatarVisible: Boolean(avatar && avatarRect.width >= 60 && avatarRect.height >= 60),
+    avatarBetweenSeatAndName: card.querySelector('.reveal-player')?.children[1]?.classList.contains('reveal-avatar'),
+    avatarFills: avatar ? getComputedStyle(avatar).objectFit === 'cover' : false,
+    privacy: Boolean(card.querySelector('.reveal-privacy-icon svg')),
+    action: actionButton?.textContent.trim(),
+    actionHeight: Math.round(actionButton?.getBoundingClientRect().height || 0),
+    actionFontSize: Math.round(parseFloat(getComputedStyle(actionButton).fontSize)),
+    actionFontWeight: Number(getComputedStyle(actionButton).fontWeight),
+    height: Math.round(rect.height),
+    insideViewport: rect.top >= 0 && rect.bottom <= innerHeight,
+    scrollWidth: document.documentElement.scrollWidth
+  };
+})()`);
+await captureScreenshot(process.env.SMOKE_ROLE_READY_SCREENSHOT);
+
+const roleAssignments = [];
+let roleOpenLayout;
+for (let index = 0; index < 10; index += 1) {
+  await click('[data-action="reveal-role"]');
+  if (index === 0) {
+    roleOpenLayout = await evaluate(`(() => {
+      const card = document.querySelector('.reveal-card');
+      const rect = card.getBoundingClientRect();
+      const avatar = card.querySelector('.reveal-avatar');
+      const actionButton = card.querySelector('.reveal-actions .btn');
+      return {
+        open: card.classList.contains('role-open'),
+        progressVisible: Boolean(card.querySelector('.reveal-progress')),
+        playerVisible: Boolean(card.querySelector('.reveal-player h1')),
+        avatar: avatar?.getAttribute('src'),
+        avatarVisible: Boolean(avatar && avatar.getBoundingClientRect().width >= 60),
+        signal: Boolean(card.querySelector('.role-reveal .reveal-signal img')),
+        team: card.querySelector('.role-reveal .badge')?.textContent,
+        action: actionButton?.textContent.trim(),
+        actionHeight: Math.round(actionButton?.getBoundingClientRect().height || 0),
+        actionFontSize: Math.round(parseFloat(getComputedStyle(actionButton).fontSize)),
+        height: Math.round(rect.height),
+        insideViewport: rect.top >= 0 && rect.bottom <= innerHeight,
+        scrollWidth: document.documentElement.scrollWidth
+      };
+    })()`);
+    await captureScreenshot(process.env.SMOKE_ROLE_OPEN_SCREENSHOT);
+  }
+  const assignment = await evaluate(`({
+    source: document.querySelector('.reveal-signal img')?.getAttribute('src'),
+    avatar: document.querySelector('.reveal-avatar')?.getAttribute('src')
+  })`);
+  roleAssignments.push({ seat: index + 1, ...assignment });
+  await click('[data-action="reveal-next"]');
+}
+
+const zeroNightSignals = await evaluate(`({
+  count: document.querySelectorAll('.signal-stack .phase-signal img').length,
+  sources: [...document.querySelectorAll('.signal-stack img')].map(image => image.getAttribute('src')),
+  actionHeight: Math.round(document.querySelector('[data-action="zero-to-day"]')?.getBoundingClientRect().height || 0),
+  actionFontSize: Math.round(parseFloat(getComputedStyle(document.querySelector('[data-action="zero-to-day"]')).fontSize))
+})`);
+await click('[data-action="zero-to-day"]');
+const firstDay = await evaluate(`({
+  hash: location.hash,
+  seats: document.querySelectorAll('.game-seat').length,
+  seatColumns: getComputedStyle(document.querySelector('.seat-grid')).gridTemplateColumns.split(' ').length,
+  seatRows: new Set([...document.querySelectorAll('.game-seat')].map(seat => Math.round(seat.getBoundingClientRect().top))).size,
+  maxSeatHeight: Math.round(Math.max(...[...document.querySelectorAll('.game-seat')].map(seat => seat.getBoundingClientRect().height))),
+  aliveSeats: document.querySelectorAll('.game-seat.alive').length,
+  deadSeats: document.querySelectorAll('.game-seat.dead').length,
+  allSeatsVisible: [...document.querySelectorAll('.game-seat')].every(seat => {
+    const rect = seat.getBoundingClientRect();
+    const navTop = document.querySelector('.game-nav')?.getBoundingClientRect().top || innerHeight;
+    return rect.top >= 0 && rect.bottom <= navTop;
+  }),
+  numberSize: Math.round(Math.min(...[...document.querySelectorAll('.game-seat .num')].map(number => parseFloat(getComputedStyle(number).fontSize)))),
+  numberWeight: Math.min(...[...document.querySelectorAll('.game-seat .num')].map(number => Number(getComputedStyle(number).fontWeight))),
+  aliveGreenAccent: [...document.querySelectorAll('.game-seat.alive')].every(seat => getComputedStyle(seat).boxShadow !== 'none' && getComputedStyle(seat).backgroundImage !== 'none'),
+  phase: document.querySelector('.phase-copy h1')?.textContent,
+  timer: document.querySelector('.timer')?.textContent,
+  timerActionHeight: Math.round(document.querySelector('[data-action="timer-toggle"]')?.getBoundingClientRect().height || 0),
+  timerActionFontSize: Math.round(parseFloat(getComputedStyle(document.querySelector('[data-action="timer-toggle"]')).fontSize)),
+  timerActionFontWeight: Number(getComputedStyle(document.querySelector('[data-action="timer-toggle"]')).fontWeight),
+  timerAdjustments: document.querySelectorAll('.timer-controls .btn').length,
+  primaryActions: [...document.querySelectorAll('.primary-game-actions .btn')].map(button => button.textContent.trim()),
+  primaryActionsSameRow: (() => {
+    const buttons = [...document.querySelectorAll('.primary-game-actions .btn')];
+    return new Set(buttons.map(button => Math.round(button.getBoundingClientRect().top))).size === 1;
+  })(),
+  primaryActionsVisible: [...document.querySelectorAll('.primary-game-actions .btn')].every(button => {
+    const rect = button.getBoundingClientRect();
+    const navTop = document.querySelector('.game-nav')?.getBoundingClientRect().top || innerHeight;
+    return rect.left >= 0 && rect.right <= innerWidth && rect.bottom <= navTop;
+  }),
+  speaker: document.querySelector('.speaker-row h2')?.textContent,
+  bottomNav: Boolean(document.querySelector('.bottom-nav.game-nav')),
+  navItems: document.querySelectorAll('.game-nav .nav-item').length,
+  activeLabel: document.querySelector('.game-nav .nav-item.active span')?.textContent,
+  navHeight: Math.round(document.querySelector('.game-nav')?.getBoundingClientRect().height || 0),
+  iconOnly: [...document.querySelectorAll('.game-nav .nav-item')].every(item => item.querySelector('svg') && item.querySelector('span') && item.querySelector('span').getBoundingClientRect().width <= 1),
+  viewport: innerWidth,
+  scrollWidth: document.documentElement.scrollWidth
+})`);
+await captureScreenshot(process.env.SMOKE_GAME_SCREENSHOT);
+
+await click('[data-action="game-settings"]');
+const gameSettingsModalFrame = await inspectModalFrame();
+const gameSettingsAppearance = await evaluate(`({
+  gameModal: document.querySelector('[data-form="game-settings"]')?.classList.contains('game-modal'),
+  context: document.querySelector('[data-form="game-settings"] .game-dialog-head .eyebrow')?.textContent,
+  closeLabel: document.querySelector('[data-form="game-settings"] .icon-btn')?.getAttribute('aria-label'),
+  accent: getComputedStyle(document.querySelector('[data-form="game-settings"]')).borderTopColor
+})`);
+await captureScreenshot(process.env.SMOKE_GAME_SETTINGS_SCREENSHOT);
+await click('[data-form="game-settings"] [data-action="close-modal"]');
+
+const readTimerSeconds = () => evaluate(`(() => {
+  const [minutes, seconds] = document.querySelector('.timer').textContent.trim().split(':').map(Number);
+  return minutes * 60 + seconds;
+})()`);
+await click('[data-action="timer-toggle"]');
+await wait(350);
+const beforeMinusFive = await readTimerSeconds();
+await click('[data-action="timer-minus"]');
+const afterMinusFive = await readTimerSeconds();
+await wait(650);
+const afterMinusTick = await readTimerSeconds();
+await click('[data-action="timer-plus"]');
+const afterPlusFive = await readTimerSeconds();
+await click('[data-action="timer-toggle"]');
+const runningTimerAdjustment = { beforeMinusFive, afterMinusFive, afterMinusTick, afterPlusFive };
+
+await click('[data-action="timer-toggle"]');
+await wait(250);
+await click('.game-nav [href="#players"]');
+const timerNavigationAway = await evaluate(`location.hash`);
+const activeProfileLocks = await evaluate(`({
+  locked: document.querySelectorAll('.player-card .player-edit[disabled][title="Профіль зараз у грі"]').length,
+  editable: document.querySelectorAll('.player-card .player-edit[data-action]').length,
+  lockedButtonsDisabled: [...document.querySelectorAll('.player-card .player-edit[title="Профіль зараз у грі"]')].every(button => button.disabled)
+})`);
+await evaluate(`location.hash = '#home'`);
+await wait(180);
+const activeGameHome = await evaluate(`({
+  rows: document.querySelectorAll('.active-games-panel .active-game-row').length,
+  resume: document.querySelectorAll('.active-games-panel [data-action="resume-game"]').length,
+  watch: document.querySelectorAll('.active-games-panel [data-action="watch-game"]').length,
+  title: document.querySelector('.active-games-panel h2')?.textContent,
+  phase: document.querySelector('.active-game-row .continue-meta')?.textContent
+})`);
+await evaluate(`location.hash = '#stats'`);
+await wait(180);
+const activeGameStats = await evaluate(`({
+  rows: document.querySelectorAll('.active-games-panel .active-game-row').length,
+  resume: document.querySelectorAll('.active-games-panel [data-action="resume-game"]').length,
+  status: document.querySelector('.directory-status')?.textContent
+})`);
+await evaluate(`location.hash = '#game'`);
+await wait(180);
+const timerNavigation = await evaluate(`({
+  away: ${JSON.stringify(timerNavigationAway)},
+  returned: location.hash,
+  stopped: document.querySelector('[data-action="timer-toggle"]')?.textContent.trim() === 'Старт',
+  navRestored: Boolean(document.querySelector('.game-nav'))
+})`);
+
+await click('.game-seat[data-seat="2"]');
+const seatModalFrame = await inspectModalFrame();
+const seatModalAppearance = await evaluate(`(() => {
+  const number = document.querySelector('.seat-sheet-number strong');
+  const header = document.querySelector('.seat-sheet-head');
+  return {
+    number: number?.textContent.trim(),
+    numberSize: Math.round(parseFloat(getComputedStyle(number).fontSize)),
+    numberWeight: Number(getComputedStyle(number).fontWeight),
+    player: document.querySelector('.seat-sheet-copy h2')?.textContent,
+    alive: header?.classList.contains('alive'),
+    status: document.querySelector('.seat-sheet-copy .badge')?.textContent,
+    gameModal: document.querySelector('.seat-control-modal')?.classList.contains('game-modal'),
+    closeLabel: document.querySelector('.seat-control-modal .modal-close')?.getAttribute('aria-label')
+  };
+})()`);
+await captureScreenshot(process.env.SMOKE_SEAT_SCREENSHOT);
+await click('[data-action="nominate"]');
+const nomination = await evaluate(`({
+  candidates: [...document.querySelectorAll('.nom-chip')].map(element => element.textContent),
+  modalOpen: Boolean(document.querySelector('.modal')),
+  latestLog: document.querySelector('.quick-log')?.innerText.split('\\n').slice(0, 2)
+})`);
+const offlineShell = await evaluate(`navigator.serviceWorker.ready.then(async () => {
+  const cache = await caches.open('mafia-desk-v104');
+  const keys = (await cache.keys()).map(request => request.url);
+  return {
+    authModule: keys.some(url => url.endsWith('/src/auth.js')),
+    cloudProfilesModule: keys.some(url => url.endsWith('/src/cloud-profiles.js')),
+    cloudGamesModule: keys.some(url => url.endsWith('/src/cloud-games.js')),
+    playerLinksModule: keys.some(url => url.endsWith('/src/player-links.js')),
+    timerModule: keys.some(url => url.endsWith('/src/timer.js')),
+    lineupModule: keys.some(url => url.endsWith('/src/lineup.js')),
+    guestNamesModule: keys.some(url => url.endsWith('/src/guest-names.js')),
+    i18nModule: keys.some(url => url.endsWith('/src/i18n.js')),
+    enjoyModule: keys.some(url => url.endsWith('/src/enjoy.js')),
+    firebaseApp: keys.some(url => url.includes('/firebasejs/12.16.0/firebase-app.js')),
+    firebaseAuth: keys.some(url => url.includes('/firebasejs/12.16.0/firebase-auth.js')),
+    firebaseFirestore: keys.some(url => url.includes('/firebasejs/12.16.0/firebase-firestore.js')),
+    roleSignals: keys.filter(url => url.includes('/assets/signals/')).length,
+    themeBackgrounds: keys.filter(url => url.includes('/assets/theme-')).length
+  };
+})`);
+await send('Network.enable');
+await send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+await send('Page.reload');
+await wait(900);
+const offlineReload = await evaluate(`({ hash: location.hash, phase: document.querySelector('.phase-copy h1')?.textContent, signedIn: Boolean(document.querySelector('.profile-btn')) })`);
+await send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+
+await click('[data-action="remove-nomination"]');
+await click('.game-seat[data-seat="10"]');
+await click('[data-action="manual-eliminate"]');
+const deadSeatAppearance = await evaluate(`(() => {
+  const seat = document.querySelector('.game-seat[data-seat="10"]');
+  const style = getComputedStyle(seat);
+  return { dead: seat.classList.contains('dead'), alive: seat.classList.contains('alive'), opacity: Number(style.opacity), grayscale: style.filter !== 'none', tag: seat.querySelector('.seat-tag')?.textContent };
+})()`);
+await click('.game-seat[data-seat="10"]');
+const deadSeatModalAppearance = await evaluate(`({
+  number: document.querySelector('.seat-sheet-number strong')?.textContent.trim(),
+  dead: document.querySelector('.seat-sheet-head')?.classList.contains('dead'),
+  status: document.querySelector('.seat-sheet-copy .badge')?.textContent
+})`);
+await click('.seat-control-modal [data-action="close-modal"]');
+await click('[data-action="undo"]');
+const restoredSeatAppearance = await evaluate(`({ alive: document.querySelector('.game-seat[data-seat="10"]')?.classList.contains('alive'), dead: document.querySelector('.game-seat[data-seat="10"]')?.classList.contains('dead') })`);
+const seatVisualStates = { seatModalAppearance, deadSeatAppearance, deadSeatModalAppearance, restoredSeatAppearance };
+for (let index = 0; index < 10; index += 1) await click('[data-action="next-speaker"]');
+await click('[data-action="start-vote"]');
+await click('[data-action="night-next"]');
+await click('[data-action="night-target"][data-seat="1"]');
+await click('[data-action="night-shot-done"]');
+
+const sheriffSeat = roleAssignments.find(item => item.source.endsWith('/sheriff.webp')).seat;
+const donSeat = roleAssignments.find(item => item.source.endsWith('/don.webp')).seat;
+const citizenSeat = roleAssignments.find(item => item.source.endsWith('/citizen.webp')).seat;
+
+await click(`[data-action="night-target"][data-seat="${citizenSeat}"]`);
+await click('[data-action="night-show-result"]');
+const donMissSignal = await evaluate(`({ source: document.querySelector('.night-result-signal img')?.getAttribute('src'), label: document.querySelector('.night-result-panel h2')?.textContent, instruction: document.querySelector('.night-result-panel p')?.textContent })`);
+await click('[data-action="night-hide-result"]');
+await click(`[data-action="night-target"][data-seat="${sheriffSeat}"]`);
+await click('[data-action="night-show-result"]');
+const donHitSignal = await evaluate(`({ source: document.querySelector('.night-result-signal img')?.getAttribute('src'), label: document.querySelector('.night-result-panel h2')?.textContent, instruction: document.querySelector('.night-result-panel p')?.textContent })`);
+await click('[data-action="night-check-done"]');
+
+await click(`[data-action="night-target"][data-seat="${donSeat}"]`);
+await click('[data-action="night-show-result"]');
+const sheriffBlackSignal = await evaluate(`({ source: document.querySelector('.night-result-signal img')?.getAttribute('src'), label: document.querySelector('.night-result-panel h2')?.textContent, instruction: document.querySelector('.night-result-panel p')?.textContent })`);
+await click('[data-action="night-hide-result"]');
+await click(`[data-action="night-target"][data-seat="${citizenSeat}"]`);
+await click('[data-action="night-show-result"]');
+const sheriffRedSignal = await evaluate(`({ source: document.querySelector('.night-result-signal img')?.getAttribute('src'), label: document.querySelector('.night-result-panel h2')?.textContent, instruction: document.querySelector('.night-result-panel p')?.textContent })`);
+
+await click('[data-action="end-game-manual"]');
+const confirmModalFrame = await inspectModalFrame();
+const confirmModalAppearance = await evaluate(`({
+  gameModal: document.querySelector('.danger-modal')?.classList.contains('game-modal'),
+  context: document.querySelector('.danger-modal .eyebrow')?.textContent,
+  closeLabel: document.querySelector('.danger-modal .icon-btn')?.getAttribute('aria-label'),
+  dangerousAccent: getComputedStyle(document.querySelector('.danger-modal')).borderTopColor
+})`);
+await captureScreenshot(process.env.SMOKE_CONFIRM_SCREENSHOT);
+await click('[data-action="confirm-action"]');
+const winnerModalFrame = await inspectModalFrame();
+const winnerModalAppearance = await evaluate(`({
+  gameModal: document.querySelector('.decision-modal')?.classList.contains('game-modal'),
+  context: document.querySelector('.decision-modal .eyebrow')?.textContent,
+  choices: document.querySelectorAll('.winner-choice').length,
+  labels: [...document.querySelectorAll('.winner-choice strong')].map(item => item.textContent),
+  descriptions: [...document.querySelectorAll('.winner-choice small')].map(item => item.textContent),
+  closeLabel: document.querySelector('.decision-modal .icon-btn')?.getAttribute('aria-label')
+})`);
+await captureScreenshot(process.env.SMOKE_WINNER_SCREENSHOT);
+await click('[data-action="finish-red"]');
+await evaluate(`location.hash = '#stats'`);
+await wait(150);
+const finishedSharedStats = await evaluate(`({
+  games: document.querySelector('.stat-card b')?.textContent,
+  archivedGames: document.querySelectorAll('[data-action="view-protocol"]').length,
+  manageableGames: document.querySelectorAll('[data-action="delete-game"]').length,
+  protocolActionsFill: (() => {
+    const row = document.querySelector('.archive-game-actions');
+    const buttons = [...row.querySelectorAll(':scope > .btn')];
+    const rowRect = row.getBoundingClientRect();
+    const firstRect = buttons[0].getBoundingClientRect();
+    const lastRect = buttons.at(-1).getBoundingClientRect();
+    return Math.abs((lastRect.right - firstRect.left) - rowRect.width) <= 2;
+  })(),
+  leaderboardRows: document.querySelectorAll('.grid.two .list-row').length,
+  status: document.querySelector('.directory-status b')?.textContent,
+  hostUsesNickname: [...document.querySelectorAll('.list-main span')].some(item => item.textContent.includes('ведучий Smoke Нік')),
+  hostDisplayNameHidden: ![...document.querySelectorAll('.list-main span')].some(item => item.textContent.includes('ведучий Ведучий Smoke'))
+})`);
+await click('[data-action="view-protocol"]');
+const protocolModalFrame = await inspectModalFrame();
+const protocolModal = await evaluate(`(() => {
+  const dialog = document.querySelector('.protocol-modal');
+  const backdrop = document.querySelector('.protocol-backdrop');
+  const rect = dialog.getBoundingClientRect();
+  const style = getComputedStyle(dialog);
+  return {
+    focused: document.activeElement === dialog,
+    scrollTop: dialog.scrollTop,
+    top: Math.round(rect.top),
+    left: Math.round(rect.left),
+    rightGap: Math.round(innerWidth - rect.right),
+    bottomWithinViewport: rect.bottom <= innerHeight - 6,
+    borders: [style.borderTopWidth, style.borderRightWidth, style.borderBottomWidth, style.borderLeftWidth],
+    backdropAlign: getComputedStyle(backdrop).alignItems,
+    logScrollable: ['auto', 'scroll'].includes(getComputedStyle(document.querySelector('.protocol-log')).overflowY)
+  };
+})()`);
+await captureScreenshot(process.env.SMOKE_PROTOCOL_SCREENSHOT);
+await click('.protocol-modal [data-action="close-modal"]');
+await evaluate(`location.hash = '#players'`);
+await wait(150);
+const queueAfterGame = await evaluate(`({
+  selected: document.querySelectorAll('.queue-player-btn.selected').length,
+  status: document.querySelector('.lineup-head b')?.textContent,
+  positions: [...document.querySelectorAll('.queue-player-btn.selected small')].map(item => Number(item.textContent)).sort((a, b) => a - b)
+})`);
+
+await evaluate(`(async () => {
+  const timestamp = new Date().toISOString();
+  const publicGame = {
+    id: 'foreign-live-smoke', title: 'Гра іншого ведучого', venue: 'Enjoy', startedAt: timestamp,
+    updatedAt: timestamp, endedAt: null, status: 'active', phase: 'day', subphase: 'speeches',
+    winner: null, durationSeconds: 0, day: 1, publicOnly: true, shared: true, source: 'cloud-live',
+    cloudOwnerUid: 'another-host', cloudHostName: 'Пані Оглядачка',
+    seats: Array.from({ length: 10 }, (_, index) => ({ number: index + 1, name: 'Гість ' + (index + 1), status: 'alive', faults: 0, eliminatedReason: '', noVote: false })),
+    nominations: [], speakerIndex: 0, speakerOrder: [1,2,3,4,5,6,7,8,9,10], lastWordSeat: null,
+    vote: { counts: {}, tied: [], yes: 0, no: 0 }, night: { step: 0, target: null, donCheck: null, sheriffCheck: null, resultOpen: false },
+    timer: { remaining: 60, running: false, purpose: 'speech', endsAt: 0 }, history: []
+  };
+  const { importDatabase } = await import('./src/db.js');
+  await importDatabase({ schema: 1, players: [], games: [publicGame], settings: [] }, { replace: false });
+  location.hash = '#home';
+})()`);
+await evaluate(`location.reload()`);
+await wait(700);
+const foreignLiveHome = await evaluate(`({
+  row: [...document.querySelectorAll('.active-game-row')].some(row => row.textContent.includes('Гра іншого ведучого')),
+  resume: Boolean(document.querySelector('.active-game-row [data-action="resume-game"][data-id="foreign-live-smoke"]')),
+  watch: Boolean(document.querySelector('.active-game-row [data-action="watch-game"][data-id="foreign-live-smoke"]')),
+  eye: Boolean(document.querySelector('.active-game-row [data-id="foreign-live-smoke"] .button-eye-icon')),
+  label: document.querySelector('.active-game-row [data-id="foreign-live-smoke"]')?.textContent.trim()
+})`);
+await click('[data-action="watch-game"][data-id="foreign-live-smoke"]');
+const foreignObserver = await evaluate(`({
+  hash: location.hash,
+  seats: document.querySelectorAll('.game-seat').length,
+  seatControls: document.querySelectorAll('.game-seat[data-action="seat-menu"]').length,
+  moderatorPanel: Boolean(document.querySelector('[data-action="toggle-secret"]')),
+  publicPanel: document.querySelector('.game-side')?.textContent.includes('Публічна інформація'),
+  bottomNavAbsent: !document.querySelector('.bottom-nav')
+})`);
+
+const nightSignals = { donMissSignal, donHitSignal, sheriffBlackSignal, sheriffRedSignal };
+const chromeByTab = { home: homeChrome, players: playersChrome, setup: setupChrome, stats: statsChrome, settings: settingsChrome };
+const unifiedModalFrames = { mediaModalFrame, hostProfileModalFrame, accountDeleteModalFrame, playerModalFrame, setupMoveModalFrame, gameSettingsModalFrame, seatModalFrame, confirmModalFrame, winnerModalFrame, protocolModalFrame };
+const languageSupport = { languageOptions, englishLanguage, frenchLanguage, russianLanguage, restoredUkrainianLanguage };
+const gameCardSystem = { roleReadyLayout, roleOpenLayout, gameSettingsAppearance, confirmModalAppearance, winnerModalAppearance };
+const result = { authenticatedHost, enjoyBrand, chromeByTab, mobileLayout, headerMediaControls, mediaPanel, preparedMedia, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, emptySharedStats, telegramImportAbsent, cameraControl, profile, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameStats, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
+console.log(JSON.stringify(result, null, 2));
+
+if (process.env.SMOKE_SCREENSHOT) {
+  await captureScreenshot(process.env.SMOKE_SCREENSHOT);
+}
+
+function verify(condition, label) {
+  if (condition) return;
+  console.error(`Smoke assertion failed: ${label}`);
+  process.exitCode = 1;
+}
+
+verify(firstDay.hash === '#game' && firstDay.seats === 10 && firstDay.phase === 'День 1' && firstDay.bottomNav && firstDay.navItems === 5 && firstDay.activeLabel === 'Активна гра' && firstDay.navHeight <= 52 && firstDay.iconOnly && firstDay.scrollWidth <= firstDay.viewport, 'first day layout and compact game navigation');
+verify(runningTimerAdjustment.afterMinusFive === Math.max(0, runningTimerAdjustment.beforeMinusFive - 5) && runningTimerAdjustment.afterMinusTick <= runningTimerAdjustment.afterMinusFive && runningTimerAdjustment.afterMinusTick >= runningTimerAdjustment.afterMinusFive - 2 && runningTimerAdjustment.afterPlusFive === runningTimerAdjustment.afterMinusTick + 5, 'running timer +/- 5 seconds');
+verify(timerNavigation.away === '#players' && timerNavigation.returned === '#game' && timerNavigation.stopped && timerNavigation.navRestored, 'timer pauses and persists when leaving active game');
+verify(activeProfileLocks.locked === 10 && activeProfileLocks.editable >= 3 && activeProfileLocks.lockedButtonsDisabled, 'profiles seated in active game are locked');
+verify(activeGameHome.rows === 1 && activeGameHome.resume === 1 && activeGameHome.watch === 0 && activeGameHome.title === 'Активні ігри' && activeGameHome.phase.includes('День 1') && activeGameStats.rows === 1 && activeGameStats.resume === 1 && activeGameStats.status.toLocaleLowerCase('uk').includes('активн'), 'active game is visible on overview and statistics with host resume action');
+verify(foreignLiveHome.row && !foreignLiveHome.resume && foreignLiveHome.watch && foreignLiveHome.eye && foreignLiveHome.label === 'Спостерігати' && foreignObserver.hash === '#observer/foreign-live-smoke' && foreignObserver.seats === 10 && foreignObserver.seatControls === 0 && !foreignObserver.moderatorPanel && foreignObserver.publicPanel && foreignObserver.bottomNavAbsent, 'foreign live game uses safe eye-icon observer action');
+verify(authenticatedHost.name === 'Тестовий ведучий' && authenticatedHost.avatar, 'authenticated host');
+verify(enjoyBrand.headerBrandAbsent && enjoyBrand.documentTitle === 'Enjoy Mafia — помічник ведучого' && enjoyBrand.heroWordmarkAbsent && enjoyBrand.heroTitle === 'Мафія enjoy' && enjoyBrand.coffeeIcon && enjoyBrand.sheriffBadge && enjoyBrand.favicon.endsWith('/assets/favicon-32.png') && enjoyBrand.brandMarkSize >= 44 && enjoyBrand.brandArtworkSize === 'contain' && enjoyBrand.heroIndexAbsent && enjoyBrand.addressAbsent && enjoyBrand.instagramAbsent && enjoyBrand.mapsAbsent && enjoyBrand.socialIcons === 0 && enjoyBrand.sharedArchive.includes('Активні й завершені') && enjoyBrand.externalArrowsAbsent && !enjoyBrand.redundantDescription && !enjoyBrand.redundantAudienceLabel, 'Enjoy brand');
+verify(Object.entries(chromeByTab).every(([route, frame]) => isUnifiedAppChrome(frame, homeChrome) && (route === 'home' ? ['', '#home'].includes(frame.route) : frame.route === `#${route}`) && frame.activeLabel === ({ home: 'Огляд', players: 'Гравці', setup: 'Нова гра', stats: 'Статистика', settings: 'Ще' })[route]), 'unified chrome across tabs');
+verify(mobileLayout.heroActionsHidden && mobileLayout.homeQuickActionCount === 2 && mobileLayout.homeQuickActionsSquare && mobileLayout.homeQuickActionsCentered && mobileLayout.homeQuickActionsAboveNavigation && mobileLayout.addPlayerFirst && mobileLayout.createGameSecond && mobileLayout.createGameRed && mobileLayout.addPlayerGold, 'mobile home floating quick actions, order and colors');
+verify(settingsHeaderBrandAbsent, 'header brand copy absent on secondary tabs');
+verify(settingsActionLayout.drive.count === 1 && settingsActionLayout.drive.fillsWidth && settingsActionLayout.drive.singleButtonFills && settingsActionLayout.observer.count === 1 && settingsActionLayout.observer.fillsWidth && settingsActionLayout.observer.singleButtonFills, 'full-width standalone settings actions');
+verify(mobileLayout.scrollWidth <= mobileLayout.viewport && mobileLayout.pagePadding <= 8 && mobileLayout.stackGap <= 8 && mobileLayout.numericFont.includes('Arial') && mobileLayout.homeStatsCentered && mobileLayout.homeStatsBackground.includes('0.86') && mobileLayout.navHeight === 72 && mobileLayout.smallestNavIcon >= 26 && mobileLayout.headerAvatarVisible && mobileLayout.headerAvatarFills && mobileLayout.shortestPrimaryAction >= 44 && mobileLayout.smallestHomeActionFont >= 15 && mobileLayout.smallestTextButtonFont >= 15 && mobileLayout.installIconOnly && mobileLayout.installLabel === 'Встановити застосунок' && mobileLayout.installSize >= 40 && compactLayout.scrollWidth <= compactLayout.viewport && compactLayout.headerWidth <= compactLayout.viewport, 'mobile layout');
+verify(headerMediaControls.bluetooth && headerMediaControls.androidSettingsLink === 'intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end' && headerMediaControls.play && headerMediaControls.pause && headerMediaControls.playInitiallyDisabled && headerMediaControls.pauseInitiallyDisabled && headerMediaControls.controls === 2 && headerMediaControls.smallest >= 40 && headerMediaControls.centerOffset <= 1 && headerMediaControls.bluetoothBesideProfile && headerMediaControls.profileGroupRightGap <= 10 && compactLayout.actionsRight <= compactLayout.viewport - 10, 'centered media controls and Bluetooth beside profile');
+verify(mediaPanel.title === 'Bluetooth і музика' && mediaPanel.audioInput === 'audio/*' && mediaPanel.externalControlWarning && mediaPanel.systemBluetoothGuidance && mediaPanel.iosControlCenterGuidance && mediaPanel.bluetoothState && mediaPanel.chooserPresentWhenSupported && preparedMedia.track === 'Enjoy smoke.wav' && preparedMedia.localOnly && preparedMedia.playEnabled && preparedMedia.clearButton, 'Bluetooth, iPhone guidance and local music panel');
+verify(tabletLayout.scrollWidth <= tabletLayout.viewport && tabletLayout.headerHeight === 62 && tabletLayout.navHeight === 72 && tabletLayout.navItems === 5 && tabletLayout.smallestNavIcon >= 26, 'tablet app chrome');
+verify(desktopLayout.scrollWidth <= desktopLayout.viewport && desktopLayout.headerTop === 0 && desktopLayout.navTop === desktopLayout.headerBottom && desktopLayout.itemWidthSpread <= 1 && desktopLayout.navRightGap <= 1, 'desktop layout');
+verify(ownerDatabases.includes('mafia-desk-local-smoke-test') && hostProfileControls.email === 'test.host@example.com' && hostProfileControls.camera === 'environment' && hostProfileControls.cameraIcon && hostProfileControls.cameraEmojiAbsent && hostProfileControls.gallery && hostProfileControls.deleteButton && hostProfileControls.deleteIconOnly && hostProfileControls.deleteInIdentity && hostProfileControls.deleteAbsentFromHeader && hostProfileControls.languageCount === 4 && JSON.stringify(hostProfileControls.languageOrder) === JSON.stringify(['UKУкраїнська', 'RUРосійська', 'ENEnglish', 'FRFrançais']) && hostProfileControls.discoverable && hostProfileControls.inputFontSize >= 16 && !hostProfileControls.inputAutofocus && hostProfileControls.descriptionPlaceholder === 'Досвід ведення, улюблена кава…' && hostProfileControls.dialogFocused && hostProfileControls.dialogScrollTop === 0 && hostProfileControls.sheetTop >= 6 && hostProfileControls.sheetTop <= 8 && hostProfileControls.sheetLeft === 6 && hostProfileControls.sheetRightGap === 6 && hostProfileControls.sheetBottom <= hostProfileControls.viewportBottom - 6 && hostAvatarDraft.namePreserved === 'Ведучий Smoke' && hostAvatarDraft.nicknamePreserved === 'Smoke Нік' && hostAvatarDraft.customPreview && savedHostAvatar.header && savedHostAvatar.stored && editedHostName === 'Ведучий Smoke', 'host profile and custom avatar persistence');
+verify(languageOptions.count === 4 && JSON.stringify(languageOptions.order) === JSON.stringify(['UKУкраїнська', 'RUРосійська', 'ENEnglish', 'FRFrançais']) && languageOptions.selected === 'uk' && englishLanguage.lang === 'en' && englishLanguage.stored === 'en' && englishLanguage.title === 'Settings' && JSON.stringify(englishLanguage.nav) === JSON.stringify(['Overview', 'Players', 'New game', 'Statistics', 'More']) && englishLanguage.field === 'App language?' && englishLanguage.selected === 'en' && frenchLanguage.lang === 'fr' && frenchLanguage.title === 'Paramètres' && frenchLanguage.more === 'Plus' && frenchLanguage.selected === 'fr' && russianLanguage.lang === 'ru' && russianLanguage.title === 'Настройки' && russianLanguage.more === 'Ещё' && russianLanguage.selected === 'ru' && restoredUkrainianLanguage.lang === 'uk' && restoredUkrainianLanguage.stored === 'uk' && restoredUkrainianLanguage.title === 'Налаштування' && restoredUkrainianLanguage.selected === 'uk', 'language switching');
+verify(themeOptions === 3 && darkPalette.active === 'dark' && lightPalette.active === 'light' && cafeTheme.active === 'cafe' && new Set([darkPalette.bg, lightPalette.bg, cafeTheme.bg]).size === 3 && new Set([darkPalette.text, lightPalette.text, cafeTheme.text]).size === 3 && new Set([darkPalette.art, lightPalette.art, cafeTheme.art]).size === 3 && darkPalette.card.includes('/ 86%') && lightPalette.card.includes('/ 87%') && cafeTheme.card.includes('/ 86%') && darkPalette.art.includes('theme-dark-mafioso.jpg') && lightPalette.art.includes('theme-light-sheriff.jpg') && cafeTheme.art.includes('theme-cafe-bar.jpg') && cafeTheme.cached === 'cafe' && cafeTheme.pressed === 'true' && cafeTheme.themeColor === '#1a100b', 'themes');
+verify(enjoyInfo.descriptionAbsent && enjoyInfo.instagramIcon && enjoyInfo.mapsIcon && enjoyInfo.iconOnly && enjoyInfo.wordmarkAbsent && enjoyInfo.smallestLink >= 44 && enjoyInfo.cardHeight <= 210, 'compact café card without Enjoy wordmark');
+verify(manualJsonTransferAbsent, 'manual JSON import and export controls removed');
+verify(settingsTechnicalTermsAbsent, 'technical storage terms absent from settings');
+verify(rulesLinks.count === 2 && rulesLinks.ukrainian?.includes('imafia.org/game-rules') && rulesLinks.international?.includes('fiim.world/fiim-rules') && rulesLinks.externalSafety && rulesLinks.arrowsAbsent, 'rules links');
+verify(compactHelp.count >= 8 && compactHelp.visiblePageDescriptions === 0 && compactHelp.visibleSectionDescriptions === 0 && compactHelp.visibleFieldHints === 0 && compactHelp.circular && helpPopover.visible && helpPopover.role === 'tooltip' && helpPopover.text.includes('Спільнота') && helpPopover.insideViewport, 'compact help tooltips');
+verify(accountDeletion.trashIconOnly && accountDeletion.trashButtonSize >= 44 && accountDeletion.dialog && accountDeletion.title === 'Видалити профіль Mafia?' && accountDeletion.retentionCopyAbsent && accountDeletion.confirm === 'Видалити профіль' && accountDeletion.focused && accountDeletion.scrollTop === 0 && accountDeletion.top >= 6 && accountDeletion.top <= 8 && accountDeletion.left === 6 && accountDeletion.rightGap === 6 && accountDeletion.bottomWithinViewport && accountDeletion.backdropAlign === 'start' && accountDeletion.bordered, 'account deletion controls');
+verify(Object.values(unifiedModalFrames).length === 10 && Object.values(unifiedModalFrames).every(isUnifiedModal), 'unified mobile modal frames');
+verify(statsPanelDefault.expanded === 'false' && statsPanelDefault.hidden && statsPanelDefault.graphPresent && statsPanelExpanded.expanded === 'true' && !statsPanelExpanded.hidden && statsPanelExpanded.focused === 'statsRoles', 'collapsible statistics graph');
+verify(emptySharedStats.title === 'Статистика' && emptySharedStats.description.includes('усіх ведучих') && emptySharedStats.archiveTitle === 'Спільний архів ігор' && emptySharedStats.blackRate === '0%' && emptySharedStats.summaryCentered && emptySharedStats.technicalTermsAbsent && emptySharedStats.unifiedStates && emptySharedStats.emptyStates, 'empty shared statistics and unified states');
+verify(cameraControl.cameraInput && cameraControl.captureMode === 'environment' && cameraControl.vectorIcon && cameraControl.emojiAbsent && cameraControl.galleryInput && cameraControl.emailInputType === 'email' && cameraControl.emailHelp.includes('Google'), 'camera and player email controls');
+verify(telegramImportAbsent.input && telegramImportAbsent.action && telegramImportAbsent.modal, 'Telegram import removed');
+verify(profile.cards === 13 && !profile.modalOpen && profile.pendingGoogleLink && lineupSelection.selected === 12 && lineupSelection.chips === 12 && lineupSelection.waitingChips === 2 && lineupSelection.status.includes('черга 2') && lineupSelection.positions.length === 12 && playersLayout.scrollWidth <= playersLayout.viewport && playersLayout.topActionHidden && playersLayout.searchActionHidden && playersLayout.textSeatingHidden && playersLayout.fabVisible && playersLayout.actionCount === 2 && playersLayout.fabSquare && playersLayout.addPlayerIcon && playersLayout.seatingIcon && playersLayout.addPlayerGold && playersLayout.seatingRed && playersLayout.fabCentered && playersLayout.fabAboveNavigation && JSON.stringify(playersLayout.labels) === JSON.stringify(['Додати гравця', 'До розсадки']) && playersCompactLayout.scrollWidth <= playersCompactLayout.viewport && playersCompactLayout.statusRight <= playersCompactLayout.viewport && playersCompactLayout.refreshWidth > 0 && playersCompactLayout.smallestQueueButton >= 44 && playersCompactLayout.fabLeft >= 0 && playersCompactLayout.fabRight <= playersCompactLayout.viewport, 'players layout, floating add and seating actions, and next-game queue');
+verify(setupPanelsDefault.setupGame.expanded === 'false' && setupPanelsDefault.setupGame.hidden && setupPanelsDefault.setupTimers.expanded === 'false' && setupPanelsDefault.setupTimers.hidden && setupPanelsDefault.setupRules.expanded === 'false' && setupPanelsDefault.setupRules.hidden && setupPanelsDefault.setupSeating.expanded === 'true' && !setupPanelsDefault.setupSeating.hidden && setupRulesLinks.expanded === 'true' && !setupRulesLinks.hidden && setupRulesLinks.count === 2 && setupRulesLinks.ukrainian?.includes('imafia.org/game-rules') && setupRulesLinks.international?.includes('fiim.world/fiim-rules') && setupRulesLinks.externalSafety && setupRulesLinks.arrowsAbsent && setupGameExpanded.expanded === 'true' && !setupGameExpanded.hidden && setupGameExpanded.focused === 'setupGame' && setupTimersCollapsed.expanded === 'false' && setupTimersCollapsed.hidden && setupSeatingCollapsed.expanded === 'false' && setupSeatingCollapsed.hidden, 'collapsible game setup panels');
+verify(setupPanelOrder.at(-2) === 'setupSeating' && setupPanelOrder.at(-1) === 'setupRules', 'rules follow seating');
+verify(Object.values(setupTypography).every(font => !/(Iowan|Palatino|Book Antiqua|Georgia|ui-serif)/i.test(font)), 'readable sans-serif typography');
+verify(setupTypography.foulHelp?.includes('Турнірна') && setupTypography.foulHelp?.includes('Клубна') && setupTypography.foulHelp?.includes('4-й фол'), 'foul system help');
+verify(setupCompactLayout.scrollWidth <= setupCompactLayout.viewport && setupCompactLayout.moveButtons === 10 && setupCompactLayout.smallestMoveButton >= 44 && setupCompactLayout.playerPickers === 10 && setupCompactLayout.smallestPlayerPicker >= 44 && setupCompactLayout.pickerIcons === 10 && setupCompactLayout.seatAvatars === 10 && setupCompactLayout.generatedAvatars > 0 && setupCompactLayout.profileAvatars > 0 && setupCompactLayout.uniqueGeneratedAvatars && setupCompactLayout.avatarSources.every(source => /(?:assets\/avatars\/|data:image|^https?:)/.test(source)) && setupCompactLayout.avatarsFill && setupCompactLayout.avatarBetweenPickerAndName && setupCompactLayout.nameInputs === 10 && setupCompactLayout.collapsedPanelMaxHeight <= 54 && setupCompactLayout.collapsedToggleMinHeight >= 44 && setupCompactLayout.maxRowHeight <= 50 && setupCompactLayout.rowBordersAbsent && setupCompactLayout.rowBackgroundsTransparent && setupCompactLayout.rowGap <= 4 && setupCompactLayout.nativeSelectsCompact && setupCompactLayout.footerActionsHidden && setupCompactLayout.floatingActions.visible && setupCompactLayout.floatingActions.count === 2 && setupCompactLayout.floatingActions.square && setupCompactLayout.floatingActions.centered && setupCompactLayout.floatingActions.aboveNavigation && setupCompactLayout.floatingActions.addPlayerIcon && setupCompactLayout.floatingActions.dealRolesIcon && setupCompactLayout.floatingActions.addLabel === 'Додати гравця' && setupCompactLayout.floatingActions.dealLabel === 'Роздати ролі' && setupCompactLayout.floatingActions.addPlayerGold && setupCompactLayout.floatingActions.dangerColor !== 'rgba(0, 0, 0, 0)', 'compact setup panels, player picker, unique real and generated avatars, controls and floating actions');
+verify(randomTable.selected === 10 && randomTable.unique === 10 && randomTable.venue.includes('Кав’ярня Enjoy') && randomTable.title.startsWith('Мафія в Enjoy') && randomTable.reroll && randomTable.nicknameFirstOption === 'Тестовий Нік · Тестова Гравчиня' && queuedTable.followsSelection && preferredSeatName === 'Тестовий Нік', 'nickname-first queued table');
+verify(seatingOptionFilter.currentPlayerPreserved && seatingOptionFilter.occupiedHiddenElsewhere && seatingOptionFilter.eachAssignedShownOnce && seatingOptionFilter.unassignedRemainAvailable, 'already seated players hidden from other seat pickers');
+verify(temporaryGuestNames.replacesNumberedPlaceholder && temporaryGuestNames.singleWord && temporaryGuestNames.manualNameSurvivesMove, 'single-word funny temporary guest names and manual override');
+verify(seatMove.dialog.title === 'Перемістити з місця 1' && seatMove.dialog.targets === 10 && seatMove.dialog.currentDisabled && seatMove.swapped && seatMove.restored, 'move player to a specific seat');
+verify(roleDealButton.label === 'Роздати ролі' && roleDealButton.danger && roleDealButton.legacyButtons === 0 && (roleDealButton.backgroundImage !== 'none' || roleDealButton.backgroundColor !== 'rgba(0, 0, 0, 0)') && roleDealButton.primaryBackground !== roleDealButton.secondaryBackground, 'unified gold, red and neutral button system');
+verify(new Set(roleAssignments.map(item => item.source)).size === 4 && zeroNightSignals.count === 2 && zeroNightSignals.sources.some(source => source.endsWith('/don.webp')) && zeroNightSignals.sources.some(source => source.endsWith('/mafia.webp')) && zeroNightSignals.actionHeight >= 60 && zeroNightSignals.actionFontSize >= 18, 'role assignments and prominent start-day action');
+verify(roleReadyLayout.ready && roleReadyLayout.progressFirst && roleReadyLayout.actionsLast && roleReadyLayout.seat === '1' && roleReadyLayout.avatar === preferredSeatAvatar && roleReadyLayout.avatarVisible && roleReadyLayout.avatarBetweenSeatAndName && roleReadyLayout.avatarFills && roleReadyLayout.privacy && roleReadyLayout.action === 'Показати мою роль' && roleReadyLayout.actionHeight >= 60 && roleReadyLayout.actionFontSize >= 18 && roleReadyLayout.actionFontWeight >= 900 && roleReadyLayout.insideViewport && roleReadyLayout.scrollWidth <= 390 && roleOpenLayout.open && roleOpenLayout.progressVisible && roleOpenLayout.playerVisible && roleOpenLayout.avatar === roleReadyLayout.avatar && roleOpenLayout.avatarVisible && roleOpenLayout.signal && roleOpenLayout.action === 'Сховати й передати далі' && roleOpenLayout.actionHeight >= 60 && roleOpenLayout.actionFontSize >= 18 && roleOpenLayout.insideViewport && roleOpenLayout.scrollWidth <= 390 && Math.abs(roleOpenLayout.height - roleReadyLayout.height) <= 2 && roleAssignments.every(item => item.avatar) && new Set(roleAssignments.map(item => item.avatar)).size === 10, 'stable hierarchical role reveal cards with persistent unique avatars and prominent actions');
+verify(gameSettingsAppearance.gameModal && gameSettingsAppearance.context === 'Активна гра' && gameSettingsAppearance.closeLabel === 'Закрити' && seatVisualStates.seatModalAppearance.gameModal && seatVisualStates.seatModalAppearance.closeLabel === 'Закрити' && confirmModalAppearance.gameModal && confirmModalAppearance.context === 'Потрібне підтвердження' && confirmModalAppearance.closeLabel === 'Закрити' && confirmModalAppearance.dangerousAccent !== gameSettingsAppearance.accent && winnerModalAppearance.gameModal && winnerModalAppearance.context === 'Завершення гри' && winnerModalAppearance.choices === 2 && JSON.stringify(winnerModalAppearance.labels) === JSON.stringify(['Мирне місто', 'Мафія']) && winnerModalAppearance.descriptions.length === 2 && winnerModalAppearance.closeLabel === 'Закрити', 'unified contextual game dialogs');
+verify(firstDay.seats === 10 && firstDay.seatColumns === 2 && firstDay.seatRows === 5 && firstDay.maxSeatHeight <= 60 && firstDay.aliveSeats === 10 && firstDay.deadSeats === 0 && firstDay.allSeatsVisible && firstDay.numberSize >= 21 && firstDay.numberWeight >= 900 && firstDay.aliveGreenAccent && firstDay.timerActionHeight >= 60 && firstDay.timerActionFontSize >= 18 && firstDay.timerActionFontWeight >= 900 && firstDay.timerAdjustments === 2 && JSON.stringify(firstDay.primaryActions) === JSON.stringify(['Старт', 'Скинути', 'Наступний →']) && firstDay.primaryActionsSameRow && firstDay.primaryActionsVisible, 'two-column compact table and one-row mobile game controls');
+verify(seatVisualStates.seatModalAppearance.number === '2' && seatVisualStates.seatModalAppearance.numberSize >= 58 && seatVisualStates.seatModalAppearance.numberWeight >= 900 && seatVisualStates.seatModalAppearance.alive && seatVisualStates.seatModalAppearance.status === 'За столом' && seatVisualStates.deadSeatAppearance.dead && !seatVisualStates.deadSeatAppearance.alive && seatVisualStates.deadSeatAppearance.opacity < 0.8 && seatVisualStates.deadSeatAppearance.grayscale && seatVisualStates.deadSeatAppearance.tag === 'вибув' && seatVisualStates.deadSeatModalAppearance.number === '10' && seatVisualStates.deadSeatModalAppearance.dead && seatVisualStates.deadSeatModalAppearance.status === 'Вибув' && seatVisualStates.restoredSeatAppearance.alive && !seatVisualStates.restoredSeatAppearance.dead, 'alive, eliminated and restored seat visuals');
+verify(nomination.candidates.length === 1 && !nomination.modalOpen && !browserErrors.length, 'nomination and browser errors');
+verify(offlineShell.authModule && offlineShell.cloudProfilesModule && offlineShell.cloudGamesModule && offlineShell.playerLinksModule && offlineShell.timerModule && offlineShell.lineupModule && offlineShell.guestNamesModule && offlineShell.i18nModule && offlineShell.enjoyModule && offlineShell.firebaseApp && offlineShell.firebaseAuth && offlineShell.firebaseFirestore && offlineShell.roleSignals === 6 && offlineShell.themeBackgrounds === 3 && offlineReload.hash === '#game' && offlineReload.phase === 'День 1' && offlineReload.signedIn, 'offline shell');
+verify(donMissSignal.source.endsWith('/don-not-sheriff.webp') && donMissSignal.label === 'НЕ ШЕРИФ' && donMissSignal.instruction.includes('схрестіть руки'), 'Don miss signal');
+verify(donHitSignal.source.endsWith('/don-found-sheriff.webp') && donHitSignal.label === 'ЦЕ ШЕРИФ' && donHitSignal.instruction.includes('однією рукою'), 'Don hit signal');
+verify(sheriffBlackSignal.source.endsWith('/mafia.webp') && sheriffBlackSignal.label === 'ЧОРНИЙ' && sheriffBlackSignal.instruction.includes('палець униз'), 'Sheriff black signal');
+verify(sheriffRedSignal.source.endsWith('/citizen.webp') && sheriffRedSignal.label === 'ЧЕРВОНИЙ' && sheriffRedSignal.instruction.includes('палець угору'), 'Sheriff red signal');
+verify(finishedSharedStats.games === '1' && finishedSharedStats.archivedGames === 1 && finishedSharedStats.manageableGames === 1 && finishedSharedStats.protocolActionsFill && finishedSharedStats.leaderboardRows > 0 && finishedSharedStats.status.includes('Активні й завершені') && finishedSharedStats.hostUsesNickname && finishedSharedStats.hostDisplayNameHidden, 'finished shared statistics, archive actions and host nickname');
+verify(protocolModal.focused && protocolModal.scrollTop === 0 && protocolModal.top >= 6 && protocolModal.top <= 8 && protocolModal.left === 6 && protocolModal.rightGap === 6 && protocolModal.bottomWithinViewport && protocolModal.borders.every(width => parseFloat(width) >= 1) && protocolModal.backdropAlign === 'start' && protocolModal.logScrollable, 'top-anchored bounded protocol modal');
+verify(queueAfterGame.selected === 2 && queueAfterGame.status.includes('2/10') && queueAfterGame.positions.join(',') === '1,2', 'waiting players carry into the next game');
+socket.close();

@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "somnit-mafia-desk"
+  },
+  "targets": {
+    "somnit-mafia-desk": {
+      "hosting": {
+        "mafia": [
+          "mafia-cafe"
+        ]
+      }
+    }
+  }
+}

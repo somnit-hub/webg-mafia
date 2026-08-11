@@ -1,0 +1,68 @@
+{
+  "firestore": {
+    "database": "(default)",
+    "location": "europe-central2",
+    "rules": "firestore.rules"
+  },
+  "auth": {
+    "providers": {
+      "anonymous": false,
+      "emailPassword": false,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Mafia",
+        "supportEmail": "somnit3d@gmail.com",
+        "authorizedRedirectUris": [
+          "https://somnit-hub.github.io",
+          "https://mafia-cafe.web.app"
+        ]
+      }
+    }
+  },
+  "hosting": {
+    "target": "mafia",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      "**/.*",
+      ".git/**",
+      ".github/**",
+      ".gitignore",
+      ".nojekyll",
+      ".firebase/**",
+      ".tmp-chrome-*/**",
+      "**/node_modules/**",
+      "README.md",
+      "firestore.rules",
+      "firebase-debug.log",
+      "tests/**",
+      "test-results/**"
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(js|css|webp|jpg|png|ico)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public,max-age=3600"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(html|webmanifest)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

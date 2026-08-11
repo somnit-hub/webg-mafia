@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0d0c0b">
+  <meta name="description" content="Enjoy Mafia — local-first помічник ведучого та гравців мафія-клубу кав’ярні Enjoy">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Enjoy Mafia — помічник ведучого</title>
+  <script>
+    (() => {
+      try {
+        const theme = localStorage.getItem('mafia-desk-theme');
+        const language = localStorage.getItem('mafia-desk-language');
+        if (['dark', 'light', 'cafe'].includes(theme)) {
+          document.documentElement.dataset.theme = theme;
+          document.querySelector('meta[name="theme-color"]').content = { dark: '#0d0c0b', light: '#e9e2d6', cafe: '#1a100b' }[theme];
+        }
+        if (['uk', 'ru', 'en', 'fr'].includes(language)) document.documentElement.lang = language;
+      } catch { /* The default dark theme remains available without storage. */ }
+    })();
+  </script>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./assets/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="./assets/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="./assets/apple-touch-icon.png" sizes="180x180">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="app" class="app-shell" aria-busy="true"></div>
+  <div id="modal-root"></div>
+  <div id="tooltip-root"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>

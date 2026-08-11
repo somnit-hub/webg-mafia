@@ -56,7 +56,28 @@ await send('Runtime.enable');
 await send('Log.enable');
 await wait(400);
 
-await click('[data-nav="players"]');
+await click('[data-nav="settings"]');
+const themeOptions = await evaluate(`document.querySelectorAll('[data-theme-choice]').length`);
+const darkPalette = await evaluate(`({ active: document.documentElement.dataset.theme, bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(), text: getComputedStyle(document.documentElement).getPropertyValue('--text').trim() })`);
+await click('[data-theme-choice="light"]');
+const lightPalette = await evaluate(`({ active: document.documentElement.dataset.theme, bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(), text: getComputedStyle(document.documentElement).getPropertyValue('--text').trim() })`);
+await click('[data-theme-choice="cafe"]');
+const cafeTheme = await evaluate(`({
+  active: document.documentElement.dataset.theme,
+  bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
+  text: getComputedStyle(document.documentElement).getPropertyValue('--text').trim(),
+  cached: localStorage.getItem('mafia-desk-theme'),
+  pressed: document.querySelector('[data-theme-choice="cafe"]')?.getAttribute('aria-pressed'),
+  themeColor: document.querySelector('meta[name="theme-color"]')?.content
+})`);
+if (process.env.SMOKE_THEME_SCREENSHOT) {
+  const capture = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(process.env.SMOKE_THEME_SCREENSHOT, Buffer.from(capture.result.data, 'base64'));
+}
+await click('[data-theme-choice="dark"]');
+
+await click('[href="#players"]');
 await click('[data-action="new-player"]');
 const cameraControl = await evaluate(`({
   cameraInput: Boolean(document.querySelector('#avatar-camera')),
@@ -94,7 +115,7 @@ const nomination = await evaluate(`({
   latestLog: document.querySelector('.quick-log')?.innerText.split('\\n').slice(0, 2)
 })`);
 
-const result = { cameraControl, profile, firstDay, nomination, browserErrors };
+const result = { themeOptions, darkPalette, lightPalette, cafeTheme, cameraControl, profile, firstDay, nomination, browserErrors };
 console.log(JSON.stringify(result, null, 2));
 
 if (process.env.SMOKE_SCREENSHOT) {
@@ -104,6 +125,7 @@ if (process.env.SMOKE_SCREENSHOT) {
 }
 
 if (firstDay.hash !== '#game' || firstDay.seats !== 10 || firstDay.phase !== 'День 1') process.exitCode = 1;
+if (themeOptions !== 3 || darkPalette.active !== 'dark' || lightPalette.active !== 'light' || cafeTheme.active !== 'cafe' || new Set([darkPalette.bg, lightPalette.bg, cafeTheme.bg]).size !== 3 || new Set([darkPalette.text, lightPalette.text, cafeTheme.text]).size !== 3 || cafeTheme.cached !== 'cafe' || cafeTheme.pressed !== 'true' || cafeTheme.themeColor !== '#1a110d') process.exitCode = 1;
 if (!cameraControl.cameraInput || cameraControl.captureMode !== 'environment' || !cameraControl.galleryInput) process.exitCode = 1;
 if (profile.cards !== 1 || profile.modalOpen) process.exitCode = 1;
 if (nomination.candidates.length !== 1 || nomination.modalOpen || browserErrors.length) process.exitCode = 1;

@@ -9,6 +9,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Mafia Desk — помічник ведучого</title>
+  <script>
+    (() => {
+      try {
+        const theme = localStorage.getItem('mafia-desk-theme');
+        if (['dark', 'light', 'cafe'].includes(theme)) {
+          document.documentElement.dataset.theme = theme;
+          document.querySelector('meta[name="theme-color"]').content = { dark: '#101012', light: '#f5f2ec', cafe: '#1a110d' }[theme];
+        }
+      } catch { /* The default dark theme remains available without storage. */ }
+    })();
+  </script>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./assets/icon-maskable.svg">

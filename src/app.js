@@ -22,10 +22,14 @@ const DEFAULT_SETTINGS = {
   nightCheck: 15,
   sound: true,
   haptics: true,
+  theme: 'dark',
   firstDaySingleNoVote: true,
   lastGetsRemainder: true,
   penaltyMode: 'tournament'
 };
+
+const THEMES = ['dark', 'light', 'cafe'];
+const THEME_COLORS = { dark: '#101012', light: '#f5f2ec', cafe: '#1a110d' };
 
 const CHANNEL_NAME = 'mafia-desk-live';
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel(CHANNEL_NAME) : null;
@@ -63,6 +67,13 @@ function esc(value) {
 
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function nowIso() { return new Date().toISOString(); }
+function applyTheme(value) {
+  const theme = THEMES.includes(value) ? value : 'dark';
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[theme]);
+  try { localStorage.setItem('mafia-desk-theme', theme); } catch { /* IndexedDB remains authoritative. */ }
+  return theme;
+}
 function formatDate(value, withTime = false) {
   if (!value) return '—';
   return new Intl.DateTimeFormat('uk-UA', withTime
@@ -319,11 +330,19 @@ function settingsView() {
   const session = getGoogleSession();
   const lastSync = app.cloudSync ? formatDate(app.cloudSync, true) : 'ще не виконувалась';
   return `<main class="page stack">
-    <div class="page-head"><div><h1>Налаштування</h1><p>Офлайн-робота, резервні копії та Google Drive.</p></div></div>
+    <div class="page-head"><div><h1>Налаштування</h1><p>Оформлення, офлайн-робота, резервні копії та Google Drive.</p></div></div>
     <div class="grid two">
       <section class="card card-pad">
         <div class="section-title"><div><h2>На цьому пристрої</h2><p>Основна база працює без сервера</p></div></div>
         <div class="stack">
+          <div class="field">
+            <span class="field-label">Тема оформлення</span>
+            <div class="theme-picker" role="group" aria-label="Тема оформлення">
+              ${themeChoice('dark', 'Темна', 'Для приглушеного світла')}
+              ${themeChoice('light', 'Світла', 'Для денного освітлення')}
+              ${themeChoice('cafe', 'Кав’ярня', 'Теплі кавові відтінки')}
+            </div>
+          </div>
           ${toggleRow('setting-sound', 'Звуковий сигнал таймера', app.settings.sound)}
           ${toggleRow('setting-haptics', 'Вібрація важливих дій', app.settings.haptics)}
         </div>
@@ -342,8 +361,13 @@ function settingsView() {
     </div>
     <section class="privacy-note"><b>Local-first:</b> авторизація не потрібна для гри. Без Google усі дані залишаються лише у браузері. Очищення даних сайту або приватний режим можуть їх видалити, тому періодично робіть експорт.</section>
     <section class="card card-pad"><div class="section-title"><div><h2>Режим оглядача</h2><p>Публічний екран без ролей і нічних результатів</p></div></div><p class="muted">Відкрийте його у другій вкладці або на під’єднаному дисплеї. Оновлення передаються через BroadcastChannel у межах цього браузера.</p><button class="btn" data-action="open-observer" ${app.game?.status === 'active' ? '' : 'disabled'}>Відкрити публічний екран</button></section>
-    <section class="card card-pad"><div class="section-title"><div><h2>Про застосунок</h2><p>Версія 1.0 · без збірки та залежностей</p></div></div><p class="muted">Встановлюється як PWA, працює на GitHub Pages і кешує оболонку для офлайн-запуску. Початковий HTML-прототип збережено в репозиторії як референс.</p></section>
+    <section class="card card-pad"><div class="section-title"><div><h2>Про застосунок</h2><p>Версія 1.1 · без збірки та залежностей</p></div></div><p class="muted">Встановлюється як PWA, працює на GitHub Pages і кешує оболонку для офлайн-запуску.</p></section>
   </main>`;
+}
+
+function themeChoice(value, label, description) {
+  const selected = app.settings.theme === value;
+  return `<button class="theme-choice ${selected ? 'selected' : ''}" type="button" data-action="set-theme" data-theme-choice="${value}" aria-pressed="${selected}"><span class="theme-preview" aria-hidden="true"><i></i><i></i><i></i></span><b>${label}</b><small>${description}</small></button>`;
 }
 
 function toggleRow(action, label, enabled) {
@@ -1113,7 +1137,8 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'start-game') {
     const selected = app.draft.seats.map(seat => seat.profileId).filter(Boolean);
     if (new Set(selected).size !== selected.length) return toast('Один профіль не можна посадити двічі');
-    app.game = createGameFromDraft(); app.settings = { ...app.game.settings }; app.undo = [];
+    const devicePreferences = { theme: app.settings.theme, sound: app.settings.sound, haptics: app.settings.haptics };
+    app.game = createGameFromDraft(); app.settings = { ...app.game.settings, ...devicePreferences }; app.undo = [];
     await setSetting('appSettings', app.settings); await saveGame(); navigate('reveal');
   } else if (action === 'resume-game') {
     app.game = gameById(element.dataset.id); app.undo = []; navigate(app.game.phase === 'reveal' ? 'reveal' : 'game');
@@ -1180,6 +1205,11 @@ async function handleAction(action, element, sourceEvent) {
     const previous = app.game; app.draft = createDraft(); app.draft.title = `${previous.title} · реванш`; app.draft.venue = previous.venue; app.draft.seats = previous.seats.map(seat => ({ number: seat.number, profileId: seat.profileId || '', name: seat.name })); navigate('setup');
   } else if (action === 'setting-sound' || action === 'setting-haptics') {
     const key = action === 'setting-sound' ? 'sound' : 'haptics'; app.settings[key] = !app.settings[key]; await setSetting('appSettings', app.settings); render();
+  } else if (action === 'set-theme') {
+    app.settings.theme = applyTheme(element.dataset.themeChoice);
+    await setSetting('appSettings', app.settings);
+    render();
+    toast(`Тема «${app.settings.theme === 'dark' ? 'Темна' : app.settings.theme === 'light' ? 'Світла' : 'Кав’ярня'}» увімкнена`);
   } else if (action === 'export-data') downloadJson(await exportDatabase());
   else if (action === 'import-data') $('#import-file').click();
   else if (action === 'google-signin') {
@@ -1244,6 +1274,7 @@ async function loadImportedFile(file) {
 
 async function loadAppData() {
   app.settings = { ...DEFAULT_SETTINGS, ...(await getSetting('appSettings', {})) };
+  app.settings.theme = applyTheme(app.settings.theme);
   app.googleClientId = await getSetting('googleClientId', '');
   app.cloudSync = await getSetting('lastCloudSync', '');
   await refreshData();

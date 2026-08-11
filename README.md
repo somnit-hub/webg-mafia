@@ -17,7 +17,7 @@
 - IndexedDB, JSON-експорт/імпорт, офлайн-кеш Service Worker;
 - опційний Google OAuth і приватна резервна копія в Google Drive `appDataFolder`.
 
-Початковий [sport_mafia_10_ua.html](./sport_mafia_10_ua.html) залишено як референс. Робоча точка входу нового застосунку — [index.html](./index.html).
+Робоча точка входу застосунку — [index.html](./index.html).
 
 ## Локальний запуск
 

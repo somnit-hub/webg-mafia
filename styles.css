@@ -1086,6 +1086,9 @@ img { display: block; max-width: 100%; }
   .player-card p { font-size: 13px; }
   .player-stats { font-size: 11px; }
   .host-profile-summary p, .identity-field { font-size: 13px; }
+  .language-picker { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  .language-choice { min-height: 52px; padding: 6px 3px; }
+  .language-flag { width: min(44px, 100%); height: 29px; }
   .settings-profile-layout { display: grid; grid-template-columns: 82px minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; column-gap: 10px; row-gap: 8px; }
   .settings-profile-layout .host-profile-summary { display: contents; }
   .settings-profile-layout .host-profile-summary > .avatar.large { width: 82px; height: 82px; grid-column: 1; grid-row: 1 / span 2; }

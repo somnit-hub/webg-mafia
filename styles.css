@@ -1088,9 +1088,9 @@ img { display: block; max-width: 100%; }
   .language-picker { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
   .language-choice { min-height: 52px; padding: 6px 3px; }
   .language-flag { width: min(44px, 100%); height: 29px; }
-  .settings-profile-layout { display: grid; grid-template-columns: 82px minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; column-gap: 10px; row-gap: 8px; }
+  .settings-profile-layout { --settings-avatar-size: clamp(100px, 26vw, 116px); display: grid; grid-template-columns: var(--settings-avatar-size) minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; column-gap: 10px; row-gap: 8px; }
   .settings-profile-layout .host-profile-summary { display: contents; }
-  .settings-profile-layout .host-profile-summary > .avatar.large { width: 82px; height: 82px; grid-column: 1; grid-row: 1 / span 2; }
+  .settings-profile-layout .host-profile-summary > .avatar.large { width: var(--settings-avatar-size); height: var(--settings-avatar-size); flex-basis: var(--settings-avatar-size); grid-column: 1; grid-row: 1 / span 2; }
   .settings-profile-layout .host-profile-summary > div { min-width: 0; grid-column: 2; grid-row: 1; }
   .settings-profile-layout .host-profile-summary h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .settings-profile-layout .host-profile-summary p { margin-bottom: 5px; }

@@ -472,11 +472,10 @@ Object.assign(COPY.it, {
   'Кав’ярня Enjoy': 'Caffetteria Enjoy',
   'Оберіть напій — повідомлення відразу піде в Telegram.': 'Scegli una bevanda: il messaggio verrà inviato immediatamente a Telegram.',
   'Кава': 'Caffè', 'Чай': 'Tè', 'Капучино': 'Cappuccino', 'Лате': 'Latte macchiato',
-  'Тестовий одержувач: @Chemelev': 'Destinatario del test: @Chemelev',
   'Замовлення не надіслано': 'Ordine non inviato', 'Замовлення надіслано': 'Ordine inviato',
   '«Кава» — замовлення надіслано': 'Caffè: ordine inviato', '«Чай» — замовлення надіслано': 'Tè: ordine inviato',
   '«Капучино» — замовлення надіслано': 'Cappuccino: ordine inviato', '«Лате» — замовлення надіслано': 'Latte: ordine inviato',
-  'Повідомлення передано тестовому одержувачу в Telegram.': 'Il messaggio è stato inviato al destinatario di prova in Telegram.',
+  'Повідомлення передано в Telegram.': 'Il messaggio è stato inviato su Telegram.',
   'Не вдалося надіслати замовлення': 'Impossibile inviare l\'ordine'
 });
 Object.assign(COPY.en, {
@@ -484,11 +483,10 @@ Object.assign(COPY.en, {
   'Кав’ярня Enjoy': 'Enjoy coffee shop',
   'Оберіть напій — повідомлення відразу піде в Telegram.': 'Choose a drink — the message will be sent to Telegram immediately.',
   'Кава': 'Coffee', 'Чай': 'Tea', 'Капучино': 'Cappuccino', 'Лате': 'Latte',
-  'Тестовий одержувач: @Chemelev': 'Test recipient: @Chemelev',
   'Замовлення не надіслано': 'Order not sent', 'Замовлення надіслано': 'Order sent',
   '«Кава» — замовлення надіслано': 'Coffee — order sent', '«Чай» — замовлення надіслано': 'Tea — order sent',
   '«Капучино» — замовлення надіслано': 'Cappuccino — order sent', '«Лате» — замовлення надіслано': 'Latte — order sent',
-  'Повідомлення передано тестовому одержувачу в Telegram.': 'The message was sent to the test recipient in Telegram.',
+  'Повідомлення передано в Telegram.': 'The message was sent to Telegram.',
   'Не вдалося надіслати замовлення': 'Could not send the order'
 });
 Object.assign(COPY.fr, {
@@ -496,11 +494,10 @@ Object.assign(COPY.fr, {
   'Кав’ярня Enjoy': 'Café Enjoy',
   'Оберіть напій — повідомлення відразу піде в Telegram.': 'Choisissez une boisson — le message sera immédiatement envoyé sur Telegram.',
   'Кава': 'Café', 'Чай': 'Thé', 'Капучино': 'Cappuccino', 'Лате': 'Latte',
-  'Тестовий одержувач: @Chemelev': 'Destinataire de test : @Chemelev',
   'Замовлення не надіслано': 'Commande non envoyée', 'Замовлення надіслано': 'Commande envoyée',
   '«Кава» — замовлення надіслано': 'Café — commande envoyée', '«Чай» — замовлення надіслано': 'Thé — commande envoyée',
   '«Капучино» — замовлення надіслано': 'Cappuccino — commande envoyée', '«Лате» — замовлення надіслано': 'Latte — commande envoyée',
-  'Повідомлення передано тестовому одержувачу в Telegram.': 'Le message a été envoyé au destinataire de test sur Telegram.',
+  'Повідомлення передано в Telegram.': 'Le message a été envoyé sur Telegram.',
   'Не вдалося надіслати замовлення': 'Impossible d’envoyer la commande'
 });
 

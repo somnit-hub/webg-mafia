@@ -1787,7 +1787,7 @@ function orderModalHtml() {
   const selectedItem = menu.find(item => item.id === order.selectedItem);
   const lastLabel = orderMenuLabel(menu.find(item => item.id === order.lastItem));
   const status = order.status === 'success'
-    ? statePanel('success', `«${lastLabel}» — замовлення надіслано`, 'Повідомлення передано тестовому одержувачу в Telegram.', '', true)
+    ? statePanel('success', `«${lastLabel}» — замовлення надіслано`, 'Повідомлення передано в Telegram.', '', true)
     : order.status === 'error'
       ? statePanel('error', 'Замовлення не надіслано', order.error, '', true)
       : '';
@@ -1801,7 +1801,6 @@ function orderModalHtml() {
       return `<button class="order-menu-item ${selectedItem?.id === item.id ? 'selected' : ''}" type="button" data-action="${hasOptions ? 'select-order-item' : 'place-order'}" data-item="${esc(item.id)}" ${order.busy ? 'disabled' : ''}>${orderDrinkIcon(item.icon)}<b>${esc(orderMenuLabel(item))}</b>${meta ? `<small>${esc(meta)}</small>` : ''}</button>`;
     }).join('')}</div>
     ${orderOptionsHtml(selectedItem)}
-    <p class="privacy-note order-recipient-note">Тестовий одержувач: @Chemelev</p>
     <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal" ${order.busy ? 'disabled' : ''}>Закрити</button></div>
   </div></div>`;
 }

@@ -62,7 +62,7 @@ python -m http.server 8080
 
 ## Замовлення напоїв у Telegram
 
-Робочий перелік напоїв збережено в Google Docs: [Меню замовлень Enjoy Mafia](https://docs.google.com/document/d/1Ktk4sfajx9RAIMyCB0FTbtzBFw2LsElLkPszlwX-mhQ/edit). Зараз у застосунку доступні кава, чай, капучино та лате, а тестовим одержувачем налаштовано `@Chemelev`.
+Робоче меню збережено в Google Sheets: [Меню Mafia Enjoy](https://docs.google.com/spreadsheets/d/1_hz7mJ_H40c22bLjkyNHJvSSmHnkrGnNO44IMODgubE/edit). Аркуш `menu_items` містить напої, переклади, ціну, об’єм, іконку, доступність та порядок; аркуш `options` — розміри, молоко, цукор та інші додатки до конкретних позицій. Для читання меню Worker-ом установіть для таблиці доступ **Усі, хто має посилання → Читач**. Зміни з’являються у застосунку протягом п’яти хвилин; якщо таблиця тимчасово недоступна, працює вбудоване резервне меню. Тестовим одержувачем замовлень налаштовано `@Chemelev`.
 
 Telegram не дозволяє боту автоматично написати приватному користувачеві лише за його `@username`: користувач спочатку має відкрити створеного бота й натиснути **Start**, після чого застосунку потрібен числовий chat ID. Налаштування виконується так:
 
@@ -84,7 +84,7 @@ npm run telegram:chat-id
 npx --yes wrangler@4 deploy --config cloudflare/wrangler.jsonc --secrets-file functions/.secret.local
 ```
 
-Worker працює окремо від Firebase Hosting і Firestore, тому для замовлень не потрібен тариф Firebase Blaze. Сам токен ніколи не потрапляє в браузер: Worker перевіряє Firebase-сесію через офіційний Auth REST API, приймає лише чотири дозволені позиції меню й обмежує частоту замовлень через Durable Object. `functions/.env.local` містить несекретні ідентифікатори Google/Firebase та тестовий Telegram-нік, а `functions/.secret.local` — приватні значення; обидва файли виключені з Git, Firebase Hosting і GitHub Pages. Production endpoint: `https://enjoy-mafia-orders.webg-mafia.workers.dev/orders`.
+Worker працює окремо від Firebase Hosting і Firestore, тому для замовлень не потрібен тариф Firebase Blaze. Сам токен ніколи не потрапляє в браузер: Worker перевіряє Firebase-сесію через офіційний Auth REST API, приймає лише доступні позиції з таблиці та обмежує частоту замовлень через Durable Object. `functions/.env.local` містить несекретні ідентифікатори Google/Firebase та тестовий Telegram-нік, а `functions/.secret.local` — приватні значення; обидва файли виключені з Git, Firebase Hosting і GitHub Pages. Production endpoint: `https://enjoy-mafia-orders.webg-mafia.workers.dev/orders`, публічне меню: `https://enjoy-mafia-orders.webg-mafia.workers.dev/menu`.
 
 Цей самий Worker обслуговує анонімні оцінки завершених ігор за адресою `/ratings`. Перед записом він перевіряє Google-сесію та наявність профілю користувача серед учасників гри. Окремий голос зберігається у Durable Object під SHA-256-ключем без email або імені; застосунок отримує власний вибір і лише агреговане зведення. Щоб ведучий не міг визначити першого автора, зведення відкривається після трьох оцінок.
 

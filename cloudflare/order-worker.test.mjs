@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GameFeedbackStore, handleRequest, orderPayload, telegramOrderText } from './order-worker.js';
+import { GameFeedbackStore, handleRequest, orderPayload, parseMenuCsv, telegramOrderText } from './order-worker.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -45,6 +45,32 @@ test('order model accepts only menu drinks and escapes Telegram HTML', () => {
   assert.match(telegramOrderText(order, 'host@example.com'), /&lt;Host&gt;/);
   assert.match(telegramOrderText(order, 'host@example.com'), /Гра &amp; кава/);
   assert.throws(() => orderPayload({ item: 'unknown' }), /Невідома позиція/);
+});
+
+test('published sheet menu controls availability, options and Telegram total', () => {
+  const items = 'id,category,name_uk,name_it,name_en,name_fr,price_uah,volume_ml,icon,available,sort,description_uk\n'
+    + 'coffee,coffee,Кава,Caffè,Coffee,Café,45,200,coffee,FALSE,10,\n'
+    + 'cocoa,coffee,Какао,Cacao,Cocoa,Cacao,"55,00 ₴",300,cocoa,TRUE,20,Гарячий шоколад';
+  const options = 'option_id,item_id,group,name_uk,name_it,name_en,name_fr,price_delta_uah,available,sort\n'
+    + 'oat,cocoa,milk,Вівсяне,Avena,Oat,Avoine,20,TRUE,10';
+  const menu = parseMenuCsv(items, options);
+  assert.deepEqual(menu.items.map(item => item.id), ['cocoa']);
+  const order = orderPayload({ item: 'cocoa', options: ['oat'], sender: 'Host' }, menu);
+  assert.equal(order.priceUah, 75);
+  assert.deepEqual(order.options.map(option => option.label), ['Вівсяне']);
+  assert.match(telegramOrderText(order), /75 грн/);
+  assert.throws(() => orderPayload({ item: 'coffee' }, menu), /недоступна/);
+});
+
+test('public menu endpoint works without Google login and exposes fallback safely', async () => {
+  const response = await handleRequest(new Request('https://orders.example/menu', {
+    method: 'GET', headers: { Origin: 'https://mafia-cafe.web.app' }
+  }), environment());
+  const result = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(result.source, 'fallback');
+  assert.deepEqual(result.items.map(item => item.id), ['coffee', 'tea', 'cappuccino', 'latte']);
+  assert.match(response.headers.get('Cache-Control'), /max-age=60/);
 });
 
 test('CORS preflight allows Firebase Hosting and rejects other sites', async () => {

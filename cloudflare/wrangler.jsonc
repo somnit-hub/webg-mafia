@@ -6,7 +6,8 @@
   "workers_dev": true,
   "vars": {
     "FIREBASE_WEB_API_KEY": "AIzaSyCTn_hp0SkDibKJ3IP6OZENOpQATahFYQM",
-    "FIREBASE_PROJECT_ID": "somnit-mafia-desk"
+    "FIREBASE_PROJECT_ID": "somnit-mafia-desk",
+    "MENU_SHEET_ID": "1_hz7mJ_H40c22bLjkyNHJvSSmHnkrGnNO44IMODgubE"
   },
   "secrets": {
     "required": [

@@ -39,7 +39,7 @@ import {
 } from './lineup.js';
 import { pickFunnyGuestNames } from './guest-names.js';
 import { LANGUAGES, applyLanguage, languageLocale, localizeDom, normalizeLanguage } from './i18n.js';
-import { sendTelegramOrder } from './order-service.js';
+import { DEFAULT_ORDER_MENU, loadOrderMenu, sendTelegramOrder } from './order-service.js';
 import {
   GAME_EMOTIONS, loadGameFeedbackBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
@@ -83,13 +83,6 @@ const RULES_LINKS = Object.freeze({
   ukrainian: 'https://www.imafia.org/game-rules',
   international: 'https://fiim.world/fiim-rules'
 });
-
-const ORDER_MENU = Object.freeze([
-  { key: 'coffee', label: 'Кава' },
-  { key: 'tea', label: 'Чай' },
-  { key: 'cappuccino', label: 'Капучино' },
-  { key: 'latte', label: 'Лате' }
-]);
 
 const DEFAULT_SETTINGS = {
   speech: 60,
@@ -165,7 +158,8 @@ let app = {
   authBusy: false,
   accountDeleteBusy: false,
   media: { trackName: '', playing: false, error: '' },
-  order: { busy: false, status: 'idle', error: '', lastItem: '' },
+  order: { busy: false, status: 'idle', error: '', lastItem: '', selectedItem: '', selectedOptions: [] },
+  orderMenu: DEFAULT_ORDER_MENU,
   profilePhotoSync: { status: 'idle' },
   gameFeedback: {},
   pendingActiveGameDeletes: [],
@@ -1751,14 +1745,45 @@ function orderDrinkIcon(key) {
     coffee: '<path d="M5 8h11v5a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V8Zm11 2h2a2 2 0 0 1 0 4h-2M4 21h15M9 3c-1 1-.8 2 0 3m4-3c-1 1-.8 2 0 3"/>',
     tea: '<path d="M5 9h11v4a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V9Zm11 2h2a2 2 0 0 1 0 4h-2M4 21h15M11 8c0-3 2-5 5-5 0 3-2 5-5 5Z"/>',
     cappuccino: '<path d="M5 10h11v4a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4v-4Zm11 2h2a2 2 0 0 1 0 4h-2M4 21h15"/><path d="M7 9c0-2 2-3 3.5-1C12 6 14 7 14 9"/>',
-    latte: '<path d="M7 4h10l-1 16H8L7 4Zm1 5h8M8 14h8M5 21h14M10 2h4"/>'
+    latte: '<path d="M7 4h10l-1 16H8L7 4Zm1 5h8M8 14h8M5 21h14M10 2h4"/>',
+    espresso: '<path d="M6 10h10v3a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4v-3Zm10 1h2a2 2 0 0 1 0 4h-3M5 20h14M9 5c-1 1-.7 2 0 3m4-3c-1 1-.7 2 0 3"/>',
+    cocoa: '<path d="M5 8h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V8Zm11 2h2a2 2 0 0 1 0 4h-2M4 21h15M8 5c1-2 2-2 3 0 1-2 2-2 3 0"/>',
+    cold_drink: '<path d="M7 3h10l-1 18H8L7 3Zm1 6h8M9 13h6M12 3l4-2"/>',
+    dessert: '<path d="M5 18h14M7 18l1-8h8l1 8M9 10c0-3 6-3 6 0M12 6V3m-2 1h4"/>'
   };
-  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[key]}</svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[key] || paths.coffee}</svg>`;
+}
+
+function orderMenuLabel(item) {
+  return item?.labels?.[app.settings.language] || item?.labels?.uk || item?.label || item?.id || '';
+}
+
+function orderMenuMeta(item, includePrice = true) {
+  const parts = [];
+  if (item?.volumeMl) parts.push(`${item.volumeMl} мл`);
+  if (includePrice && item?.priceUah !== null && item?.priceUah !== undefined) parts.push(`${item.priceUah} грн`);
+  return parts.join(' · ');
+}
+
+function orderOptionsHtml(item) {
+  if (!item) return '';
+  const options = app.orderMenu.options.filter(option => option.itemId === item.id);
+  if (!options.length) return '';
+  const groups = new Map();
+  options.forEach(option => groups.set(option.group, [...(groups.get(option.group) || []), option]));
+  const groupLabels = { size: 'Розмір', milk: 'Молоко', sugar: 'Цукор', extra: 'Додатково' };
+  return `<div class="order-options"><div class="section-heading"><div><h3>${esc(orderMenuLabel(item))}</h3><p>Оберіть потрібні варіанти</p></div></div>${[...groups].map(([group, values]) => `<fieldset class="order-option-group"><legend>${esc(groupLabels[group] || group)}</legend><div class="order-option-list">${values.map(option => {
+    const selected = app.order.selectedOptions?.includes(option.id);
+    const price = option.priceDeltaUah ? `+${option.priceDeltaUah} грн` : '';
+    return `<button class="order-option ${selected ? 'selected' : ''}" type="button" data-action="choose-order-option" data-group="${esc(group)}" data-option="${esc(option.id)}" aria-pressed="${selected}"><b>${esc(orderMenuLabel(option))}</b>${price ? `<small>${price}</small>` : ''}</button>`;
+  }).join('')}</div></fieldset>`).join('')}<button class="btn primary wide order-confirm" type="button" data-action="place-order" data-item="${esc(item.id)}">Надіслати замовлення</button></div>`;
 }
 
 function orderModalHtml() {
   const order = app.order;
-  const lastLabel = ORDER_MENU.find(item => item.key === order.lastItem)?.label || '';
+  const menu = app.orderMenu.items;
+  const selectedItem = menu.find(item => item.id === order.selectedItem);
+  const lastLabel = orderMenuLabel(menu.find(item => item.id === order.lastItem));
   const status = order.status === 'success'
     ? statePanel('success', `«${lastLabel}» — замовлення надіслано`, 'Повідомлення передано тестовому одержувачу в Telegram.', '', true)
     : order.status === 'error'
@@ -1768,7 +1793,12 @@ function orderModalHtml() {
     <div class="section-title section-heading"><div><span class="eyebrow">Кав’ярня Enjoy</span><h2 id="order-panel-title">Замовлення напою</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити" ${order.busy ? 'disabled' : ''}>×</button></div>
     <p class="order-intro">Оберіть напій — повідомлення відразу піде в Telegram.</p>
     ${status}
-    <div class="order-menu-grid">${ORDER_MENU.map(item => `<button class="order-menu-item" type="button" data-action="place-order" data-item="${item.key}" ${order.busy ? 'disabled' : ''}>${orderDrinkIcon(item.key)}<b>${item.label}</b></button>`).join('')}</div>
+    <div class="order-menu-grid">${menu.map(item => {
+      const hasOptions = app.orderMenu.options.some(option => option.itemId === item.id);
+      const meta = orderMenuMeta(item);
+      return `<button class="order-menu-item ${selectedItem?.id === item.id ? 'selected' : ''}" type="button" data-action="${hasOptions ? 'select-order-item' : 'place-order'}" data-item="${esc(item.id)}" ${order.busy ? 'disabled' : ''}>${orderDrinkIcon(item.icon)}<b>${esc(orderMenuLabel(item))}</b>${meta ? `<small>${esc(meta)}</small>` : ''}</button>`;
+    }).join('')}</div>
+    ${orderOptionsHtml(selectedItem)}
     <p class="privacy-note order-recipient-note">Тестовий одержувач: @Chemelev</p>
     <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal" ${order.busy ? 'disabled' : ''}>Закрити</button></div>
   </div></div>`;
@@ -3143,14 +3173,34 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'rate-game-emotion') {
     await updatePersonalGameFeedback(element.dataset.id, 'emotion', element.dataset.value);
   } else if (action === 'open-order-panel') {
-    app.order = { busy: false, status: 'idle', error: '', lastItem: '' };
+    app.order = { busy: false, status: 'idle', error: '', lastItem: '', selectedItem: '', selectedOptions: [] };
     app.modal = { type: 'order' };
+    render();
+  } else if (action === 'select-order-item') {
+    const item = element.dataset.item;
+    if (!app.orderMenu.items.some(option => option.id === item)) return toast('Невідома позиція меню');
+    app.order = { ...app.order, status: 'idle', error: '', selectedItem: item, selectedOptions: [] };
+    render();
+  } else if (action === 'choose-order-option') {
+    if (app.modal?.type !== 'order' || app.order.busy || !app.order.selectedItem) return;
+    const group = element.dataset.group;
+    const optionId = element.dataset.option;
+    const selectedOption = app.orderMenu.options.find(option => option.id === optionId && option.itemId === app.order.selectedItem && option.group === group);
+    if (!selectedOption) return toast('Цей варіант меню недоступний');
+    const selectedOptions = [...(app.order.selectedOptions || [])];
+    const alreadySelected = selectedOptions.includes(optionId);
+    const filtered = selectedOption.group === 'extra'
+      ? selectedOptions.filter(id => id !== optionId)
+      : selectedOptions.filter(id => !app.orderMenu.options.some(option => option.id === id && option.group === selectedOption.group));
+    if (!alreadySelected) filtered.push(optionId);
+    app.order = { ...app.order, status: 'idle', error: '', selectedOptions: filtered };
     render();
   } else if (action === 'place-order') {
     if (app.modal?.type !== 'order' || app.order.busy) return;
     const item = element.dataset.item;
-    if (!ORDER_MENU.some(option => option.key === item)) return toast('Невідома позиція меню');
-    app.order = { busy: true, status: 'loading', error: '', lastItem: item };
+    if (!app.orderMenu.items.some(option => option.id === item)) return toast('Невідома позиція меню');
+    const options = app.order.selectedItem === item ? [...(app.order.selectedOptions || [])] : [];
+    app.order = { ...app.order, busy: true, status: 'loading', error: '', lastItem: item };
     render();
     try {
       const idToken = LOCAL_AUTH_TEST ? '' : await getFirebaseIdToken();
@@ -3160,16 +3210,17 @@ async function handleAction(action, element, sourceEvent) {
       await sendTelegramOrder({
         idToken,
         item,
+        options,
         sender: app.hostProfile?.nickname || app.hostProfile?.displayName || app.authUser?.googleName || 'Гість Enjoy',
         game: activeGame?.title || '',
         testMode: LOCAL_AUTH_TEST
       });
-      app.order = { busy: false, status: 'success', error: '', lastItem: item };
+      app.order = { ...app.order, busy: false, status: 'success', error: '', lastItem: item };
       render();
       vibrate([40, 30, 70]);
       toast('Замовлення надіслано');
     } catch (error) {
-      app.order = { busy: false, status: 'error', error: error?.message || 'Не вдалося надіслати замовлення', lastItem: item };
+      app.order = { ...app.order, busy: false, status: 'error', error: error?.message || 'Не вдалося надіслати замовлення', lastItem: item };
       render();
     }
   } else if (action === 'open-media-panel') {
@@ -3832,10 +3883,16 @@ channel?.addEventListener('message', event => {
   render();
 });
 
+async function refreshOrderMenu() {
+  app.orderMenu = await loadOrderMenu({ testMode: LOCAL_AUTH_TEST });
+  if (app.modal?.type === 'order') render();
+}
+
 async function init() {
   render();
   configureMediaSession();
   void refreshBluetoothState();
+  void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }

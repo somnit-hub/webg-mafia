@@ -1,9 +1,15 @@
-const DRINKS = Object.freeze({
-  coffee: 'Кава',
-  tea: 'Чай',
-  cappuccino: 'Капучино',
-  latte: 'Лате'
+const FALLBACK_MENU = Object.freeze({
+  items: Object.freeze([
+    { id: 'coffee', category: 'coffee', labels: { uk: 'Кава', it: 'Caffè', en: 'Coffee', fr: 'Café' }, icon: 'coffee', sort: 10, priceUah: null, volumeMl: null, descriptionUk: '' },
+    { id: 'tea', category: 'tea', labels: { uk: 'Чай', it: 'Tè', en: 'Tea', fr: 'Thé' }, icon: 'tea', sort: 20, priceUah: null, volumeMl: null, descriptionUk: '' },
+    { id: 'cappuccino', category: 'coffee', labels: { uk: 'Капучино', it: 'Cappuccino', en: 'Cappuccino', fr: 'Cappuccino' }, icon: 'cappuccino', sort: 30, priceUah: null, volumeMl: null, descriptionUk: '' },
+    { id: 'latte', category: 'coffee', labels: { uk: 'Лате', it: 'Latte', en: 'Latte', fr: 'Latte' }, icon: 'latte', sort: 40, priceUah: null, volumeMl: null, descriptionUk: '' }
+  ]),
+  options: Object.freeze([]),
+  source: 'fallback'
 });
+const MENU_CACHE_MS = 5 * 60 * 1000;
+let menuCache = { value: null, expiresAt: 0 };
 
 const ALLOWED_ORIGINS = new Set([
   'https://mafia-cafe.web.app',
@@ -30,12 +36,149 @@ function escapeHtml(value) {
   })[character]);
 }
 
-export function orderPayload(body = {}) {
+function csvRows(source = '') {
+  const rows = [];
+  let row = [];
+  let value = '';
+  let quoted = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (quoted) {
+      if (character === '"' && source[index + 1] === '"') { value += '"'; index += 1; }
+      else if (character === '"') quoted = false;
+      else value += character;
+    } else if (character === '"') quoted = true;
+    else if (character === ',') { row.push(value); value = ''; }
+    else if (character === '\n') { row.push(value); rows.push(row); row = []; value = ''; }
+    else if (character !== '\r') value += character;
+  }
+  if (value || row.length) { row.push(value); rows.push(row); }
+  return rows;
+}
+
+function recordsFromCsv(source) {
+  const rows = csvRows(source);
+  const headers = (rows.shift() || []).map(value => clean(value, 40));
+  return rows.map(row => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
+}
+
+function sheetNumber(value, minimum = 0, maximum = 100000) {
+  let normalized = String(value || '').replace(/[\s\u00a0₴грн]/gi, '');
+  if (normalized.includes(',') && normalized.includes('.')) normalized = normalized.replaceAll('.', '').replace(',', '.');
+  else normalized = normalized.replace(',', '.');
+  normalized = normalized.replace(/[^0-9.-]/g, '');
+  if (!normalized) return null;
+  const number = Number(normalized);
+  return Number.isFinite(number) && number >= minimum && number <= maximum ? number : null;
+}
+
+function enabled(value) {
+  return ['true', '1', 'yes', 'так'].includes(clean(value, 12).toLowerCase());
+}
+
+function labelsFromRow(row) {
+  const uk = clean(row.name_uk, 80);
+  if (!uk) return null;
+  return {
+    uk,
+    it: clean(row.name_it || uk, 80),
+    en: clean(row.name_en || uk, 80),
+    fr: clean(row.name_fr || uk, 80)
+  };
+}
+
+export function parseMenuCsv(itemsCsv, optionsCsv = '') {
+  const ids = new Set();
+  const items = recordsFromCsv(itemsCsv).map(row => {
+    const id = clean(row.id, 48).toLowerCase();
+    const labels = labelsFromRow(row);
+    if (!enabled(row.available) || !/^[a-z0-9][a-z0-9_-]*$/.test(id) || ids.has(id) || !labels) return null;
+    ids.add(id);
+    return {
+      id,
+      category: clean(row.category, 32).toLowerCase() || 'other',
+      labels,
+      priceUah: sheetNumber(row.price_uah),
+      volumeMl: sheetNumber(row.volume_ml, 1, 5000),
+      icon: clean(row.icon, 32).toLowerCase() || 'coffee',
+      sort: sheetNumber(row.sort, -100000, 100000) ?? 0,
+      descriptionUk: clean(row.description_uk, 240)
+    };
+  }).filter(Boolean).sort((left, right) => left.sort - right.sort || left.labels.uk.localeCompare(right.labels.uk, 'uk'));
+  if (!items.length) throw new Error('Published menu has no available items');
+
+  const optionIds = new Set();
+  const options = recordsFromCsv(optionsCsv).map(row => {
+    const id = clean(row.option_id, 48).toLowerCase();
+    const itemId = clean(row.item_id, 48).toLowerCase();
+    const labels = labelsFromRow(row);
+    if (!enabled(row.available) || !/^[a-z0-9][a-z0-9_-]*$/.test(id) || optionIds.has(id) || !ids.has(itemId) || !labels) return null;
+    optionIds.add(id);
+    return {
+      id,
+      itemId,
+      group: clean(row.group, 32).toLowerCase() || 'extra',
+      labels,
+      priceDeltaUah: sheetNumber(row.price_delta_uah, -100000, 100000) ?? 0,
+      sort: sheetNumber(row.sort, -100000, 100000) ?? 0
+    };
+  }).filter(Boolean).sort((left, right) => left.sort - right.sort || left.labels.uk.localeCompare(right.labels.uk, 'uk'));
+  return { items, options, source: 'sheet', updatedAt: new Date().toISOString() };
+}
+
+function sheetCsvUrl(spreadsheetId, sheet) {
+  return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`;
+}
+
+async function fetchSheetCsv(spreadsheetId, sheet) {
+  const response = await fetch(sheetCsvUrl(spreadsheetId, sheet), {
+    headers: { Accept: 'text/csv' },
+    cf: { cacheEverything: true, cacheTtl: 300 }
+  });
+  if (!response.ok) throw new Error(`Menu sheet ${sheet} returned ${response.status}`);
+  return response.text();
+}
+
+export async function loadMenu(env, now = Date.now()) {
+  if (menuCache.value && menuCache.expiresAt > now) return menuCache.value;
+  const spreadsheetId = clean(env?.MENU_SHEET_ID, 160);
+  if (!spreadsheetId) return FALLBACK_MENU;
+  try {
+    const [itemsCsv, optionsCsv] = await Promise.all([
+      fetchSheetCsv(spreadsheetId, 'menu_items'),
+      fetchSheetCsv(spreadsheetId, 'options')
+    ]);
+    const value = parseMenuCsv(itemsCsv, optionsCsv);
+    menuCache = { value, expiresAt: now + MENU_CACHE_MS };
+    return value;
+  } catch (error) {
+    console.error('Menu refresh failed', { name: error?.name || 'Error' });
+    if (menuCache.value) return { ...menuCache.value, stale: true };
+    return FALLBACK_MENU;
+  }
+}
+
+export function orderPayload(body = {}, menu = FALLBACK_MENU) {
   const item = clean(body.item, 24).toLowerCase();
-  if (!DRINKS[item]) throw new HttpError(400, 'Невідома позиція меню');
+  const selectedItem = menu.items.find(option => option.id === item);
+  if (!selectedItem) throw new HttpError(400, 'Невідома позиція меню або вона недоступна');
+  const requestedOptionIds = Array.isArray(body.options)
+    ? [...new Set(body.options.map(option => clean(option, 48).toLowerCase()).filter(Boolean))]
+    : [];
+  if (requestedOptionIds.length > 8) throw new HttpError(400, 'Забагато додатків до замовлення');
+  const selectedOptions = requestedOptionIds.map(id => menu.options.find(option => option.id === id && option.itemId === item));
+  if (selectedOptions.some(option => !option)) throw new HttpError(400, 'Невідомий або недоступний варіант напою');
+  const singleGroups = selectedOptions.filter(option => option.group !== 'extra').map(option => option.group);
+  if (new Set(singleGroups).size !== singleGroups.length) throw new HttpError(400, 'Для однієї групи можна вибрати лише один варіант');
+  const priceUah = selectedItem.priceUah === null
+    ? null
+    : selectedItem.priceUah + selectedOptions.reduce((sum, option) => sum + option.priceDeltaUah, 0);
   return {
     item,
-    label: DRINKS[item],
+    label: selectedItem.labels.uk,
+    options: selectedOptions.map(option => ({ id: option.id, label: option.labels.uk, priceDeltaUah: option.priceDeltaUah })),
+    priceUah,
+    volumeMl: selectedItem.volumeMl,
     sender: clean(body.sender, 60) || 'Гість Enjoy',
     game: clean(body.game, 80)
   };
@@ -47,6 +190,9 @@ export function telegramOrderText(order, email = '') {
     `Напій: <b>${escapeHtml(order.label)}</b>`,
     `Від: ${escapeHtml(order.sender)}`
   ];
+  if (order.volumeMl) lines.splice(2, 0, `Об’єм: ${escapeHtml(order.volumeMl)} мл`);
+  if (order.options?.length) lines.splice(order.volumeMl ? 3 : 2, 0, `Додатково: ${order.options.map(option => escapeHtml(option.label)).join(', ')}`);
+  if (order.priceUah !== null && order.priceUah !== undefined) lines.splice(-1, 0, `Сума: <b>${escapeHtml(order.priceUah)} грн</b>`);
   if (order.game) lines.push(`Гра: ${escapeHtml(order.game)}`);
   if (email) lines.push(`Акаунт: ${escapeHtml(clean(email, 120))}`);
   return lines.join('\n');
@@ -73,8 +219,10 @@ function corsHeaders(origin = '') {
   return headers;
 }
 
-function json(origin, status, body) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders(origin) });
+function json(origin, status, body, cacheControl = 'no-store') {
+  const headers = corsHeaders(origin);
+  headers.set('Cache-Control', cacheControl);
+  return new Response(JSON.stringify(body), { status, headers });
 }
 
 async function firebaseIdentity(idToken, env) {
@@ -177,6 +325,10 @@ export async function handleRequest(request, env) {
 
   const url = new URL(request.url);
   if (url.pathname === '/health' && request.method === 'GET') return json(origin, 200, { ok: true, service: 'enjoy-mafia-orders' });
+  if (url.pathname === '/menu') {
+    if (request.method !== 'GET') return json(origin, 405, { error: 'Потрібен GET-запит' });
+    return json(origin, 200, await loadMenu(env), 'public,max-age=60,s-maxage=300,stale-while-revalidate=3600');
+  }
   if (!['/orders', '/ratings', '/ratings/batch'].includes(url.pathname)) return json(origin, 404, { error: 'Маршрут не знайдено' });
   if (url.pathname === '/orders' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
   if (url.pathname === '/ratings' && !['GET', 'POST'].includes(request.method)) return json(origin, 405, { error: 'Метод не підтримується' });
@@ -209,7 +361,7 @@ export async function handleRequest(request, env) {
       return json(origin, 200, result);
     }
     const body = await request.json().catch(() => { throw new HttpError(400, 'Некоректний запит'); });
-    const order = orderPayload(body);
+    const order = orderPayload(body, await loadMenu(env));
     await checkRateLimit(identity, env);
     await sendTelegram(order, identity, env);
     return json(origin, 200, { ok: true, item: order.item, label: order.label });

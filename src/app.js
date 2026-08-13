@@ -1141,7 +1141,7 @@ function settingsView() {
   return `<main class="page tab-page">
     ${pageHeader('Налаштування', 'Спільнота, оформлення, синхронізація та резервні копії. Профілі, активні й завершені ігри доступні після Google-входу. Публічний стан активної гри не містить ролей, нічних цілей або приватного протоколу. Нотатка ведучого ніколи не додається до профілю в каталозі.')}
     <section class="card card-pad enjoy-info-card">
-      <div class="enjoy-info-copy"><div class="enjoy-brand-tools">${cafeIconLinks('settings-cafe-links')}</div><div><div class="eyebrow">coffee · community · mafia</div><h2>Домівка нашого мафія-клубу</h2></div></div>
+      <div class="enjoy-info-copy"><div class="enjoy-brand-tools">${cafeIconLinks('settings-cafe-links')}</div><div><div class="eyebrow">coffee · community · mafia</div><h2>Домівка мафія-клубу</h2></div></div>
     </section>
     <div class="grid two">
       <section class="card card-pad">

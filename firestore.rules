@@ -84,7 +84,7 @@ service cloud.firestore {
           || (request.resource.data.avatarPreset is string
             && request.resource.data.avatarPreset.size() <= 80
             && (request.resource.data.avatarPreset == ''
-              || request.resource.data.avatarPreset.matches('^[.]/assets/avatars/(raccoon|cat|capybara|pug|fox|owl|hamster|lion|frog|boar)[.]webp$')))
+              || request.resource.data.avatarPreset.matches('^[.]/assets/avatars/(raccoon|cat|capybara|pug|fox|owl|hamster|lion|frog|boar)[.]webp$'))))
         && request.resource.data.profileUpdatedAt is string
         && request.resource.data.profileUpdatedAt.size() <= 40
         && request.resource.data.schemaVersion == 1

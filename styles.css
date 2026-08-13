@@ -350,18 +350,21 @@ img { display: block; max-width: 100%; }
   color: var(--text);
   background: var(--control-bg);
 }
-.icon-btn[data-action="close-modal"] { font-size: 0; }
+.icon-btn[data-action="close-modal"] { position: relative; padding: 0; overflow: hidden; font-size: 0; line-height: 0; }
 .icon-btn[data-action="close-modal"]::before,
 .icon-btn[data-action="close-modal"]::after {
   content: "";
-  grid-area: 1 / 1;
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 21px;
   height: 3.5px;
   border-radius: 999px;
   background: currentColor;
+  transform-origin: center;
 }
-.icon-btn[data-action="close-modal"]::before { transform: rotate(45deg); }
-.icon-btn[data-action="close-modal"]::after { transform: rotate(-45deg); }
+.icon-btn[data-action="close-modal"]::before { transform: translate(-50%, -50%) rotate(45deg); }
+.icon-btn[data-action="close-modal"]::after { transform: translate(-50%, -50%) rotate(-45deg); }
 .install-btn { flex: 0 0 40px; }
 .install-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: square; stroke-linejoin: miter; }
 .order-btn { flex: 0 0 40px; color: var(--gold); }

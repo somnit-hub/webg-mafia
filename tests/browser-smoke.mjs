@@ -199,6 +199,19 @@ const headerMediaControls = await evaluate(`({
   bluetoothBesideProfile: (() => { const bluetooth = document.querySelector('.browser-bluetooth-btn').getBoundingClientRect(); const profile = document.querySelector('.profile-btn').getBoundingClientRect(); return bluetooth.right <= profile.left && profile.left - bluetooth.right <= 6; })(),
   profileGroupRightGap: (() => { const box = document.querySelector('.header-profile-actions').getBoundingClientRect(); return Math.round(innerWidth - box.right); })()
 })`);
+const headerOrderControl = await evaluate(`(() => {
+  const order = document.querySelector('[data-action="open-order-panel"]');
+  const install = document.querySelector('[data-action="install"]');
+  const orderBox = order.getBoundingClientRect();
+  const installBox = install?.getBoundingClientRect();
+  return {
+    icon: Boolean(order.querySelector('svg')),
+    label: order.getAttribute('aria-label'),
+    size: Math.round(orderBox.width),
+    besideInstall: !installBox || (installBox.right <= orderBox.left && orderBox.left - installBox.right <= 6),
+    insideViewport: orderBox.left >= 0 && orderBox.right <= innerWidth
+  };
+})()`);
 await click('[data-action="open-media-panel"]');
 const mediaModalFrame = await inspectModalFrame();
 const mediaPanel = await evaluate(`({
@@ -234,6 +247,24 @@ const preparedMedia = await evaluate(`({
 })`);
 await captureScreenshot(process.env.SMOKE_MEDIA_SCREENSHOT);
 await click('.media-modal [data-action="close-modal"]');
+await click('[data-action="open-order-panel"]');
+const orderModalFrame = await inspectModalFrame();
+const orderPanel = await evaluate(`({
+  title: document.querySelector('#order-panel-title')?.textContent,
+  choices: [...document.querySelectorAll('.order-menu-item b')].map(item => item.textContent),
+  count: document.querySelectorAll('.order-menu-item').length,
+  smallestChoice: Math.round(Math.min(...[...document.querySelectorAll('.order-menu-item')].map(item => item.getBoundingClientRect().height))),
+  recipient: document.querySelector('.order-recipient-note')?.textContent,
+  immediate: document.querySelector('.order-intro')?.textContent.includes('відразу піде в Telegram')
+})`);
+await click('.order-menu-item[data-item="cappuccino"]');
+await wait(150);
+const orderResult = await evaluate(`({
+  success: Boolean(document.querySelector('.order-modal .state-success')),
+  text: document.querySelector('.order-modal .state-copy')?.textContent,
+  modalOpen: Boolean(document.querySelector('.order-modal'))
+})`);
+await click('.order-modal [data-action="close-modal"]');
 await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 568, deviceScaleFactor: 1, mobile: true });
 await wait(100);
 const compactLayout = await evaluate(`({ viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth, headerWidth: document.querySelector('.shell-header').getBoundingClientRect().width, actionsRight: Math.round(document.querySelector('.header-actions').getBoundingClientRect().right) })`);
@@ -284,7 +315,11 @@ const hostProfileControls = await evaluate(`({
   deleteInIdentity: Boolean(document.querySelector('.host-profile-modal .identity-field .account-delete-btn')),
   deleteAbsentFromHeader: !document.querySelector('.host-profile-modal .section-title .account-delete-btn'),
   languageCount: document.querySelectorAll('.host-profile-modal [data-language]').length,
-  languageOrder: [...document.querySelectorAll('.host-profile-modal [data-language]')].map(button => button.textContent.trim()),
+  languageOrder: [...document.querySelectorAll('.host-profile-modal [data-language]')].map(button => button.dataset.language),
+  languageLabels: [...document.querySelectorAll('.host-profile-modal [data-language]')].map(button => button.getAttribute('aria-label')),
+  languageFlags: document.querySelectorAll('.host-profile-modal .language-flag svg').length,
+  languageNamesHidden: [...document.querySelectorAll('.host-profile-modal [data-language]')].every(button => !button.textContent.trim()),
+  neutralBlackFlag: document.querySelector('.host-profile-modal [data-language="ru"] .neutral-flag-field')?.getAttribute('fill'),
   discoverable: document.querySelector('[name="discoverable"]')?.checked,
   inputFontSize: parseFloat(getComputedStyle(document.querySelector('#host-display-name')).fontSize),
   inputAutofocus: document.querySelector('#host-display-name').hasAttribute('autofocus'),
@@ -331,6 +366,11 @@ const savedHostAvatar = await evaluate(`new Promise((resolve, reject) => {
 })`);
 await click('[href="#settings"]');
 const settingsChrome = await inspectAppChrome();
+const profilePhotoSyncStatus = await evaluate(`({
+  label: document.querySelector('.host-profile-summary [data-photo-sync-status]')?.textContent,
+  status: document.querySelector('.host-profile-summary [data-photo-sync-status]')?.dataset.photoSyncStatus,
+  visible: Boolean(document.querySelector('.host-profile-summary [data-photo-sync-status]')?.getBoundingClientRect().width)
+})`);
 const settingsActionLayout = await evaluate(`(() => {
   const measure = selector => {
     const row = document.querySelector(selector);
@@ -349,7 +389,11 @@ const settingsActionLayout = await evaluate(`(() => {
 const themeOptions = await evaluate(`document.querySelectorAll('[data-theme-choice]').length`);
 const languageOptions = await evaluate(`({
   count: document.querySelectorAll('main [data-language]').length,
-  order: [...document.querySelectorAll('main [data-language]')].map(button => button.textContent.trim()),
+  order: [...document.querySelectorAll('main [data-language]')].map(button => button.dataset.language),
+  labels: [...document.querySelectorAll('main [data-language]')].map(button => button.getAttribute('aria-label')),
+  flags: document.querySelectorAll('main .language-flag svg').length,
+  namesHidden: [...document.querySelectorAll('main [data-language]')].every(button => !button.textContent.trim()),
+  neutralBlackFlag: document.querySelector('main [data-language="ru"] .neutral-flag-field')?.getAttribute('fill'),
   selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language
 })`);
 await click('main [data-language="en"]');
@@ -463,6 +507,19 @@ const statsPanelExpanded = await evaluate(`({
   focused: document.activeElement?.dataset.panel
 })`);
 await click('[data-action="toggle-panel"][data-panel="statsRoles"]');
+const statsPlayersDefault = await evaluate(`({
+  expanded: document.querySelector('[data-action="toggle-panel"][data-panel="statsPlayers"]')?.getAttribute('aria-expanded'),
+  hidden: document.querySelector('#panel-statsPlayers')?.hidden,
+  emptyState: Boolean(document.querySelector('#panel-statsPlayers .ui-state.state-empty'))
+})`);
+await click('[data-action="toggle-panel"][data-panel="statsPlayers"]');
+const statsPlayersCollapsed = await evaluate(`({
+  expanded: document.querySelector('[data-action="toggle-panel"][data-panel="statsPlayers"]')?.getAttribute('aria-expanded'),
+  hidden: document.querySelector('#panel-statsPlayers')?.hidden,
+  focused: document.activeElement?.dataset.panel,
+  panelHeight: Math.round(document.querySelector('[data-panel="statsPlayers"]')?.getBoundingClientRect().height || 0)
+})`);
+await click('[data-action="toggle-panel"][data-panel="statsPlayers"]');
 const emptySharedStats = await evaluate(`({
   title: document.querySelector('.page-head h1')?.textContent,
   description: document.querySelector('.page-head .help')?.dataset.tooltip,
@@ -612,6 +669,8 @@ const setupCompactLayout = await evaluate(`({
   smallestPlayerPicker: Math.round(Math.min(...[...document.querySelectorAll('.seat-player-picker')].map(picker => picker.getBoundingClientRect().height))),
   pickerIcons: document.querySelectorAll('.seat-player-picker > svg').length,
   seatAvatars: document.querySelectorAll('.seat-inline-avatar').length,
+  avatarControls: document.querySelectorAll('.seat-avatar-control').length,
+  editableAvatarControls: document.querySelectorAll('[data-action="open-setup-avatar"]').length,
   generatedAvatars: document.querySelectorAll('.seat-inline-avatar.generated-avatar').length,
   profileAvatars: document.querySelectorAll('.seat-inline-avatar:not(.generated-avatar)').length,
   avatarSources: [...document.querySelectorAll('.seat-inline-avatar')].map(image => image.getAttribute('src')),
@@ -623,7 +682,7 @@ const setupCompactLayout = await evaluate(`({
     const imageRect = image.getBoundingClientRect();
     return getComputedStyle(image).objectFit === 'cover' && Math.abs(imageRect.width - imageRect.height) <= 1 && Math.round(imageRect.width) === 40;
   }),
-  avatarBetweenPickerAndName: [...document.querySelectorAll('.seat-setup-row')].every(row => row.children[1]?.classList.contains('seat-player-picker') && row.children[2]?.classList.contains('seat-inline-avatar') && row.children[3]?.classList.contains('seat-name-input')),
+  avatarBetweenPickerAndName: [...document.querySelectorAll('.seat-setup-row')].every(row => row.children[1]?.classList.contains('seat-player-picker') && row.children[2]?.classList.contains('seat-avatar-control') && row.children[2]?.querySelector('.seat-inline-avatar') && row.children[3]?.classList.contains('seat-name-input')),
   nameInputs: document.querySelectorAll('.seat-name-input').length,
   collapsedPanelMaxHeight: Math.round(Math.max(...[...document.querySelectorAll('.collapsible-panel[data-panel^="setup"]:not(.expanded)')].map(panel => panel.getBoundingClientRect().height))),
   collapsedToggleMinHeight: Math.round(Math.min(...[...document.querySelectorAll('.collapsible-panel[data-panel^="setup"]:not(.expanded) .collapsible-toggle')].map(toggle => toggle.getBoundingClientRect().height))),
@@ -697,6 +756,43 @@ const seatingOptionFilter = await evaluate(`(() => {
     unassignedRemainAvailable: [...occurrences.entries()].some(([profileId, count]) => !assigned.includes(profileId) && count === selects.length)
   };
 })()`);
+const setupAvatarTarget = await evaluate(`(() => {
+  const select = [...document.querySelectorAll('[data-seat-profile]')].find(item => item.selectedOptions[0]?.textContent.startsWith('Тестовий Нік'));
+  return { seat: Number(select?.dataset.seatProfile || 0), playerId: select?.value || '' };
+})()`);
+await click(`[data-action="open-setup-avatar"][data-seat="${setupAvatarTarget.seat}"]`);
+const setupAvatarModalFrame = await inspectModalFrame();
+const setupAvatarPickerBefore = await evaluate(`({
+  title: document.querySelector('.setup-avatar-modal h2')?.textContent,
+  choices: document.querySelectorAll('[data-action="choose-setup-avatar"]').length,
+  imageChoices: document.querySelectorAll('[data-action="choose-setup-avatar"] img').length,
+  profile: document.querySelector('.setup-avatar-modal .section-heading p')?.textContent,
+  manualHelp: document.querySelector('.setup-avatar-help')?.textContent,
+  lionEnabled: !document.querySelector('[data-action="choose-setup-avatar"][data-avatar="./assets/avatars/lion.webp"]')?.disabled
+})`);
+await click('[data-action="choose-setup-avatar"][data-avatar="./assets/avatars/lion.webp"]');
+await wait(250);
+const setupAvatarSaved = await evaluate(`(async ({ seat, playerId }) => {
+  const stored = await new Promise((resolve, reject) => {
+    const request = indexedDB.open('mafia-desk-local-smoke-test');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const transaction = request.result.transaction('players', 'readonly');
+      const read = transaction.objectStore('players').get(playerId);
+      read.onsuccess = () => resolve(read.result || null);
+      read.onerror = () => reject(read.error);
+    };
+  });
+  const control = document.querySelector('[data-action="open-setup-avatar"][data-seat="' + seat + '"]');
+  return {
+    modalClosed: !document.querySelector('.setup-avatar-modal'),
+    editable: Boolean(control),
+    rowAvatar: control?.querySelector('img')?.getAttribute('src') || '',
+    storedAvatar: stored?.avatar || '',
+    storedPreset: stored?.avatarPreset || ''
+  };
+})(${JSON.stringify(setupAvatarTarget)})`);
+const setupAvatarPicker = { ...setupAvatarPickerBefore, ...setupAvatarSaved };
 const temporaryOriginalProfile = await evaluate(`document.querySelector('[data-seat-profile="10"]').value`);
 await evaluate(`(() => {
   const select = document.querySelector('[data-seat-profile="10"]');
@@ -705,6 +801,7 @@ await evaluate(`(() => {
 })()`);
 await wait(100);
 const generatedGuestName = await evaluate(`document.querySelector('[data-seat-name="10"]')?.value`);
+const temporaryAvatarLocked = await evaluate(`!document.querySelector('[data-action="open-setup-avatar"][data-seat="10"]')`);
 await evaluate(`(() => {
   const input = document.querySelector('[data-seat-name="10"]');
   input.value = 'Ручний Гість';
@@ -764,7 +861,7 @@ const roleDealButton = await evaluate(`({
   primaryBackground: getComputedStyle(document.querySelector('.setup-rules-panel .btn.primary')).backgroundColor,
   secondaryBackground: getComputedStyle(document.querySelector('[data-action="shuffle-seats"]')).backgroundColor
 })`);
-const preferredSeatAvatar = await evaluate(`document.querySelector('[data-seat-name="1"]')?.previousElementSibling?.getAttribute('src')`);
+const preferredSeatAvatar = await evaluate(`document.querySelector('[data-seat-name="1"]')?.previousElementSibling?.querySelector('img')?.getAttribute('src')`);
 await click('.setup-fab-group [data-action="start-game"]');
 await wait(250);
 const preferredSeatName = await evaluate(`document.querySelector('.reveal-card h1')?.textContent`);
@@ -837,8 +934,28 @@ for (let index = 0; index < 10; index += 1) {
 const zeroNightSignals = await evaluate(`({
   count: document.querySelectorAll('.signal-stack .phase-signal img').length,
   sources: [...document.querySelectorAll('.signal-stack img')].map(image => image.getAttribute('src')),
-  actionHeight: Math.round(document.querySelector('[data-action="zero-to-day"]')?.getBoundingClientRect().height || 0),
-  actionFontSize: Math.round(parseFloat(getComputedStyle(document.querySelector('[data-action="zero-to-day"]')).fontSize))
+  steps: document.querySelectorAll('.phase-stepper li').length,
+  current: document.querySelector('.phase-stepper [aria-current="step"] b')?.textContent,
+  cue: document.querySelector('.moderator-cue b')?.textContent,
+  actionHeight: Math.round(document.querySelector('[data-action="zero-night-sheriff"]')?.getBoundingClientRect().height || 0),
+  actionFontSize: Math.round(parseFloat(getComputedStyle(document.querySelector('[data-action="zero-night-sheriff"]')).fontSize)),
+  insideViewport: document.querySelector('.phase-panel')?.getBoundingClientRect().bottom <= document.querySelector('.game-nav')?.getBoundingClientRect().top
+})`);
+await click('[data-action="zero-night-sheriff"]');
+const zeroNightSheriff = await evaluate(`({
+  signal: document.querySelector('.phase-signal img')?.getAttribute('src'),
+  current: document.querySelector('.phase-stepper [aria-current="step"] b')?.textContent,
+  cue: document.querySelector('.moderator-cue b')?.textContent,
+  timer: document.querySelector('.timer')?.textContent,
+  action: document.querySelector('[data-action="zero-night-free-seating"]')?.textContent.trim(),
+  actionHeight: Math.round(document.querySelector('[data-action="zero-night-free-seating"]')?.getBoundingClientRect().height || 0)
+})`);
+await click('[data-action="zero-night-free-seating"]');
+const zeroNightFreeSeating = await evaluate(`({
+  current: document.querySelector('.phase-stepper [aria-current="step"] b')?.textContent,
+  cue: document.querySelector('.moderator-cue b')?.textContent,
+  timer: document.querySelector('.timer')?.textContent,
+  action: document.querySelector('[data-action="zero-to-day"]')?.textContent.trim()
 })`);
 await click('[data-action="zero-to-day"]');
 const firstDay = await evaluate(`({
@@ -969,12 +1086,14 @@ const nomination = await evaluate(`({
   latestLog: document.querySelector('.quick-log')?.innerText.split('\\n').slice(0, 2)
 })`);
 const offlineShell = await evaluate(`navigator.serviceWorker.ready.then(async () => {
-  const cache = await caches.open('mafia-desk-v104');
+  const cache = await caches.open('mafia-desk-v109');
   const keys = (await cache.keys()).map(request => request.url);
   return {
     authModule: keys.some(url => url.endsWith('/src/auth.js')),
     cloudProfilesModule: keys.some(url => url.endsWith('/src/cloud-profiles.js')),
     cloudGamesModule: keys.some(url => url.endsWith('/src/cloud-games.js')),
+    gameEngineModule: keys.some(url => url.endsWith('/src/game-engine.js')),
+    orderServiceModule: keys.some(url => url.endsWith('/src/order-service.js')),
     playerLinksModule: keys.some(url => url.endsWith('/src/player-links.js')),
     timerModule: keys.some(url => url.endsWith('/src/timer.js')),
     lineupModule: keys.some(url => url.endsWith('/src/lineup.js')),
@@ -1039,6 +1158,33 @@ await click('[data-action="night-hide-result"]');
 await click(`[data-action="night-target"][data-seat="${citizenSeat}"]`);
 await click('[data-action="night-show-result"]');
 const sheriffRedSignal = await evaluate(`({ source: document.querySelector('.night-result-signal img')?.getAttribute('src'), label: document.querySelector('.night-result-panel h2')?.textContent, instruction: document.querySelector('.night-result-panel p')?.textContent })`);
+await click('[data-action="night-check-done"]');
+const nightResultAnnouncement = await evaluate(`({
+  title: document.querySelector('.phase-panel h2')?.textContent,
+  cue: document.querySelector('.moderator-cue b')?.textContent,
+  action: document.querySelector('[data-action="wake-city"]')?.textContent.trim()
+})`);
+await click('[data-action="wake-city"]');
+const bestMoveLayout = await evaluate(`(() => {
+  const panel = document.querySelector('.best-move-panel');
+  const nav = document.querySelector('.game-nav');
+  return {
+    phase: document.querySelector('.phase-copy h1')?.textContent,
+    timer: panel?.querySelector('.timer')?.textContent,
+    candidates: panel?.querySelectorAll('[data-action="best-move-target"]').length,
+    unavailable: panel?.querySelectorAll('[data-action="best-move-target"]:disabled').length,
+    selected: panel?.querySelectorAll('[data-action="best-move-target"].selected').length,
+    cue: panel?.querySelector('.moderator-cue b')?.textContent,
+    insideViewport: Boolean(panel && nav && panel.getBoundingClientRect().bottom <= nav.getBoundingClientRect().top),
+    scrollWidth: document.documentElement.scrollWidth
+  };
+})()`);
+const bestMoveTargets = await evaluate(`[...document.querySelectorAll('[data-action="best-move-target"]:not(:disabled)')].slice(0, 3).map(button => button.dataset.seat)`);
+for (const target of bestMoveTargets) await click(`[data-action="best-move-target"][data-seat="${target}"]`);
+await click('[data-action="finish-best-move"]');
+const bestMoveFarewell = await evaluate(`({ phase: document.querySelector('.phase-copy h1')?.textContent, timer: document.querySelector('.timer')?.textContent, player: document.querySelector('.speaker-row h2')?.textContent, cue: document.querySelector('.moderator-cue b')?.textContent })`);
+await click('[data-action="finish-last-word"]');
+const afterBestMove = await evaluate(`({ phase: document.querySelector('.phase-copy h1')?.textContent, logged: [...document.querySelectorAll('.log-item')].some(item => item.textContent.includes('Кращий хід')) })`);
 
 await click('[data-action="end-game-manual"]');
 const confirmModalFrame = await inspectModalFrame();
@@ -1144,12 +1290,12 @@ const foreignObserver = await evaluate(`({
   bottomNavAbsent: !document.querySelector('.bottom-nav')
 })`);
 
-const nightSignals = { donMissSignal, donHitSignal, sheriffBlackSignal, sheriffRedSignal };
+const nightSignals = { donMissSignal, donHitSignal, sheriffBlackSignal, sheriffRedSignal, nightResultAnnouncement };
 const chromeByTab = { home: homeChrome, players: playersChrome, setup: setupChrome, stats: statsChrome, settings: settingsChrome };
-const unifiedModalFrames = { mediaModalFrame, hostProfileModalFrame, accountDeleteModalFrame, playerModalFrame, setupMoveModalFrame, gameSettingsModalFrame, seatModalFrame, confirmModalFrame, winnerModalFrame, protocolModalFrame };
+const unifiedModalFrames = { mediaModalFrame, orderModalFrame, hostProfileModalFrame, accountDeleteModalFrame, playerModalFrame, setupMoveModalFrame, setupAvatarModalFrame, gameSettingsModalFrame, seatModalFrame, confirmModalFrame, winnerModalFrame, protocolModalFrame };
 const languageSupport = { languageOptions, englishLanguage, frenchLanguage, russianLanguage, restoredUkrainianLanguage };
-const gameCardSystem = { roleReadyLayout, roleOpenLayout, gameSettingsAppearance, confirmModalAppearance, winnerModalAppearance };
-const result = { authenticatedHost, enjoyBrand, chromeByTab, mobileLayout, headerMediaControls, mediaPanel, preparedMedia, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, emptySharedStats, telegramImportAbsent, cameraControl, profile, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameStats, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
+const gameCardSystem = { roleReadyLayout, roleOpenLayout, gameSettingsAppearance, confirmModalAppearance, winnerModalAppearance, zeroNightSheriff, zeroNightFreeSeating, bestMoveLayout, bestMoveFarewell, afterBestMove };
+const result = { authenticatedHost, enjoyBrand, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, mediaPanel, preparedMedia, orderPanel, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersCollapsed, emptySharedStats, telegramImportAbsent, cameraControl, profile, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameStats, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
 console.log(JSON.stringify(result, null, 2));
 
 if (process.env.SMOKE_SCREENSHOT) {
@@ -1162,7 +1308,7 @@ function verify(condition, label) {
   process.exitCode = 1;
 }
 
-verify(firstDay.hash === '#game' && firstDay.seats === 10 && firstDay.phase === 'День 1' && firstDay.bottomNav && firstDay.navItems === 5 && firstDay.activeLabel === 'Активна гра' && firstDay.navHeight <= 52 && firstDay.iconOnly && firstDay.scrollWidth <= firstDay.viewport, 'first day layout and compact game navigation');
+verify(firstDay.hash === '#game' && firstDay.seats === 10 && firstDay.phase === 'День 1' && firstDay.timer === '01:00' && firstDay.bottomNav && firstDay.navItems === 5 && firstDay.activeLabel === 'Активна гра' && firstDay.navHeight <= 52 && firstDay.iconOnly && firstDay.scrollWidth <= firstDay.viewport, 'first day timer, layout and compact game navigation');
 verify(runningTimerAdjustment.afterMinusFive === Math.max(0, runningTimerAdjustment.beforeMinusFive - 5) && runningTimerAdjustment.afterMinusTick <= runningTimerAdjustment.afterMinusFive && runningTimerAdjustment.afterMinusTick >= runningTimerAdjustment.afterMinusFive - 2 && runningTimerAdjustment.afterPlusFive === runningTimerAdjustment.afterMinusTick + 5, 'running timer +/- 5 seconds');
 verify(timerNavigation.away === '#players' && timerNavigation.returned === '#game' && timerNavigation.stopped && timerNavigation.navRestored, 'timer pauses and persists when leaving active game');
 verify(activeProfileLocks.locked === 10 && activeProfileLocks.editable >= 3 && activeProfileLocks.lockedButtonsDisabled, 'profiles seated in active game are locked');
@@ -1177,10 +1323,13 @@ verify(settingsActionLayout.drive.count === 1 && settingsActionLayout.drive.fill
 verify(mobileLayout.scrollWidth <= mobileLayout.viewport && mobileLayout.pagePadding <= 8 && mobileLayout.stackGap <= 8 && mobileLayout.numericFont.includes('Arial') && mobileLayout.homeStatsCentered && mobileLayout.homeStatsBackground.includes('0.86') && mobileLayout.navHeight === 72 && mobileLayout.smallestNavIcon >= 26 && mobileLayout.headerAvatarVisible && mobileLayout.headerAvatarFills && mobileLayout.shortestPrimaryAction >= 44 && mobileLayout.smallestHomeActionFont >= 15 && mobileLayout.smallestTextButtonFont >= 15 && mobileLayout.installIconOnly && mobileLayout.installLabel === 'Встановити застосунок' && mobileLayout.installSize >= 40 && compactLayout.scrollWidth <= compactLayout.viewport && compactLayout.headerWidth <= compactLayout.viewport, 'mobile layout');
 verify(headerMediaControls.bluetooth && headerMediaControls.androidSettingsLink === 'intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end' && headerMediaControls.play && headerMediaControls.pause && headerMediaControls.playInitiallyDisabled && headerMediaControls.pauseInitiallyDisabled && headerMediaControls.controls === 2 && headerMediaControls.smallest >= 40 && headerMediaControls.centerOffset <= 1 && headerMediaControls.bluetoothBesideProfile && headerMediaControls.profileGroupRightGap <= 10 && compactLayout.actionsRight <= compactLayout.viewport - 10, 'centered media controls and Bluetooth beside profile');
 verify(mediaPanel.title === 'Bluetooth і музика' && mediaPanel.audioInput === 'audio/*' && mediaPanel.externalControlWarning && mediaPanel.systemBluetoothGuidance && mediaPanel.iosControlCenterGuidance && mediaPanel.bluetoothState && mediaPanel.chooserPresentWhenSupported && preparedMedia.track === 'Enjoy smoke.wav' && preparedMedia.localOnly && preparedMedia.playEnabled && preparedMedia.clearButton, 'Bluetooth, iPhone guidance and local music panel');
+verify(headerOrderControl.icon && headerOrderControl.label === 'Замовити напій' && headerOrderControl.size >= 40 && headerOrderControl.besideInstall && headerOrderControl.insideViewport, 'compact order control beside install');
+verify(orderPanel.title === 'Замовлення напою' && orderPanel.count === 4 && JSON.stringify(orderPanel.choices) === JSON.stringify(['Кава', 'Чай', 'Капучино', 'Лате']) && orderPanel.smallestChoice >= 88 && orderPanel.recipient.includes('@Chemelev') && orderPanel.immediate && orderResult.success && orderResult.text.includes('Telegram') && orderResult.modalOpen, 'Telegram drink order panel and local delivery result');
 verify(tabletLayout.scrollWidth <= tabletLayout.viewport && tabletLayout.headerHeight === 62 && tabletLayout.navHeight === 72 && tabletLayout.navItems === 5 && tabletLayout.smallestNavIcon >= 26, 'tablet app chrome');
 verify(desktopLayout.scrollWidth <= desktopLayout.viewport && desktopLayout.headerTop === 0 && desktopLayout.navTop === desktopLayout.headerBottom && desktopLayout.itemWidthSpread <= 1 && desktopLayout.navRightGap <= 1, 'desktop layout');
-verify(ownerDatabases.includes('mafia-desk-local-smoke-test') && hostProfileControls.email === 'test.host@example.com' && hostProfileControls.camera === 'environment' && hostProfileControls.cameraIcon && hostProfileControls.cameraEmojiAbsent && hostProfileControls.gallery && hostProfileControls.deleteButton && hostProfileControls.deleteIconOnly && hostProfileControls.deleteInIdentity && hostProfileControls.deleteAbsentFromHeader && hostProfileControls.languageCount === 4 && JSON.stringify(hostProfileControls.languageOrder) === JSON.stringify(['UKУкраїнська', 'RUРосійська', 'ENEnglish', 'FRFrançais']) && hostProfileControls.discoverable && hostProfileControls.inputFontSize >= 16 && !hostProfileControls.inputAutofocus && hostProfileControls.descriptionPlaceholder === 'Досвід ведення, улюблена кава…' && hostProfileControls.dialogFocused && hostProfileControls.dialogScrollTop === 0 && hostProfileControls.sheetTop >= 6 && hostProfileControls.sheetTop <= 8 && hostProfileControls.sheetLeft === 6 && hostProfileControls.sheetRightGap === 6 && hostProfileControls.sheetBottom <= hostProfileControls.viewportBottom - 6 && hostAvatarDraft.namePreserved === 'Ведучий Smoke' && hostAvatarDraft.nicknamePreserved === 'Smoke Нік' && hostAvatarDraft.customPreview && savedHostAvatar.header && savedHostAvatar.stored && editedHostName === 'Ведучий Smoke', 'host profile and custom avatar persistence');
-verify(languageOptions.count === 4 && JSON.stringify(languageOptions.order) === JSON.stringify(['UKУкраїнська', 'RUРосійська', 'ENEnglish', 'FRFrançais']) && languageOptions.selected === 'uk' && englishLanguage.lang === 'en' && englishLanguage.stored === 'en' && englishLanguage.title === 'Settings' && JSON.stringify(englishLanguage.nav) === JSON.stringify(['Overview', 'Players', 'New game', 'Statistics', 'More']) && englishLanguage.field === 'App language?' && englishLanguage.selected === 'en' && frenchLanguage.lang === 'fr' && frenchLanguage.title === 'Paramètres' && frenchLanguage.more === 'Plus' && frenchLanguage.selected === 'fr' && russianLanguage.lang === 'ru' && russianLanguage.title === 'Настройки' && russianLanguage.more === 'Ещё' && russianLanguage.selected === 'ru' && restoredUkrainianLanguage.lang === 'uk' && restoredUkrainianLanguage.stored === 'uk' && restoredUkrainianLanguage.title === 'Налаштування' && restoredUkrainianLanguage.selected === 'uk', 'language switching');
+verify(ownerDatabases.includes('mafia-desk-local-smoke-test') && hostProfileControls.email === 'test.host@example.com' && hostProfileControls.camera === 'environment' && hostProfileControls.cameraIcon && hostProfileControls.cameraEmojiAbsent && hostProfileControls.gallery && hostProfileControls.deleteButton && hostProfileControls.deleteIconOnly && hostProfileControls.deleteInIdentity && hostProfileControls.deleteAbsentFromHeader && hostProfileControls.languageCount === 4 && JSON.stringify(hostProfileControls.languageOrder) === JSON.stringify(['uk', 'ru', 'en', 'fr']) && JSON.stringify(hostProfileControls.languageLabels) === JSON.stringify(['Українська', 'Російська', 'English', 'Français']) && hostProfileControls.languageFlags === 4 && hostProfileControls.languageNamesHidden && hostProfileControls.neutralBlackFlag === '#111111' && hostProfileControls.discoverable && hostProfileControls.inputFontSize >= 16 && !hostProfileControls.inputAutofocus && hostProfileControls.descriptionPlaceholder === 'Досвід ведення, улюблена кава…' && hostProfileControls.dialogFocused && hostProfileControls.dialogScrollTop === 0 && hostProfileControls.sheetTop >= 6 && hostProfileControls.sheetTop <= 8 && hostProfileControls.sheetLeft === 6 && hostProfileControls.sheetRightGap === 6 && hostProfileControls.sheetBottom <= hostProfileControls.viewportBottom - 6 && hostAvatarDraft.namePreserved === 'Ведучий Smoke' && hostAvatarDraft.nicknamePreserved === 'Smoke Нік' && hostAvatarDraft.customPreview && savedHostAvatar.header && savedHostAvatar.stored && editedHostName === 'Ведучий Smoke', 'host profile, flag-only language picker and custom avatar persistence');
+verify(profilePhotoSyncStatus.label === 'Фото синхронізовано' && profilePhotoSyncStatus.status === 'synced' && profilePhotoSyncStatus.visible, 'explicit synced profile photo status');
+verify(languageOptions.count === 4 && JSON.stringify(languageOptions.order) === JSON.stringify(['uk', 'ru', 'en', 'fr']) && JSON.stringify(languageOptions.labels) === JSON.stringify(['Українська', 'Російська', 'English', 'Français']) && languageOptions.flags === 4 && languageOptions.namesHidden && languageOptions.neutralBlackFlag === '#111111' && languageOptions.selected === 'uk' && englishLanguage.lang === 'en' && englishLanguage.stored === 'en' && englishLanguage.title === 'Settings' && JSON.stringify(englishLanguage.nav) === JSON.stringify(['Overview', 'Players', 'New game', 'Statistics', 'More']) && englishLanguage.field === 'App language?' && englishLanguage.selected === 'en' && frenchLanguage.lang === 'fr' && frenchLanguage.title === 'Paramètres' && frenchLanguage.more === 'Plus' && frenchLanguage.selected === 'fr' && russianLanguage.lang === 'ru' && russianLanguage.title === 'Настройки' && russianLanguage.more === 'Ещё' && russianLanguage.selected === 'ru' && restoredUkrainianLanguage.lang === 'uk' && restoredUkrainianLanguage.stored === 'uk' && restoredUkrainianLanguage.title === 'Налаштування' && restoredUkrainianLanguage.selected === 'uk', 'flag-only language switching');
 verify(themeOptions === 3 && darkPalette.active === 'dark' && lightPalette.active === 'light' && cafeTheme.active === 'cafe' && new Set([darkPalette.bg, lightPalette.bg, cafeTheme.bg]).size === 3 && new Set([darkPalette.text, lightPalette.text, cafeTheme.text]).size === 3 && new Set([darkPalette.art, lightPalette.art, cafeTheme.art]).size === 3 && darkPalette.card.includes('/ 86%') && lightPalette.card.includes('/ 87%') && cafeTheme.card.includes('/ 86%') && darkPalette.art.includes('theme-dark-mafioso.jpg') && lightPalette.art.includes('theme-light-sheriff.jpg') && cafeTheme.art.includes('theme-cafe-bar.jpg') && cafeTheme.cached === 'cafe' && cafeTheme.pressed === 'true' && cafeTheme.themeColor === '#1a100b', 'themes');
 verify(enjoyInfo.descriptionAbsent && enjoyInfo.instagramIcon && enjoyInfo.mapsIcon && enjoyInfo.iconOnly && enjoyInfo.wordmarkAbsent && enjoyInfo.smallestLink >= 44 && enjoyInfo.cardHeight <= 210, 'compact café card without Enjoy wordmark');
 verify(manualJsonTransferAbsent, 'manual JSON import and export controls removed');
@@ -1188,8 +1337,9 @@ verify(settingsTechnicalTermsAbsent, 'technical storage terms absent from settin
 verify(rulesLinks.count === 2 && rulesLinks.ukrainian?.includes('imafia.org/game-rules') && rulesLinks.international?.includes('fiim.world/fiim-rules') && rulesLinks.externalSafety && rulesLinks.arrowsAbsent, 'rules links');
 verify(compactHelp.count >= 8 && compactHelp.visiblePageDescriptions === 0 && compactHelp.visibleSectionDescriptions === 0 && compactHelp.visibleFieldHints === 0 && compactHelp.circular && helpPopover.visible && helpPopover.role === 'tooltip' && helpPopover.text.includes('Спільнота') && helpPopover.insideViewport, 'compact help tooltips');
 verify(accountDeletion.trashIconOnly && accountDeletion.trashButtonSize >= 44 && accountDeletion.dialog && accountDeletion.title === 'Видалити профіль Mafia?' && accountDeletion.retentionCopyAbsent && accountDeletion.confirm === 'Видалити профіль' && accountDeletion.focused && accountDeletion.scrollTop === 0 && accountDeletion.top >= 6 && accountDeletion.top <= 8 && accountDeletion.left === 6 && accountDeletion.rightGap === 6 && accountDeletion.bottomWithinViewport && accountDeletion.backdropAlign === 'start' && accountDeletion.bordered, 'account deletion controls');
-verify(Object.values(unifiedModalFrames).length === 10 && Object.values(unifiedModalFrames).every(isUnifiedModal), 'unified mobile modal frames');
+verify(Object.values(unifiedModalFrames).length === 12 && Object.values(unifiedModalFrames).every(isUnifiedModal), 'unified mobile modal frames');
 verify(statsPanelDefault.expanded === 'false' && statsPanelDefault.hidden && statsPanelDefault.graphPresent && statsPanelExpanded.expanded === 'true' && !statsPanelExpanded.hidden && statsPanelExpanded.focused === 'statsRoles', 'collapsible statistics graph');
+verify(statsPlayersDefault.expanded === 'true' && !statsPlayersDefault.hidden && statsPlayersDefault.emptyState && statsPlayersCollapsed.expanded === 'false' && statsPlayersCollapsed.hidden && statsPlayersCollapsed.focused === 'statsPlayers' && statsPlayersCollapsed.panelHeight <= 72, 'collapsible statistics players section');
 verify(emptySharedStats.title === 'Статистика' && emptySharedStats.description.includes('усіх ведучих') && emptySharedStats.archiveTitle === 'Спільний архів ігор' && emptySharedStats.blackRate === '0%' && emptySharedStats.summaryCentered && emptySharedStats.technicalTermsAbsent && emptySharedStats.unifiedStates && emptySharedStats.emptyStates, 'empty shared statistics and unified states');
 verify(cameraControl.cameraInput && cameraControl.captureMode === 'environment' && cameraControl.vectorIcon && cameraControl.emojiAbsent && cameraControl.galleryInput && cameraControl.emailInputType === 'email' && cameraControl.emailHelp.includes('Google'), 'camera and player email controls');
 verify(telegramImportAbsent.input && telegramImportAbsent.action && telegramImportAbsent.modal, 'Telegram import removed');
@@ -1198,23 +1348,26 @@ verify(setupPanelsDefault.setupGame.expanded === 'false' && setupPanelsDefault.s
 verify(setupPanelOrder.at(-2) === 'setupSeating' && setupPanelOrder.at(-1) === 'setupRules', 'rules follow seating');
 verify(Object.values(setupTypography).every(font => !/(Iowan|Palatino|Book Antiqua|Georgia|ui-serif)/i.test(font)), 'readable sans-serif typography');
 verify(setupTypography.foulHelp?.includes('Турнірна') && setupTypography.foulHelp?.includes('Клубна') && setupTypography.foulHelp?.includes('4-й фол'), 'foul system help');
-verify(setupCompactLayout.scrollWidth <= setupCompactLayout.viewport && setupCompactLayout.moveButtons === 10 && setupCompactLayout.smallestMoveButton >= 44 && setupCompactLayout.playerPickers === 10 && setupCompactLayout.smallestPlayerPicker >= 44 && setupCompactLayout.pickerIcons === 10 && setupCompactLayout.seatAvatars === 10 && setupCompactLayout.generatedAvatars > 0 && setupCompactLayout.profileAvatars > 0 && setupCompactLayout.uniqueGeneratedAvatars && setupCompactLayout.avatarSources.every(source => /(?:assets\/avatars\/|data:image|^https?:)/.test(source)) && setupCompactLayout.avatarsFill && setupCompactLayout.avatarBetweenPickerAndName && setupCompactLayout.nameInputs === 10 && setupCompactLayout.collapsedPanelMaxHeight <= 54 && setupCompactLayout.collapsedToggleMinHeight >= 44 && setupCompactLayout.maxRowHeight <= 50 && setupCompactLayout.rowBordersAbsent && setupCompactLayout.rowBackgroundsTransparent && setupCompactLayout.rowGap <= 4 && setupCompactLayout.nativeSelectsCompact && setupCompactLayout.footerActionsHidden && setupCompactLayout.floatingActions.visible && setupCompactLayout.floatingActions.count === 2 && setupCompactLayout.floatingActions.square && setupCompactLayout.floatingActions.centered && setupCompactLayout.floatingActions.aboveNavigation && setupCompactLayout.floatingActions.addPlayerIcon && setupCompactLayout.floatingActions.dealRolesIcon && setupCompactLayout.floatingActions.addLabel === 'Додати гравця' && setupCompactLayout.floatingActions.dealLabel === 'Роздати ролі' && setupCompactLayout.floatingActions.addPlayerGold && setupCompactLayout.floatingActions.dangerColor !== 'rgba(0, 0, 0, 0)', 'compact setup panels, player picker, unique real and generated avatars, controls and floating actions');
+verify(setupCompactLayout.scrollWidth <= setupCompactLayout.viewport && setupCompactLayout.moveButtons === 10 && setupCompactLayout.smallestMoveButton >= 44 && setupCompactLayout.playerPickers === 10 && setupCompactLayout.smallestPlayerPicker >= 44 && setupCompactLayout.pickerIcons === 10 && setupCompactLayout.seatAvatars === 10 && setupCompactLayout.avatarControls === 10 && setupCompactLayout.editableAvatarControls > 0 && setupCompactLayout.generatedAvatars > 0 && setupCompactLayout.profileAvatars > 0 && setupCompactLayout.uniqueGeneratedAvatars && setupCompactLayout.avatarSources.every(source => /(?:assets\/avatars\/|data:image|^https?:)/.test(source)) && setupCompactLayout.avatarsFill && setupCompactLayout.avatarBetweenPickerAndName && setupCompactLayout.nameInputs === 10 && setupCompactLayout.collapsedPanelMaxHeight <= 54 && setupCompactLayout.collapsedToggleMinHeight >= 44 && setupCompactLayout.maxRowHeight <= 50 && setupCompactLayout.rowBordersAbsent && setupCompactLayout.rowBackgroundsTransparent && setupCompactLayout.rowGap <= 4 && setupCompactLayout.nativeSelectsCompact && setupCompactLayout.footerActionsHidden && setupCompactLayout.floatingActions.visible && setupCompactLayout.floatingActions.count === 2 && setupCompactLayout.floatingActions.square && setupCompactLayout.floatingActions.centered && setupCompactLayout.floatingActions.aboveNavigation && setupCompactLayout.floatingActions.addPlayerIcon && setupCompactLayout.floatingActions.dealRolesIcon && setupCompactLayout.floatingActions.addLabel === 'Додати гравця' && setupCompactLayout.floatingActions.dealLabel === 'Роздати ролі' && setupCompactLayout.floatingActions.addPlayerGold && setupCompactLayout.floatingActions.dangerColor !== 'rgba(0, 0, 0, 0)', 'compact setup panels, player picker, unique real and generated avatars, controls and floating actions');
+verify(setupAvatarTarget.seat > 0 && setupAvatarTarget.playerId && setupAvatarPicker.title === 'Аватар гравця' && setupAvatarPicker.profile === 'Тестовий Нік' && setupAvatarPicker.choices === 10 && setupAvatarPicker.imageChoices === 10 && setupAvatarPicker.manualHelp.includes('ручному профілі') && setupAvatarPicker.lionEnabled && setupAvatarPicker.modalClosed && setupAvatarPicker.editable && setupAvatarPicker.rowAvatar.startsWith('data:image/webp;base64,') && setupAvatarPicker.storedAvatar === setupAvatarPicker.rowAvatar && setupAvatarPicker.storedPreset === './assets/avatars/lion.webp' && temporaryAvatarLocked, 'manual-profile setup avatar picker, persistence and temporary-profile restriction');
 verify(randomTable.selected === 10 && randomTable.unique === 10 && randomTable.venue.includes('Кав’ярня Enjoy') && randomTable.title.startsWith('Мафія в Enjoy') && randomTable.reroll && randomTable.nicknameFirstOption === 'Тестовий Нік · Тестова Гравчиня' && queuedTable.followsSelection && preferredSeatName === 'Тестовий Нік', 'nickname-first queued table');
 verify(seatingOptionFilter.currentPlayerPreserved && seatingOptionFilter.occupiedHiddenElsewhere && seatingOptionFilter.eachAssignedShownOnce && seatingOptionFilter.unassignedRemainAvailable, 'already seated players hidden from other seat pickers');
 verify(temporaryGuestNames.replacesNumberedPlaceholder && temporaryGuestNames.singleWord && temporaryGuestNames.manualNameSurvivesMove, 'single-word funny temporary guest names and manual override');
 verify(seatMove.dialog.title === 'Перемістити з місця 1' && seatMove.dialog.targets === 10 && seatMove.dialog.currentDisabled && seatMove.swapped && seatMove.restored, 'move player to a specific seat');
 verify(roleDealButton.label === 'Роздати ролі' && roleDealButton.danger && roleDealButton.legacyButtons === 0 && (roleDealButton.backgroundImage !== 'none' || roleDealButton.backgroundColor !== 'rgba(0, 0, 0, 0)') && roleDealButton.primaryBackground !== roleDealButton.secondaryBackground, 'unified gold, red and neutral button system');
-verify(new Set(roleAssignments.map(item => item.source)).size === 4 && zeroNightSignals.count === 2 && zeroNightSignals.sources.some(source => source.endsWith('/don.webp')) && zeroNightSignals.sources.some(source => source.endsWith('/mafia.webp')) && zeroNightSignals.actionHeight >= 60 && zeroNightSignals.actionFontSize >= 18, 'role assignments and prominent start-day action');
+verify(new Set(roleAssignments.map(item => item.source)).size === 4 && zeroNightSignals.count === 2 && zeroNightSignals.sources.some(source => source.endsWith('/don.webp')) && zeroNightSignals.sources.some(source => source.endsWith('/mafia.webp')) && zeroNightSignals.steps === 3 && zeroNightSignals.current === 'Знайомство мафії' && zeroNightSignals.cue.includes('Дон') && zeroNightSignals.actionHeight >= 60 && zeroNightSignals.actionFontSize >= 18 && zeroNightSignals.insideViewport && zeroNightSheriff.signal.endsWith('/sheriff.webp') && zeroNightSheriff.current === 'Позначення Шерифа' && zeroNightSheriff.cue.includes('Шериф') && zeroNightSheriff.timer === '00:10' && zeroNightSheriff.action === 'Вільна посадка' && zeroNightSheriff.actionHeight >= 60 && zeroNightFreeSeating.current === 'Вільна посадка' && zeroNightFreeSeating.cue.includes('вільної посадки') && zeroNightFreeSeating.timer === '00:20' && zeroNightFreeSeating.action === 'Почати день 1', 'guided zero night with Mafia meeting, Sheriff identification and free seating');
 verify(roleReadyLayout.ready && roleReadyLayout.progressFirst && roleReadyLayout.actionsLast && roleReadyLayout.seat === '1' && roleReadyLayout.avatar === preferredSeatAvatar && roleReadyLayout.avatarVisible && roleReadyLayout.avatarBetweenSeatAndName && roleReadyLayout.avatarFills && roleReadyLayout.privacy && roleReadyLayout.action === 'Показати мою роль' && roleReadyLayout.actionHeight >= 60 && roleReadyLayout.actionFontSize >= 18 && roleReadyLayout.actionFontWeight >= 900 && roleReadyLayout.insideViewport && roleReadyLayout.scrollWidth <= 390 && roleOpenLayout.open && roleOpenLayout.progressVisible && roleOpenLayout.playerVisible && roleOpenLayout.avatar === roleReadyLayout.avatar && roleOpenLayout.avatarVisible && roleOpenLayout.signal && roleOpenLayout.action === 'Сховати й передати далі' && roleOpenLayout.actionHeight >= 60 && roleOpenLayout.actionFontSize >= 18 && roleOpenLayout.insideViewport && roleOpenLayout.scrollWidth <= 390 && Math.abs(roleOpenLayout.height - roleReadyLayout.height) <= 2 && roleAssignments.every(item => item.avatar) && new Set(roleAssignments.map(item => item.avatar)).size === 10, 'stable hierarchical role reveal cards with persistent unique avatars and prominent actions');
-verify(gameSettingsAppearance.gameModal && gameSettingsAppearance.context === 'Активна гра' && gameSettingsAppearance.closeLabel === 'Закрити' && seatVisualStates.seatModalAppearance.gameModal && seatVisualStates.seatModalAppearance.closeLabel === 'Закрити' && confirmModalAppearance.gameModal && confirmModalAppearance.context === 'Потрібне підтвердження' && confirmModalAppearance.closeLabel === 'Закрити' && confirmModalAppearance.dangerousAccent !== gameSettingsAppearance.accent && winnerModalAppearance.gameModal && winnerModalAppearance.context === 'Завершення гри' && winnerModalAppearance.choices === 2 && JSON.stringify(winnerModalAppearance.labels) === JSON.stringify(['Мирне місто', 'Мафія']) && winnerModalAppearance.descriptions.length === 2 && winnerModalAppearance.closeLabel === 'Закрити', 'unified contextual game dialogs');
+verify(gameSettingsAppearance.gameModal && gameSettingsAppearance.context === 'Активна гра' && gameSettingsAppearance.closeLabel === 'Закрити' && seatVisualStates.seatModalAppearance.gameModal && seatVisualStates.seatModalAppearance.closeLabel === 'Закрити' && confirmModalAppearance.gameModal && confirmModalAppearance.context === 'Потрібне підтвердження' && confirmModalAppearance.closeLabel === 'Закрити' && confirmModalAppearance.dangerousAccent !== gameSettingsAppearance.accent && winnerModalAppearance.gameModal && winnerModalAppearance.context === 'Завершення гри' && winnerModalAppearance.choices === 3 && JSON.stringify(winnerModalAppearance.labels) === JSON.stringify(['Мирне місто', 'Мафія', 'Нічия']) && winnerModalAppearance.descriptions.length === 3 && winnerModalAppearance.closeLabel === 'Закрити', 'unified contextual game dialogs');
 verify(firstDay.seats === 10 && firstDay.seatColumns === 2 && firstDay.seatRows === 5 && firstDay.maxSeatHeight <= 60 && firstDay.aliveSeats === 10 && firstDay.deadSeats === 0 && firstDay.allSeatsVisible && firstDay.numberSize >= 21 && firstDay.numberWeight >= 900 && firstDay.aliveGreenAccent && firstDay.timerActionHeight >= 60 && firstDay.timerActionFontSize >= 18 && firstDay.timerActionFontWeight >= 900 && firstDay.timerAdjustments === 2 && JSON.stringify(firstDay.primaryActions) === JSON.stringify(['Старт', 'Скинути', 'Наступний →']) && firstDay.primaryActionsSameRow && firstDay.primaryActionsVisible, 'two-column compact table and one-row mobile game controls');
 verify(seatVisualStates.seatModalAppearance.number === '2' && seatVisualStates.seatModalAppearance.numberSize >= 58 && seatVisualStates.seatModalAppearance.numberWeight >= 900 && seatVisualStates.seatModalAppearance.alive && seatVisualStates.seatModalAppearance.status === 'За столом' && seatVisualStates.deadSeatAppearance.dead && !seatVisualStates.deadSeatAppearance.alive && seatVisualStates.deadSeatAppearance.opacity < 0.8 && seatVisualStates.deadSeatAppearance.grayscale && seatVisualStates.deadSeatAppearance.tag === 'вибув' && seatVisualStates.deadSeatModalAppearance.number === '10' && seatVisualStates.deadSeatModalAppearance.dead && seatVisualStates.deadSeatModalAppearance.status === 'Вибув' && seatVisualStates.restoredSeatAppearance.alive && !seatVisualStates.restoredSeatAppearance.dead, 'alive, eliminated and restored seat visuals');
 verify(nomination.candidates.length === 1 && !nomination.modalOpen && !browserErrors.length, 'nomination and browser errors');
-verify(offlineShell.authModule && offlineShell.cloudProfilesModule && offlineShell.cloudGamesModule && offlineShell.playerLinksModule && offlineShell.timerModule && offlineShell.lineupModule && offlineShell.guestNamesModule && offlineShell.i18nModule && offlineShell.enjoyModule && offlineShell.firebaseApp && offlineShell.firebaseAuth && offlineShell.firebaseFirestore && offlineShell.roleSignals === 6 && offlineShell.themeBackgrounds === 3 && offlineReload.hash === '#game' && offlineReload.phase === 'День 1' && offlineReload.signedIn, 'offline shell');
+verify(offlineShell.authModule && offlineShell.cloudProfilesModule && offlineShell.cloudGamesModule && offlineShell.gameEngineModule && offlineShell.orderServiceModule && offlineShell.playerLinksModule && offlineShell.timerModule && offlineShell.lineupModule && offlineShell.guestNamesModule && offlineShell.i18nModule && offlineShell.enjoyModule && offlineShell.firebaseApp && offlineShell.firebaseAuth && offlineShell.firebaseFirestore && offlineShell.roleSignals === 6 && offlineShell.themeBackgrounds === 3 && offlineReload.hash === '#game' && offlineReload.phase === 'День 1' && offlineReload.signedIn, 'offline shell');
 verify(donMissSignal.source.endsWith('/don-not-sheriff.webp') && donMissSignal.label === 'НЕ ШЕРИФ' && donMissSignal.instruction.includes('схрестіть руки'), 'Don miss signal');
 verify(donHitSignal.source.endsWith('/don-found-sheriff.webp') && donHitSignal.label === 'ЦЕ ШЕРИФ' && donHitSignal.instruction.includes('однією рукою'), 'Don hit signal');
 verify(sheriffBlackSignal.source.endsWith('/mafia.webp') && sheriffBlackSignal.label === 'ЧОРНИЙ' && sheriffBlackSignal.instruction.includes('палець униз'), 'Sheriff black signal');
 verify(sheriffRedSignal.source.endsWith('/citizen.webp') && sheriffRedSignal.label === 'ЧЕРВОНИЙ' && sheriffRedSignal.instruction.includes('палець угору'), 'Sheriff red signal');
+verify(nightResultAnnouncement.title === 'У місті триває ніч' && nightResultAnnouncement.cue.includes('У місті триває ніч') && !nightResultAnnouncement.cue.includes('ранок') && nightResultAnnouncement.action === 'Зафіксувати вибуття', 'night result is announced before morning');
+verify(bestMoveLayout.phase === 'Кращий хід' && bestMoveLayout.timer === '00:20' && bestMoveLayout.candidates === 10 && bestMoveLayout.unavailable === 1 && bestMoveLayout.selected === 0 && bestMoveLayout.cue.includes('трійку чорних') && bestMoveLayout.insideViewport && bestMoveLayout.scrollWidth <= 390 && bestMoveFarewell.phase === 'Останнє слово' && bestMoveFarewell.timer === '01:00' && bestMoveFarewell.player.includes('№1') && bestMoveFarewell.cue.includes('У місті ранок') && afterBestMove.phase === 'День 2' && afterBestMove.logged, 'first-night Best Move, morning and farewell flow');
 verify(finishedSharedStats.games === '1' && finishedSharedStats.archivedGames === 1 && finishedSharedStats.manageableGames === 1 && finishedSharedStats.protocolActionsFill && finishedSharedStats.leaderboardRows > 0 && finishedSharedStats.status.includes('Активні й завершені') && finishedSharedStats.hostUsesNickname && finishedSharedStats.hostDisplayNameHidden, 'finished shared statistics, archive actions and host nickname');
 verify(protocolModal.focused && protocolModal.scrollTop === 0 && protocolModal.top >= 6 && protocolModal.top <= 8 && protocolModal.left === 6 && protocolModal.rightGap === 6 && protocolModal.bottomWithinViewport && protocolModal.borders.every(width => parseFloat(width) >= 1) && protocolModal.backdropAlign === 'start' && protocolModal.logScrollable, 'top-anchored bounded protocol modal');
 verify(queueAfterGame.selected === 2 && queueAfterGame.status.includes('2/10') && queueAfterGame.positions.join(',') === '1,2', 'waiting players carry into the next game');

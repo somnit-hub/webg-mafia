@@ -62,6 +62,11 @@ export function getAuthUser() {
   return publicUser(firebaseUser);
 }
 
+export async function getFirebaseIdToken() {
+  if (!auth?.currentUser) throw new Error('Спочатку увійдіть через Google');
+  return auth.currentUser.getIdToken();
+}
+
 export async function initializeGoogleAuth() {
   if (!hasFirebaseConfig()) return { configured: false, user: null };
   try {

@@ -16,6 +16,7 @@ const player = {
   contact: 'Enjoy',
   notes: 'Любить грати шерифом',
   avatar: 'data:image/webp;base64,AAAA',
+  avatarPreset: './assets/avatars/cat.webp',
   updatedAt: '2026-08-12T10:00:00.000Z'
 };
 
@@ -24,6 +25,7 @@ assert.equal(isPersistentManualPlayer(player), true);
 assert.equal(isPersistentManualPlayer({ ...player, autoGuestName: true }), false);
 assert.equal(isPersistentManualPlayer({ ...player, source: 'temporary' }), false);
 assert.equal(isPersistentManualPlayer({ ...player, linkedCloudUid: 'google-user' }), false);
+assert.equal(isPersistentManualPlayer({ ...player, cloudUid: 'google-user' }), false);
 
 const shared = createSharedManualPlayerFields(user, host, player);
 assert.deepEqual(shared, {
@@ -37,6 +39,7 @@ assert.deepEqual(shared, {
   club: 'Enjoy',
   description: 'Любить грати шерифом',
   photoDataURL: 'data:image/webp;base64,AAAA',
+  avatarPreset: './assets/avatars/cat.webp',
   profileUpdatedAt: '2026-08-12T10:00:00.000Z',
   schemaVersion: 1
 });
@@ -60,6 +63,7 @@ const editedByAnotherHost = updateSharedManualPlayerFields(shared, {
   contact: 'Enjoy',
   notes: 'Оновлено іншим ведучим',
   avatar: 'data:image/webp;base64,BBBB',
+  avatarPreset: './assets/avatars/lion.webp',
   updatedAt: '2026-08-13T12:00:00.000Z'
 });
 assert.equal(editedByAnotherHost.id, shared.id);
@@ -69,5 +73,9 @@ assert.equal(editedByAnotherHost.localPlayerId, shared.localPlayerId);
 assert.equal(editedByAnotherHost.displayName, 'Марія Оновлена');
 assert.equal(editedByAnotherHost.nickname, 'Еспресо');
 assert.equal(editedByAnotherHost.photoDataURL, 'data:image/webp;base64,BBBB');
+assert.equal(editedByAnotherHost.avatarPreset, './assets/avatars/lion.webp');
+
+const invalidPreset = createSharedManualPlayerFields(user, host, { ...player, avatarPreset: 'https://example.com/avatar.webp' });
+assert.equal(invalidPreset.avatarPreset, '');
 
 console.log('Shared manual profile model passed.');

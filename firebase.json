@@ -1,4 +1,8 @@
 {
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
   "firestore": {
     "database": "(default)",
     "location": "europe-central2",
@@ -31,6 +35,7 @@
       ".nojekyll",
       ".firebase/**",
       ".tmp-chrome-*/**",
+      "functions/**",
       "**/node_modules/**",
       "README.md",
       "firestore.rules",

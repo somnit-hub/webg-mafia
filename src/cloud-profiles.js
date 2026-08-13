@@ -4,6 +4,12 @@ const FIREBASE_VERSION = '12.16.0';
 const APP_SDK = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`;
 const FIRESTORE_SDK = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-firestore.js`;
 const COMMUNITY_ID = 'enjoy';
+const MANUAL_AVATAR_PRESETS = new Set([
+  './assets/avatars/raccoon.webp', './assets/avatars/cat.webp', './assets/avatars/capybara.webp',
+  './assets/avatars/pug.webp', './assets/avatars/fox.webp', './assets/avatars/owl.webp',
+  './assets/avatars/hamster.webp', './assets/avatars/lion.webp', './assets/avatars/frog.webp',
+  './assets/avatars/boar.webp'
+]);
 
 let sdkPromise = null;
 let databasePromise = null;
@@ -35,6 +41,7 @@ export function isPersistentManualPlayer(player) {
   return Boolean(
     clean(player?.id, 128)
     && clean(player?.name, 60)
+    && !player?.cloudUid
     && !player?.linkedCloudUid
     && player?.autoGuestName !== true
     && player?.source !== 'temporary'
@@ -45,6 +52,15 @@ function sharedAvatar(value) {
   const avatar = String(value || '').trim();
   if (!/^data:image\/(?:webp|jpeg|png);base64,/i.test(avatar)) return '';
   return avatar.length <= 350000 ? avatar : '';
+}
+
+export function resolveOwnProfilePhotoDataURL(localAvatar, remotePhotoDataURL) {
+  return sharedAvatar(remotePhotoDataURL) || sharedAvatar(localAvatar);
+}
+
+function sharedAvatarPreset(value) {
+  const preset = clean(value, 80);
+  return MANUAL_AVATAR_PRESETS.has(preset) ? preset : '';
 }
 
 export function createSharedManualPlayerFields(user, hostProfile, player) {
@@ -62,6 +78,7 @@ export function createSharedManualPlayerFields(user, hostProfile, player) {
     club: publicClub,
     description: clean(player.notes, 600),
     photoDataURL: sharedAvatar(player.avatar),
+    avatarPreset: sharedAvatarPreset(player.avatarPreset),
     profileUpdatedAt: player.updatedAt || new Date().toISOString(),
     schemaVersion: 1
   };
@@ -79,6 +96,7 @@ export function updateSharedManualPlayerFields(existing, player) {
     club: clean(player.contact || existing.club || 'Enjoy', 100),
     description: clean(player.notes, 600),
     photoDataURL: sharedAvatar(player.avatar),
+    avatarPreset: sharedAvatarPreset(player.avatarPreset),
     profileUpdatedAt: player.updatedAt || new Date().toISOString(),
     schemaVersion: 1
   };
@@ -128,6 +146,7 @@ function manualPlayerFromSnapshot(snapshot) {
     club: clean(data.club, 100),
     description: clean(data.description, 600),
     photoDataURL: sharedAvatar(data.photoDataURL),
+    avatarPreset: sharedAvatarPreset(data.avatarPreset),
     profileUpdatedAt: clean(data.profileUpdatedAt, 40)
   };
 }
@@ -187,13 +206,16 @@ export async function reconcileOwnCommunityProfile(user, profile, { hasLocalProf
     return { ...createOwnCommunityProfileFields(user, profile), uid: user.uid };
   }
 
+  // A local custom photo must not be lost merely because another profile field has a newer timestamp.
+  // Existing shared photos still win; this only fills an empty shared photo.
+  const resolvedPhotoDataURL = resolveOwnProfilePhotoDataURL(profile.avatar, remote.photoDataURL);
   await sdk.updateDoc(reference, {
     photoURL: clean(user.googlePhotoURL, 2048),
-    photoDataURL: remote.photoDataURL,
+    photoDataURL: resolvedPhotoDataURL,
     lastSeenAt: sdk.serverTimestamp(),
     updatedAt: sdk.serverTimestamp()
   });
-  return remote;
+  return { ...remote, photoDataURL: resolvedPhotoDataURL };
 }
 
 export async function saveOwnCommunityProfile(user, profile) {

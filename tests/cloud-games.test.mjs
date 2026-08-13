@@ -112,3 +112,10 @@ test('finished games cannot enter the live list', () => {
     /лише активну гру/
   );
 });
+
+test('shared archive supports an official draw result', () => {
+  const game = finishedGame();
+  game.winner = 'draw';
+  const document = createFinishedGameDocument({ uid: 'host_uid' }, {}, game);
+  assert.equal(document.winner, 'draw');
+});

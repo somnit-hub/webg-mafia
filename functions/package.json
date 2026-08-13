@@ -1,0 +1,19 @@
+{
+  "name": "enjoy-mafia-functions",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "telegram:chat-id": "node scripts/find-telegram-chat-id.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "14.2.0",
+    "firebase-functions": "7.3.2"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
+  }
+}

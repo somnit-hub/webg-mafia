@@ -53,7 +53,7 @@ service cloud.firestore {
     function validManualPlayer(playerId) {
       return request.resource.data.keys().hasOnly([
           'id', 'communityId', 'ownerUid', 'ownerName', 'localPlayerId',
-          'displayName', 'nickname', 'club', 'description', 'photoDataURL',
+          'displayName', 'nickname', 'club', 'description', 'photoDataURL', 'avatarPreset',
           'profileUpdatedAt', 'schemaVersion', 'createdAt', 'updatedAt'
         ])
         && request.resource.data.id == playerId
@@ -80,6 +80,11 @@ service cloud.firestore {
         && request.resource.data.photoDataURL.size() <= 350000
         && (request.resource.data.photoDataURL == ''
           || request.resource.data.photoDataURL.matches('^data:image/(webp|jpeg|png);base64,.*$'))
+        && (!request.resource.data.keys().hasAny(['avatarPreset'])
+          || (request.resource.data.avatarPreset is string
+            && request.resource.data.avatarPreset.size() <= 80
+            && (request.resource.data.avatarPreset == ''
+              || request.resource.data.avatarPreset.matches('^[.]/assets/avatars/(raccoon|cat|capybara|pug|fox|owl|hamster|lion|frog|boar)[.]webp$')))
         && request.resource.data.profileUpdatedAt is string
         && request.resource.data.profileUpdatedAt.size() <= 40
         && request.resource.data.schemaVersion == 1
@@ -114,7 +119,7 @@ service cloud.firestore {
         && request.resource.data.gameUpdatedAt.size() > 0
         && request.resource.data.gameUpdatedAt.size() <= 40
         && request.resource.data.status == 'finished'
-        && request.resource.data.winner in ['red', 'black']
+        && request.resource.data.winner in ['red', 'black', 'draw']
         && request.resource.data.durationSeconds is int
         && request.resource.data.durationSeconds >= 0
         && request.resource.data.durationSeconds <= 31536000
@@ -190,7 +195,7 @@ service cloud.firestore {
         && request.resource.data.status == 'active'
         && request.resource.data.phase in [
           'reveal', 'zeroNight', 'day', 'vote', 'tieSpeech', 'tieVote',
-          'allTie', 'lastWord', 'night'
+          'allTie', 'lastWord', 'bestMove', 'night'
         ]
         && request.resource.data.subphase is string
         && request.resource.data.subphase.size() <= 40

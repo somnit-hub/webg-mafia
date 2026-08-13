@@ -6,7 +6,7 @@ import {
 import {
   initializeGoogleAuth, isGoogleAuthConfigured, signInWithGoogle,
   signOutGoogleAccount, authorizeGoogleDrive, observeGoogleAuth,
-  reauthenticateGoogleAccount, deleteGoogleAccount
+  reauthenticateGoogleAccount, deleteGoogleAccount, getFirebaseIdToken
 } from './auth.js';
 import {
   setDriveAccessToken, clearDriveAccess, getDriveSession, pushToDrive, pullFromDrive
@@ -29,11 +29,16 @@ import {
 } from './cloud-games.js';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
+  canLiftTiedCandidates, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
+  secureShuffle, toggleBestMoveCandidate, victoryForSeats
+} from './game-engine.js';
+import {
   TABLE_SIZE, consumeSeatedPlayers, lineupStatus, normalizeLineup,
   remapLineupPlayers, toggleLineupPlayer
 } from './lineup.js';
 import { pickFunnyGuestNames } from './guest-names.js';
 import { LANGUAGES, applyLanguage, languageLocale, localizeDom, normalizeLanguage } from './i18n.js';
+import { sendTelegramOrder } from './order-service.js';
 
 const ROLE_DECK = [
   { key: 'sheriff', label: 'Шериф', team: 'red', symbol: '★', description: 'Щоночі перевіряє одного гравця та дізнається колір його команди.' },
@@ -63,16 +68,34 @@ const ANIMAL_AVATARS = Object.freeze([
   './assets/avatars/frog.webp', './assets/avatars/boar.webp'
 ]);
 
+const ANIMAL_AVATAR_LABELS = Object.freeze({
+  'raccoon.webp': 'Єнот', 'cat.webp': 'Кішка', 'capybara.webp': 'Капібара',
+  'pug.webp': 'Мопс', 'fox.webp': 'Лисиця', 'owl.webp': 'Сова',
+  'hamster.webp': 'Хом’як', 'lion.webp': 'Лев', 'frog.webp': 'Жабка',
+  'boar.webp': 'Кабанчик'
+});
+
 const RULES_LINKS = Object.freeze({
   ukrainian: 'https://www.imafia.org/game-rules',
   international: 'https://fiim.world/fiim-rules'
 });
 
+const ORDER_MENU = Object.freeze([
+  { key: 'coffee', label: 'Кава' },
+  { key: 'tea', label: 'Чай' },
+  { key: 'cappuccino', label: 'Капучино' },
+  { key: 'latte', label: 'Лате' }
+]);
+
 const DEFAULT_SETTINGS = {
   speech: 60,
   tieSpeech: 30,
   lastWord: 60,
-  nightCheck: 15,
+  nightCheck: 10,
+  mafiaMeet: 60,
+  sheriffMark: 10,
+  freeSeating: 20,
+  bestMove: 20,
   sound: true,
   haptics: true,
   theme: 'dark',
@@ -117,6 +140,7 @@ let app = {
   installPrompt: null,
   undo: [],
   timerHandle: null,
+  gameTransitionBusy: false,
   observerTimerHandle: null,
   wakeLock: null,
   toastHandle: null,
@@ -136,6 +160,8 @@ let app = {
   authBusy: false,
   accountDeleteBusy: false,
   media: { trackName: '', playing: false, error: '' },
+  order: { busy: false, status: 'idle', error: '', lastItem: '' },
+  profilePhotoSync: { status: 'idle' },
   bluetooth: {
     supported: 'bluetooth' in navigator,
     available: null,
@@ -148,7 +174,8 @@ let app = {
     setupTimers: false,
     setupRules: false,
     setupSeating: true,
-    statsRoles: false
+    statsRoles: false,
+    statsPlayers: true
   }
 };
 let activationPromise = null;
@@ -158,6 +185,7 @@ let cloudArchivePromise = null;
 let cloudArchiveMigrationStarted = false;
 let activeGamePublishPromise = null;
 const pendingActiveGames = new Map();
+const presetAvatarDataUrls = new Map();
 
 const LOCAL_AUTH_TEST = ['localhost', '127.0.0.1'].includes(location.hostname)
   && new URLSearchParams(location.search).get('auth_test') === '1';
@@ -200,7 +228,8 @@ function initials(name = '?') {
   return name.trim().split(/\s+/).slice(0, 2).map(part => part[0] || '').join('').toUpperCase() || '?';
 }
 function avatar(player, size = '') {
-  if (player?.avatar) return `<img class="avatar ${size}" src="${esc(player.avatar)}" alt="Фото ${esc(player.name)}">`;
+  const source = player?.avatar || player?.avatarPreset || '';
+  if (source) return `<img class="avatar ${size}" src="${esc(source)}" alt="Фото ${esc(player.name)}">`;
   return `<span class="avatar avatar-fallback ${size}" aria-hidden="true">${esc(initials(player?.name))}</span>`;
 }
 
@@ -215,6 +244,11 @@ function setupAvatarKey(seat, player) {
 function setupAnimalAvatarMap() {
   const assigned = new Map();
   const used = new Set();
+  app.draft.seats.forEach(seat => {
+    const player = seat.profileId ? playerById(seat.profileId) : null;
+    const presetIndex = ANIMAL_AVATARS.indexOf(player?.avatarPreset || '');
+    if (presetIndex >= 0) used.add(presetIndex);
+  });
   app.draft.seats.map(seat => {
     const player = seat.profileId ? playerById(seat.profileId) : null;
     return player?.avatar ? null : setupAvatarKey(seat, player);
@@ -229,13 +263,28 @@ function setupAnimalAvatarMap() {
 }
 
 function setupSeatAvatar(seat, player) {
-  const source = player?.avatar || setupAnimalAvatarMap().get(setupAvatarKey(seat, player)) || ANIMAL_AVATARS[0];
-  const fallback = player?.avatar ? '' : ' generated-avatar';
-  return `<img class="seat-inline-avatar${fallback}" src="${esc(source)}" alt="" aria-hidden="true">`;
+  const savedSource = player?.avatar || player?.avatarPreset || '';
+  const source = savedSource || setupAnimalAvatarMap().get(setupAvatarKey(seat, player)) || ANIMAL_AVATARS[0];
+  const fallback = savedSource ? '' : ' generated-avatar';
+  const image = `<img class="seat-inline-avatar${fallback}" src="${esc(source)}" alt="">`;
+  if (!editableManualPlayer(player)) return `<span class="seat-avatar-control" aria-hidden="true">${image}</span>`;
+  return `<button class="seat-avatar-control editable" type="button" data-action="open-setup-avatar" data-seat="${seat.number}" aria-label="Змінити аватар ${esc(preferredPlayerName(player))}" title="Змінити аватар">${image}<span class="seat-avatar-edit-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 16-1 4 4-1L19 8l-3-3L5 16Zm9-9 3 3"/></svg></span></button>`;
 }
 function hostAvatar(size = '') {
   const profile = app.hostProfile || {};
   return avatar({ name: profile.displayName || app.authUser?.googleName || 'Google', avatar: profile.avatar || app.authUser?.googlePhotoURL || '' }, size);
+}
+
+function profilePhotoSyncHtml(hasPhoto = Boolean(app.hostProfile?.avatar), status = app.profilePhotoSync.status) {
+  if (!hasPhoto) return '';
+  const copy = {
+    synced: ['green', 'Фото синхронізовано'],
+    syncing: ['gold', 'Синхронізація фото…'],
+    pending: ['', 'Фото ще не синхронізовано'],
+    error: ['red', 'Фото очікує синхронізації']
+  };
+  const [tone, label] = copy[status] || copy.pending;
+  return `<span class="badge ${tone} profile-photo-sync-status" data-photo-sync-status="${esc(status || 'pending')}" role="status" aria-live="polite">${esc(label)}</span>`;
 }
 function roleOf(seat) { return ROLE_DECK.find(role => role.key === seat?.role) || null; }
 function teamOf(seat) { return roleOf(seat)?.team || null; }
@@ -254,6 +303,9 @@ function playerById(id) { return app.players.find(player => player.id === id); }
 function profileIsInActiveGame(profileId) {
   return Boolean(profileId) && activeGames().some(game => game.seats?.some(seat => seat.profileId === profileId));
 }
+function editableManualPlayer(player) {
+  return isPersistentManualPlayer(player) && !profileIsInActiveGame(player.id);
+}
 function cloudPlayer(member) {
   if (member.kind === 'manual') return {
     id: member.localPlayerId,
@@ -265,6 +317,7 @@ function cloudPlayer(member) {
     contact: member.club || 'Enjoy',
     notes: member.description || '',
     avatar: member.photoDataURL || '',
+    avatarPreset: member.avatarPreset || '',
     updatedAt: member.profileUpdatedAt || ''
   };
   return {
@@ -387,7 +440,8 @@ function mergePlayerSources() {
         nickname: remote.nickname || '',
         contact: remote.contact || 'Enjoy',
         notes: remote.notes || '',
-        avatar: remote.avatar || ''
+        avatar: remote.avatar || '',
+        avatarPreset: remote.avatarPreset || ''
       } : {}),
       cloudManualId: remote.cloudManualId,
       cloudOwnerUid: remote.cloudOwnerUid,
@@ -679,7 +733,8 @@ function headerControlIcon(name) {
   const paths = {
     bluetooth: '<path d="M7 7l10 10-5 4V3l5 4L7 17"/><path d="m4 8 8 8m-8 0 8-8"/>',
     play: '<path d="m8 5 11 7-11 7V5Z"/>',
-    pause: '<path d="M8 5v14m8-14v14"/>'
+    pause: '<path d="M8 5v14m8-14v14"/>',
+    order: '<path d="M4 16h16M6 16a6 6 0 0 1 12 0M3 20h18M12 6v2"/><circle cx="12" cy="4" r="1"/>'
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]}</svg>`;
 }
@@ -688,12 +743,13 @@ function headerHtml() {
   const profileLabel = app.hostProfile?.displayName || app.authUser?.googleName || app.authUser?.email || 'Google';
   const hasTrack = Boolean(app.media.trackName);
   const bluetoothLabel = CLIENT_PLATFORM === 'ios' ? 'Підключити колонку на iPhone' : 'Bluetooth і музика';
-  return `<header class="shell-header">
+  return `<header class="shell-header ${app.installPrompt && !['game', 'reveal'].includes(app.route) ? 'has-install' : ''}">
     <a class="brand" href="#home" aria-label="Mafia — головна">
       <img class="brand-mark" src="./assets/logo-mafia.webp" alt="" width="44" height="44" aria-hidden="true">
     </a>
     <div class="header-actions">
       ${app.installPrompt && !['game', 'reveal'].includes(app.route) ? '<button class="icon-btn install-btn" data-action="install" aria-label="Встановити застосунок" title="Встановити застосунок"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg></button>' : ''}
+      <button class="icon-btn order-btn" type="button" data-action="open-order-panel" aria-label="Замовити напій" title="Замовити напій" aria-haspopup="dialog">${headerControlIcon('order')}</button>
       <div class="header-media-controls" role="group" aria-label="Bluetooth і музика">
         <button class="icon-btn header-media-btn play-btn ${app.media.playing ? 'active' : ''}" data-action="media-play" aria-label="Відтворити музику" title="Відтворити музику" ${!hasTrack || app.media.playing ? 'disabled' : ''}>${headerControlIcon('play')}</button>
         <button class="icon-btn header-media-btn pause-btn" data-action="media-pause" aria-label="Призупинити музику" title="Призупинити музику" ${!hasTrack || !app.media.playing ? 'disabled' : ''}>${headerControlIcon('pause')}</button>
@@ -741,9 +797,15 @@ function pageHeader(title, explanation, action = '') {
 }
 
 function languagePickerHtml() {
+  const flags = {
+    uk: '<svg viewBox="0 0 36 24"><rect width="36" height="12" fill="#0057b7"/><rect y="12" width="36" height="12" fill="#ffd700"/></svg>',
+    ru: '<svg class="language-flag-neutral" viewBox="0 0 36 24"><path d="M7 3v19" stroke="#aaa096" stroke-width="2"/><path class="neutral-flag-field" d="M8 4c8-3 13 3 21 0v11c-8 3-13-3-21 0Z" fill="#111111" stroke="#736b63"/><circle cx="7" cy="3" r="1.5" fill="#aaa096"/></svg>',
+    en: '<svg viewBox="0 0 36 24"><rect width="36" height="24" fill="#012169"/><path d="M0 0 36 24M36 0 0 24" stroke="#fff" stroke-width="5"/><path d="M0 0 36 24M36 0 0 24" stroke="#c8102e" stroke-width="2"/><path d="M18 0v24M0 12h36" stroke="#fff" stroke-width="8"/><path d="M18 0v24M0 12h36" stroke="#c8102e" stroke-width="4"/></svg>',
+    fr: '<svg viewBox="0 0 36 24"><rect width="12" height="24" fill="#0055a4"/><rect x="12" width="12" height="24" fill="#fff"/><rect x="24" width="12" height="24" fill="#ef4135"/></svg>'
+  };
   return `<div class="language-picker" role="radiogroup" aria-label="Мова застосунку">${LANGUAGES.map(language => {
     const selected = app.settings.language === language.code;
-    return `<button class="language-choice ${selected ? 'selected' : ''}" type="button" role="radio" aria-checked="${selected}" data-action="set-language" data-language="${language.code}" data-no-i18n><span aria-hidden="true">${language.code.toUpperCase()}</span><b>${language.label}</b></button>`;
+    return `<button class="language-choice ${selected ? 'selected' : ''}" type="button" role="radio" aria-checked="${selected}" aria-label="${esc(language.label)}" title="${esc(language.label)}" data-action="set-language" data-language="${language.code}" data-no-i18n><span class="language-flag" aria-hidden="true">${flags[language.code]}</span></button>`;
   }).join('')}</div>`;
 }
 
@@ -829,7 +891,7 @@ function homeView() {
 }
 
 function gameRow(game) {
-  const winner = game.winner === 'red' ? 'Місто' : game.winner === 'black' ? 'Мафія' : 'Не визначено';
+  const winner = game.winner === 'red' ? 'Місто' : game.winner === 'black' ? 'Мафія' : game.winner === 'draw' ? 'Нічия' : 'Не визначено';
   const host = preferredGameHostName(game);
   return `<div class="list-row"><div class="list-main"><b>${esc(game.title)}</b><span>${formatDate(game.endedAt || game.updatedAt, true)} · ${formatDuration(game.durationSeconds)}${host ? ` · ведучий ${esc(host)}` : ''}</span></div><span class="badge ${game.winner === 'red' ? 'red' : ''}">${winner}</span></div>`;
 }
@@ -938,7 +1000,11 @@ function setupView() {
           ${numberField('Промова, сек', 'speech', app.draft.settings.speech, 'Основний час промови гравця.')}
           ${numberField('Автокатастрофа, сек', 'tieSpeech', app.draft.settings.tieSpeech, 'Додаткова промова кандидатів після нічиєї.')}
           ${numberField('Останнє слово, сек', 'lastWord', app.draft.settings.lastWord, 'Час гравця, який залишає стіл.')}
-          ${numberField('Нічна дія, сек', 'nightCheck', app.draft.settings.nightCheck, 'Орієнтир для пострілу або перевірки.')}
+          ${numberField('Нічна дія, сек', 'nightCheck', app.draft.settings.nightCheck, 'Час на постріл або одну перевірку Дона чи Шерифа.')}
+          ${numberField('Знайомство мафії, сек', 'mafiaMeet', app.draft.settings.mafiaMeet, 'У нульову ніч Дон представляється команді та задає порядок відстрілу.')}
+          ${numberField('Позначення Шерифа, сек', 'sheriffMark', app.draft.settings.sheriffMark, 'Після знайомства мафії Шериф жестом позначає себе ведучому, не знімаючи маску.')}
+          ${numberField('Вільна посадка, сек', 'freeSeating', app.draft.settings.freeSeating, 'Усі залишаються в масках, але можуть зайняти зручну позу перед початком дня.')}
+          ${numberField('Кращий хід, сек', 'bestMove', app.draft.settings.bestMove, 'Після першого нічного вбивства гравець називає трійку чорних до протоколу.')}
         </div>
         <div class="divider"></div>
         <div class="field"><label>${help('Система фолів', FOUL_SYSTEM_HELP)}</label><select class="select" data-draft-setting="penaltyMode"><option value="tournament" ${app.draft.settings.penaltyMode === 'tournament' ? 'selected' : ''}>Турнірна</option><option value="club" ${app.draft.settings.penaltyMode === 'club' ? 'selected' : ''}>Клубна</option></select></div>
@@ -976,8 +1042,9 @@ function aggregateStats() {
   const games = finishedGames();
   const totalSeconds = games.reduce((sum, game) => sum + (game.durationSeconds || 0), 0);
   const redWins = games.filter(game => game.winner === 'red').length;
+  const blackWins = games.filter(game => game.winner === 'black').length;
   const redWinRate = games.length ? Math.round(redWins / games.length * 100) : 0;
-  return { games: games.length, totalSeconds, redWinRate, blackWinRate: games.length ? 100 - redWinRate : 0 };
+  return { games: games.length, totalSeconds, redWinRate, blackWinRate: games.length ? Math.round(blackWins / games.length * 100) : 0 };
 }
 
 function sharedLeaderboard(games) {
@@ -1021,7 +1088,7 @@ function statsView() {
     </section>
     <div class="grid two stats-panels">
       ${collapsiblePanel('statsRoles', 'Результативність ролей', 'Показано частку перемог команди гравця для кожної ролі.', `<div class="bar-chart">${roles.map(role => `<div class="bar-row"><span>${esc(role.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${role.rate}%"></div></div><span class="bar-value">${role.rate}%</span></div>`).join('')}</div>`)}
-      <section class="card card-pad"><div class="section-title section-heading">${titleHelp('h2', 'Гравці', 'Рейтинг упорядковано за кількістю перемог.')}</div>${leaderboard.length ? `<div class="list">${leaderboard.map((row, index) => `<div class="list-row"><div style="display:flex;align-items:center;gap:9px"><b class="muted">${index + 1}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог</span></div></div><b>${row.wins}</b></div>`).join('')}</div>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.')}</section>
+      ${collapsiblePanel('statsPlayers', 'Гравці', 'Рейтинг упорядковано за кількістю перемог.', leaderboard.length ? `<div class="list">${leaderboard.map((row, index) => `<div class="list-row"><div style="display:flex;align-items:center;gap:9px"><b class="muted">${index + 1}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог</span></div></div><b>${row.wins}</b></div>`).join('')}</div>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.'))}
     </div>
     <section class="card card-pad"><div class="section-title section-heading">${titleHelp('h2', 'Спільний архів ігор', 'Протоколи синхронізуються між пристроями та кешуються для офлайн-перегляду.')}</div>${games.length ? `<div class="list">${games.map(game => `${gameRow(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div>`).join('')}</div>` : statePanel('empty', 'Архів ігор порожній', 'Завершені ігри з’являться тут автоматично.')}</section>
   </main>`;
@@ -1041,7 +1108,7 @@ function settingsView() {
     <div class="grid two">
       <section class="card card-pad">
         <div class="section-title section-heading">${titleHelp('h2', 'Профіль Enjoy', 'Google-акаунт і спільний каталог гравців. Email приватний. Email ручного профілю використовується лише для запрошення на об’єднання і доступний цьому ведучому та відповідному підтвердженому Google-акаунту. Ім’я, нікнейм, клуб, опис і вибраний аватар синхронізуються у каталозі.')}<span class="badge ${app.cloudDirectory.status === 'online' ? 'green' : ''}">${esc(directoryStatus)}</span></div>
-        <div class="host-profile-summary">${hostAvatar('large')}<div><h3>${esc(app.hostProfile?.displayName || app.authUser?.googleName || 'Ведучий')}</h3><p>${esc(app.authUser?.email || '')}</p>${app.hostProfile?.club ? `<span class="badge gold">${esc(app.hostProfile.club)}</span>` : ''}</div></div>
+        <div class="host-profile-summary">${hostAvatar('large')}<div><h3>${esc(app.hostProfile?.displayName || app.authUser?.googleName || 'Ведучий')}</h3><p>${esc(app.authUser?.email || '')}</p><div class="host-profile-badges">${app.hostProfile?.club ? `<span class="badge gold">${esc(app.hostProfile.club)}</span>` : ''}${profilePhotoSyncHtml()}</div></div></div>
         <div class="actions profile-actions"><button class="btn secondary" data-action="edit-host-profile">Редагувати профіль</button><button class="btn secondary" data-action="auth-signout">Вийти</button><button class="icon-btn account-delete-btn" type="button" data-action="delete-account" aria-label="Видалити профіль Mafia" title="Видалити профіль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/></svg></button></div>
       </section>
       <section class="card card-pad">
@@ -1107,16 +1174,17 @@ function phaseLabel(game = app.game) {
   const labels = {
     reveal: 'Роздача ролей', zeroNight: 'Нульова ніч', day: `День ${game.day}`,
     vote: `Голосування · день ${game.day}`, tieSpeech: 'Автокатастрофа · промови', tieVote: 'Автокатастрофа · голосування',
-    allTie: 'Вихід усіх кандидатів', lastWord: 'Останнє слово', night: `Ніч ${game.day}`, finished: 'Гру завершено'
+    allTie: 'Вихід усіх кандидатів', lastWord: 'Останнє слово', bestMove: 'Кращий хід', night: `Ніч ${game.day}`, finished: 'Гру завершено'
   };
   return labels[game.phase] || game.phase;
 }
 
 function phaseDescription(game) {
   if (game.phase === 'day') return game.subphase === 'speeches' ? `Промова гравця №${currentSpeaker()?.number || '—'}` : 'Номінації сформовано';
-  if (game.phase === 'night') return ['Місто засинає', 'Мафія стріляє', 'Дон шукає Шерифа', 'Шериф перевіряє місто', 'Місто прокидається'][game.night.step] || '';
-  if (game.phase === 'zeroNight') return 'Чорна команда знайомиться';
+  if (game.phase === 'night') return ['Місто засинає', 'Мафія стріляє', 'Дон шукає Шерифа', 'Шериф перевіряє місто', 'Результат відстрілу'][game.night.step] || '';
+  if (game.phase === 'zeroNight') return ['Чорна команда знайомиться', 'Шериф позначає себе ведучому', 'Гравці займають вільну посадку'][game.zeroNight?.step || 0];
   if (game.phase === 'lastWord') return `Гравець №${game.lastWordSeat}`;
+  if (game.phase === 'bestMove') return `Гравець №${game.bestMove?.seat || game.lastWordSeat}`;
   if (game.phase === 'tieSpeech') return `Промова гравця №${game.vote.tied[game.speakerIndex] || '—'}`;
   return `${aliveSeats().length} гравців за столом`;
 }
@@ -1125,9 +1193,11 @@ function gameView(observer = false) {
   const game = app.game;
   if (!game) return missingGameView();
   if (game.phase === 'finished') return winnerView(observer);
-  return `<main class="page game-page"><div class="game-workspace">
+  const focused = ['zeroNight', 'bestMove'].includes(game.phase)
+    || (game.phase === 'night' && game.night?.resultOpen);
+  return `<main class="page game-page ${focused ? 'game-focus-phase' : ''}" aria-live="polite"><div class="game-workspace">
     <section class="card phase-strip game-top"><div class="phase-copy"><i class="phase-dot ${['night', 'zeroNight'].includes(game.phase) ? 'night' : ''}"></i><div><h1>${phaseLabel(game)}</h1><p>${phaseDescription(game)}</p></div></div><div class="phase-stats"><b>${aliveSeats().length}</b>/10 живих</div></section>
-    <div class="game-body">${tableHtml(observer)}${phaseControlHtml(observer)}</div>
+    <div class="game-body">${focused ? '' : tableHtml(observer)}${phaseControlHtml(observer)}</div>
     <aside class="game-side">${observer ? observerSideHtml() : moderatorSideHtml()}</aside>
   </div></main>`;
 }
@@ -1149,22 +1219,60 @@ function gameSeatHtml(seat, observer) {
 
 function phaseControlHtml(observer) {
   const game = app.game;
-  if (observer) return `<section class="card phase-panel"><div class="eyebrow">Публічний екран</div><h2>${phaseDescription(game)}</h2>${['day', 'tieSpeech', 'lastWord'].includes(game.phase) ? `<div class="timer ${game.timer.remaining <= 10 ? 'danger' : ''}">${formatTimer(game.timer.remaining)}</div>` : '<p>Ведучий керує поточною фазою на своєму екрані.</p>'}</section>`;
-  if (game.phase === 'zeroNight') return `<section class="card phase-panel"><div class="signal-stack" aria-label="Прокидаються Дон і Мафія">${roleSignal('don', 'phase-signal', 'Дон')}${roleSignal('mafia', 'phase-signal', 'Мафія')}</div><div class="eyebrow">Нульова ніч</div><h2>Мафія прокидається</h2><p>Дон і двоє гравців Мафії знайомляться та без слів узгоджують порядок відстрілу.</p><button class="btn primary wide game-lead-action" data-action="zero-to-day">Почати день 1</button></section>`;
+  if (observer) return `<section class="card phase-panel"><div class="eyebrow">Публічний екран</div><h2>${phaseDescription(game)}</h2>${['zeroNight', 'day', 'tieSpeech', 'lastWord', 'bestMove'].includes(game.phase) ? `<div class="timer ${game.timer.remaining <= 10 ? 'danger' : ''}">${formatTimer(game.timer.remaining)}</div>` : '<p>Ведучий керує поточною фазою на своєму екрані.</p>'}</section>`;
+  if (game.phase === 'zeroNight') return zeroNightHtml();
   if (game.phase === 'day') return dayControlHtml();
   if (game.phase === 'vote' || game.phase === 'tieVote') return voteControlHtml();
   if (game.phase === 'tieSpeech') return tieSpeechHtml();
   if (game.phase === 'allTie') return allTieHtml();
   if (game.phase === 'lastWord') return lastWordHtml();
+  if (game.phase === 'bestMove') return bestMoveHtml();
   if (game.phase === 'night') return nightHtml();
   return '';
 }
 
 function timerControls(nextAction, nextLabel) {
   const game = app.game;
+  const prominentNext = ['zero-night-sheriff', 'zero-night-free-seating', 'zero-to-day', 'finish-best-move'].includes(nextAction) ? 'game-lead-action' : '';
   return `<div class="timer ${game.timer.remaining <= 10 ? 'danger' : ''}">${formatTimer(game.timer.remaining)}</div>
     <div class="timer-controls"><button class="btn secondary icon" data-action="timer-minus" aria-label="Мінус 5 секунд">−5</button><button class="btn secondary icon" data-action="timer-plus" aria-label="Плюс 5 секунд">+5</button></div>
-    <div class="primary-game-actions"><button class="btn primary game-lead-action" data-action="timer-toggle">${game.timer.running ? 'Пауза' : 'Старт'}</button><button class="btn secondary" data-action="timer-reset">Скинути</button><button class="btn primary" data-action="${nextAction}">${nextLabel}</button></div>`;
+    <div class="primary-game-actions"><button class="btn primary game-lead-action" data-action="timer-toggle">${game.timer.running ? 'Пауза' : 'Старт'}</button><button class="btn secondary" data-action="timer-reset">Скинути</button><button class="btn primary ${prominentNext}" data-action="${nextAction}">${nextLabel}</button></div>`;
+}
+
+function phaseStepsHtml(labels, current) {
+  return `<ol class="phase-stepper" style="--phase-step-count:${labels.length}" aria-label="Послідовність фази">${labels.map((label, index) => `<li class="${index < current ? 'done' : index === current ? 'current' : ''}" ${index === current ? 'aria-current="step"' : ''}><span>${index + 1}</span><b>${esc(label)}</b></li>`).join('')}</ol>`;
+}
+
+function moderatorCue(text) {
+  return `<div class="moderator-cue"><span>Скажіть</span><b>«${esc(text)}»</b></div>`;
+}
+
+function zeroNightHtml() {
+  const step = app.game.zeroNight?.step || 0;
+  if (step === 0) return `<section class="card phase-panel zero-night-panel phase-enter">
+    ${phaseStepsHtml(['Знайомство мафії', 'Позначення Шерифа', 'Вільна посадка'], step)}
+    <div class="signal-stack" aria-label="Прокидаються Дон і Мафія">${roleSignal('don', 'phase-signal', 'Дон')}${roleSignal('mafia', 'phase-signal', 'Мафія')}</div>
+    <div class="eyebrow">Нульова ніч · 1 із 3</div><h2>Мафія прокидається</h2>
+    ${moderatorCue('Прокидається Мафія. Дон позначає себе та задає порядок відстрілу')}
+    <p>Усі інші гравці залишаються в масках. Дон представляється команді та без слів задає порядок пострілів.</p>
+    ${timerControls('zero-night-sheriff', 'Мафія засинає')}
+  </section>`;
+  if (step === 1) return `<section class="card phase-panel zero-night-panel phase-enter">
+    ${phaseStepsHtml(['Знайомство мафії', 'Позначення Шерифа', 'Вільна посадка'], step)}
+    ${roleSignal('sheriff', 'phase-signal', 'Шериф')}
+    <div class="eyebrow">Нульова ніч · 2 із 3</div><h2>Шериф позначає себе</h2>
+    ${moderatorCue('Шериф має можливість позначити себе')}
+    <p>Шериф не прокидається: лише показує ведучому встановлений жест, залишаючись у нічній посадці.</p>
+    ${timerControls('zero-night-free-seating', 'Вільна посадка')}
+  </section>`;
+  return `<section class="card phase-panel zero-night-panel phase-enter">
+    ${phaseStepsHtml(['Знайомство мафії', 'Позначення Шерифа', 'Вільна посадка'], step)}
+    <div class="night-symbol">◌</div>
+    <div class="eyebrow">Нульова ніч · 3 із 3</div><h2>Вільна посадка</h2>
+    ${moderatorCue('Фаза вільної посадки')}
+    <p>Усі залишаються в масках і дотримуються нічної тиші, але можуть зайняти зручну позу.</p>
+    ${timerControls('zero-to-day', 'Почати день 1')}
+  </section>`;
 }
 
 function syncObserverTimer() {
@@ -1230,27 +1338,55 @@ function allTieHtml() {
 function lastWordHtml() {
   const seat = seatByNo(app.game.lastWordSeat);
   const hasMore = app.game.pendingLastWords?.length;
-  const next = hasMore ? 'Наступне слово →' : app.game.afterNightKill ? 'Наступний день →' : 'Перейти до ночі →';
-  return `<section class="card control-card"><div class="speaker-row"><div><div class="eyebrow">Останнє слово</div><h2>№${seat?.number || '—'} · ${esc(seat?.name || '—')}</h2></div></div>${timerControls('finish-last-word', next)}</section>`;
+  const next = hasMore ? 'Наступне слово →' : app.game.pendingWinner ? 'Оголосити результат' : app.game.afterNightKill ? 'Наступний день →' : 'Перейти до ночі →';
+  const cue = app.game.afterNightKill
+    ? `У місті ранок. Гравець номер ${seat?.number || '—'} залишає ігровий стіл`
+    : `Гравець номер ${seat?.number || '—'}, у вас одна хвилина на останнє слово`;
+  return `<section class="card control-card phase-enter"><div class="speaker-row"><div><div class="eyebrow">${app.game.afterNightKill ? 'Ранок · прощальна хвилина' : 'Останнє слово'}</div><h2>№${seat?.number || '—'} · ${esc(seat?.name || '—')}</h2></div></div>${moderatorCue(cue)}${timerControls('finish-last-word', next)}</section>`;
+}
+
+function bestMoveHtml() {
+  const game = app.game;
+  const seat = seatByNo(game.bestMove?.seat || game.lastWordSeat);
+  const selected = game.bestMove?.selected || [];
+  return `<section class="card control-card best-move-panel phase-enter">
+    ${phaseStepsHtml(['Гравця вбито', 'Трійка чорних', 'До протоколу'], 1)}
+    <div class="speaker-row"><div><div class="eyebrow">Кращий хід · перше нічне вбивство</div><h2>№${seat?.number || '—'} · ${esc(seat?.name || '—')}</h2></div><span class="badge gold">${selected.length}/3</span></div>
+    ${moderatorCue(`Гравець номер ${seat?.number || '—'}, у вас 20 секунд і право назвати трійку чорних`)}
+    <p class="best-move-help">Позначте три номери в тому порядку, в якому їх називає гравець.</p>
+    ${targetsHtml(null, { action: 'best-move-target', selectedMany: selected })}
+    ${timerControls('finish-best-move', 'Записати КХ')}
+    <button class="btn secondary wide best-move-skip" data-action="skip-best-move">Без КХ</button>
+  </section>`;
 }
 
 function nightHtml() {
   const game = app.game;
   const step = game.night.step;
-  if (step === 0) return `<section class="card phase-panel"><div class="night-symbol">☾</div><div class="eyebrow">Ніч ${game.day}</div><h2>Місто засинає</h2><p>Усі живі гравці надягають маски. Перевірте тишу та посадку.</p><button class="btn primary" data-action="night-next">Далі: стрільба мафії</button></section>`;
-  if (step === 1) return nightTargetPanel('mafia', 'Мафія стріляє', 'Зафіксуйте узгоджену ціль або промах.', game.night.target, `<button class="btn secondary" data-action="night-miss">Промах</button><button class="btn danger" data-action="night-shot-done" ${game.night.target == null ? 'disabled' : ''}>Зафіксувати</button>`);
+  const steps = phaseStepsHtml(['Тиша', 'Постріл', 'Дон', 'Шериф', 'Ранок'], step);
+  if (step === 0) return `<section class="card phase-panel phase-enter">${steps}<div class="night-symbol">☾</div><div class="eyebrow">Ніч ${game.day}</div><h2>Місто засинає</h2>${moderatorCue('У місті настає ніч. Усі сплять міцно та правильно')}<p>Усі живі гравці надягають маски. Перевірте тишу, руки й правильну нічну посадку.</p><button class="btn primary game-lead-action" data-action="night-next">Почати відстріл</button></section>`;
+  if (step === 1) return nightTargetPanel('mafia', 'Мафія стріляє', 'Називайте місця від 1 до 10 з рівними паузами. Зафіксуйте ціль лише якщо всі живі чорні зробили постріл узгоджено.', game.night.target, `<button class="btn secondary" data-action="night-miss">Промах</button><button class="btn danger" data-action="night-shot-done" ${game.night.target == null ? 'disabled' : ''}>Зафіксувати постріл</button>`, steps, 'Не спить тільки Мафія, яка проходить повз гравців за номерами');
   if (step === 2) return nightCheckPanel('don');
   if (step === 3) return nightCheckPanel('sheriff');
   const target = game.night.target === -1 ? null : seatByNo(game.night.target);
-  return `<section class="card phase-panel"><div class="night-symbol">☀</div><div class="eyebrow">Ранок</div><h2>Місто прокидається</h2><p>${target ? `Вночі вибуває гравець №${target.number} · ${esc(target.name)}.` : 'Мафія промахнулася. Усі залишаються за столом.'}</p><button class="btn ${target ? 'danger' : 'primary'} game-lead-action" data-action="wake-city">${target ? 'Оголосити вибуття' : 'Почати наступний день'}</button></section>`;
+  return `<section class="card phase-panel phase-enter">${steps}<div class="night-symbol">☾</div><div class="eyebrow">Результат відстрілу</div><h2>У місті триває ніч</h2>${moderatorCue(target ? `У місті триває ніч. Було вбито гравця номер ${target.number}` : 'У місті триває ніч, у місті промах. У місті ранок')}<p>${target ? `Після оголошення результату гравець №${target.number} · ${esc(target.name)} отримає Кращий хід або прощальну хвилину.` : 'Мафія промахнулася. Усі залишаються за столом.'}</p><button class="btn ${target ? 'danger' : 'primary'} game-lead-action" data-action="wake-city">${target ? 'Зафіксувати вибуття' : 'Почати наступний день'}</button></section>`;
 }
 
-function targetsHtml(selected) {
-  return `<div class="target-grid">${app.game.seats.map(seat => `<button class="target ${seat.status === 'dead' ? 'dead' : ''} ${selected === seat.number ? 'selected' : ''}" data-action="night-target" data-seat="${seat.number}"><b>${seat.number}</b>${esc(seat.name)}</button>`).join('')}</div>`;
+function targetsHtml(selected, { action = 'night-target', selectedMany = [] } = {}) {
+  return `<div class="target-grid">${app.game.seats.map(seat => {
+    const unavailable = seat.status === 'dead';
+    const isSelected = selected === seat.number || selectedMany.includes(seat.number);
+    return `<button class="target ${unavailable ? 'dead' : ''} ${isSelected ? 'selected' : ''}" data-action="${action}" data-seat="${seat.number}" ${unavailable ? 'disabled aria-disabled="true"' : ''}><b>${seat.number}</b>${esc(seat.name)}</button>`;
+  }).join('')}</div>`;
 }
 
-function nightTargetPanel(roleKey, title, text, selected, actions) {
-  return `<section class="card phase-panel">${roleSignal(roleKey, 'phase-signal', title)}<div class="eyebrow">Ніч ${app.game.day}</div><h2>${title}</h2><p>${text}</p>${targetsHtml(selected)}<div class="actions">${actions}</div></section>`;
+function compactTimerControls() {
+  const game = app.game;
+  return `<div class="compact-timer"><div class="timer ${game.timer.remaining <= 10 ? 'danger' : ''}">${formatTimer(game.timer.remaining)}</div><div class="compact-timer-actions"><button class="btn secondary" data-action="timer-minus" aria-label="Мінус 5 секунд">−5</button><button class="btn primary" data-action="timer-toggle">${game.timer.running ? 'Пауза' : 'Старт'}</button><button class="btn secondary" data-action="timer-plus" aria-label="Плюс 5 секунд">+5</button><button class="btn secondary" data-action="timer-reset">Скинути</button></div></div>`;
+}
+
+function nightTargetPanel(roleKey, title, text, selected, actions, steps = '', cue = '') {
+  return `<section class="card phase-panel night-action-panel phase-enter">${steps}${roleSignal(roleKey, 'phase-signal', title)}<div class="eyebrow">Ніч ${app.game.day}</div><h2>${title}</h2>${cue ? moderatorCue(cue) : ''}<p>${text}</p>${compactTimerControls()}${targetsHtml(selected)}<div class="actions night-action-buttons">${actions}</div></section>`;
 }
 
 function nightCheckPanel(kind) {
@@ -1260,7 +1396,9 @@ function nightCheckPanel(kind) {
   const selected = isDon ? game.night.donCheck : game.night.sheriffCheck;
   const actorRole = isDon ? 'don' : 'sheriff';
   const title = isDon ? 'Дон шукає Шерифа' : 'Шериф перевіряє місто';
-  if (!roleAlive) return `<section class="card phase-panel">${roleSignal(actorRole, 'phase-signal', title)}<div class="eyebrow">Ніч ${game.day}</div><h2>${title}</h2><p>Роль уже вибула. Оголосіть фазу та витримайте паузу, щоб не розкрити це столу.</p><button class="btn primary" data-action="night-skip-check">Продовжити</button></section>`;
+  const steps = phaseStepsHtml(['Тиша', 'Постріл', 'Дон', 'Шериф', 'Ранок'], game.night.step);
+  const cue = isDon ? 'Прокидається Дон гри' : 'Прокидається Шериф гри';
+  if (!roleAlive) return `<section class="card phase-panel night-action-panel phase-enter">${steps}${roleSignal(actorRole, 'phase-signal', title)}<div class="eyebrow">Ніч ${game.day}</div><h2>${title}</h2>${moderatorCue(cue)}<p>Роль уже вибула. Оголосіть фазу та витримайте повну паузу, щоб не розкрити це столу.</p>${compactTimerControls()}<button class="btn primary game-lead-action" data-action="night-skip-check">Завершити паузу</button></section>`;
   if (selected && game.night.resultOpen) {
     const seat = seatByNo(selected);
     const hit = isDon ? seat.role === 'sheriff' : teamOf(seat) === 'black';
@@ -1271,9 +1409,9 @@ function nightCheckPanel(kind) {
     const image = isDon
       ? checkSignal(hit ? 'sheriffFound' : 'sheriffNotFound', 'night-result-signal', resultLabel)
       : roleSignal(hit ? 'mafia' : 'citizen', 'night-result-signal', resultLabel);
-    return `<section class="card phase-panel night-result-panel" role="status"><div class="eyebrow">Результат перевірки · гравець №${seat.number}</div>${image}<h2>${resultLabel}</h2><p><b>${instruction}</b><br>Сховайте екран одразу після сигналу.</p><div class="night-result-actions"><button class="btn secondary" data-action="night-hide-result">Змінити ціль</button><button class="btn primary" data-action="night-check-done">Сховати й далі</button></div></section>`;
+    return `<section class="card phase-panel night-result-panel phase-enter" role="status">${steps}<div class="eyebrow">Результат перевірки · гравець №${seat.number}</div>${image}<h2>${resultLabel}</h2><p><b>${instruction}</b><br>Сховайте екран одразу після сигналу.</p><div class="night-result-actions"><button class="btn secondary" data-action="night-hide-result">Змінити ціль</button><button class="btn primary game-lead-action" data-action="night-check-done">Сховати й далі</button></div></section>`;
   }
-  return nightTargetPanel(actorRole, title, isDon ? 'Дон показує номер одного гравця.' : 'Шериф показує номер одного гравця.', selected, `${selected ? '<button class="btn danger" data-action="night-show-result">Показати результат</button>' : ''}<button class="btn primary" data-action="night-check-done" ${selected ? '' : 'disabled'}>Далі</button>`);
+  return nightTargetPanel(actorRole, title, isDon ? 'Дон показує номер одного живого гравця.' : 'Шериф показує номер одного живого гравця.', selected, `<button class="btn danger wide game-lead-action" data-action="night-show-result" ${selected ? '' : 'disabled'}>Показати сигнал ведучого</button>`, steps, cue);
 }
 
 function moderatorSideHtml() {
@@ -1294,7 +1432,10 @@ function nominationChipsObserver() {
 
 function winnerView(observer = false) {
   const red = app.game.winner === 'red';
-  return `<main class="page"><section class="card winner">${roleSignal(red ? 'citizen' : 'mafia', 'winner-signal', red ? 'Перемога мирного міста' : 'Перемога чорної команди')}<div class="eyebrow">Фінал гри</div><h1>${red ? 'Перемога мирного міста' : 'Перемога чорної команди'}</h1><p class="muted">${red ? 'Усі гравці чорної команди вибули.' : 'Чорна команда досягла паритету з містом.'}</p>${observer ? '' : `<div class="actions" style="justify-content:center"><button class="btn secondary" data-action="copy-protocol">Копіювати протокол</button><button class="btn primary" data-action="rematch">Реванш</button><button class="btn secondary" data-nav="home">На головну</button></div>`}</section></main>`;
+  const draw = app.game.winner === 'draw';
+  const title = draw ? 'Гру завершено нічиєю' : red ? 'Перемога мирного міста' : 'Перемога чорної команди';
+  const detail = draw ? 'Результат зафіксовано без переможця.' : red ? 'Усі гравці чорної команди вибули.' : 'Чорна команда досягла паритету з містом.';
+  return `<main class="page"><section class="card winner">${draw ? '<div class="winner-draw-mark" aria-hidden="true">＝</div>' : roleSignal(red ? 'citizen' : 'mafia', 'winner-signal', title)}<div class="eyebrow">Фінал гри</div><h1>${title}</h1><p class="muted">${detail}</p>${observer ? '' : `<div class="actions" style="justify-content:center">${app.undo.length ? '<button class="btn secondary" data-action="undo">↶ Скасувати результат</button>' : ''}<button class="btn secondary" data-action="copy-protocol">Копіювати протокол</button><button class="btn primary" data-action="rematch">Реванш</button><button class="btn secondary" data-nav="home">На головну</button></div>`}</section></main>`;
 }
 
 function playerModalHtml() {
@@ -1319,9 +1460,11 @@ function playerModalHtml() {
 function hostProfileModalHtml() {
   const profile = { ...(app.hostProfile || {}), ...(app.modal?.profileDraft || {}) };
   const photo = profile.avatar || app.authUser?.googlePhotoURL || '';
+  const photoDraftChanged = Boolean(app.modal?.profileDraft && Object.hasOwn(app.modal.profileDraft, 'avatar') && profile.avatar !== app.hostProfile?.avatar);
+  const photoSyncStatus = photoDraftChanged ? 'pending' : app.profilePhotoSync.status;
   return `<div class="modal-backdrop host-profile-backdrop" data-action="close-modal"><form class="card modal host-profile-modal" data-form="host-profile" aria-modal="true" role="dialog" tabindex="-1">
     <div class="section-title section-heading">${titleHelp('h2', 'Мій профіль Enjoy', 'Ці дані допоможуть ведучим знайти вас і додати на стіл. Власний аватар стискається локально; видалення власного фото повертає фотографію Google.')}<div class="profile-modal-title-actions"><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div></div>
-    <div class="avatar-editor">${avatar({ name: profile.displayName || app.authUser?.googleName, avatar: photo }, 'large')}<div><div class="avatar-source-actions"><label class="btn primary" for="host-avatar-camera">${cameraIcon()}<span>Зробити фото</span></label><input id="host-avatar-camera" class="visually-hidden" type="file" accept="image/*" capture="environment" data-input="host-avatar-camera"><label class="btn secondary" for="host-avatar-gallery">Обрати з галереї</label><input id="host-avatar-gallery" class="visually-hidden" type="file" accept="image/*" data-input="host-avatar-gallery">${app.authUser?.googlePhotoURL && profile.avatar ? '<button class="btn secondary" type="button" data-action="host-use-google-photo">Фото Google</button>' : ''}</div></div></div>
+    <div class="avatar-editor">${avatar({ name: profile.displayName || app.authUser?.googleName, avatar: photo }, 'large')}<div><div class="avatar-source-actions"><label class="btn primary" for="host-avatar-camera">${cameraIcon()}<span>Зробити фото</span></label><input id="host-avatar-camera" class="visually-hidden" type="file" accept="image/*" capture="environment" data-input="host-avatar-camera"><label class="btn secondary" for="host-avatar-gallery">Обрати з галереї</label><input id="host-avatar-gallery" class="visually-hidden" type="file" accept="image/*" data-input="host-avatar-gallery">${app.authUser?.googlePhotoURL && profile.avatar ? '<button class="btn secondary" type="button" data-action="host-use-google-photo">Фото Google</button>' : ''}</div>${profilePhotoSyncHtml(Boolean(profile.avatar), photoSyncStatus)}</div></div>
     <div class="stack">
       <div class="field"><label for="host-display-name">Ім’я для відображення *</label><input id="host-display-name" class="input" name="displayName" value="${esc(profile.displayName || app.authUser?.googleName || '')}" maxlength="60" required></div>
       <div class="field"><label for="host-nickname">Нікнейм</label><input id="host-nickname" class="input" name="nickname" value="${esc(profile.nickname || '')}" maxlength="40"></div>
@@ -1381,8 +1524,12 @@ function confirmModalHtml() {
 
 function gameSettingsModalHtml() {
   const settings = app.game.settings;
-  const labels = { speech: 'Промова, сек', tieSpeech: 'Автокатастрофа, сек', lastWord: 'Останнє слово, сек', nightCheck: 'Нічна дія, сек' };
-  return `<div class="modal-backdrop" data-action="close-modal"><form class="card modal game-modal game-settings-modal" data-form="game-settings" role="dialog" aria-modal="true"><div class="section-title section-heading game-dialog-head"><div><span class="eyebrow">Активна гра</span>${titleHelp('h2', 'Налаштування гри', 'Нові значення діятимуть із наступної відповідної фази.')}</div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div><div class="setup-options">${['speech', 'tieSpeech', 'lastWord', 'nightCheck'].map(key => `<div class="field"><label>${labels[key]}</label><input class="input" type="number" name="${key}" min="5" max="180" step="5" value="${settings[key]}"></div>`).join('')}</div><div class="divider"></div><div class="field"><label>${help('Система фолів', FOUL_SYSTEM_HELP)}</label><select class="select" name="penaltyMode"><option value="tournament" ${settings.penaltyMode === 'tournament' ? 'selected' : ''}>Турнірна</option><option value="club" ${settings.penaltyMode === 'club' ? 'selected' : ''}>Клубна</option></select></div><div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Скасувати</button><button class="btn primary" type="submit">Застосувати</button></div></form></div>`;
+  const labels = {
+    speech: 'Промова, сек', tieSpeech: 'Автокатастрофа, сек', lastWord: 'Останнє слово, сек',
+    nightCheck: 'Нічна дія, сек', mafiaMeet: 'Знайомство мафії, сек',
+    sheriffMark: 'Позначення Шерифа, сек', freeSeating: 'Вільна посадка, сек', bestMove: 'Кращий хід, сек'
+  };
+  return `<div class="modal-backdrop" data-action="close-modal"><form class="card modal game-modal game-settings-modal" data-form="game-settings" role="dialog" aria-modal="true"><div class="section-title section-heading game-dialog-head"><div><span class="eyebrow">Активна гра</span>${titleHelp('h2', 'Налаштування гри', 'Нові значення діятимуть із наступної відповідної фази.')}</div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div><div class="setup-options">${Object.keys(labels).map(key => `<div class="field"><label>${labels[key]}</label><input class="input" type="number" name="${key}" min="5" max="180" step="5" value="${settings[key]}"></div>`).join('')}</div><div class="divider"></div><div class="field"><label>${help('Система фолів', FOUL_SYSTEM_HELP)}</label><select class="select" name="penaltyMode"><option value="tournament" ${settings.penaltyMode === 'tournament' ? 'selected' : ''}>Турнірна</option><option value="club" ${settings.penaltyMode === 'club' ? 'selected' : ''}>Клубна</option></select></div><div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Скасувати</button><button class="btn primary" type="submit">Застосувати</button></div></form></div>`;
 }
 
 function setupMoveModalHtml() {
@@ -1392,6 +1539,29 @@ function setupMoveModalHtml() {
     <div class="section-title section-heading"><div><h2 id="setup-move-title">Перемістити з місця ${source.number}</h2><p>${esc(draftSeatLabel(source))}</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div>
     <div class="setup-move-grid">${app.draft.seats.map(target => `<button class="setup-move-target ${target.number === source.number ? 'current' : ''}" type="button" data-action="move-setup-to" data-from="${source.number}" data-to="${target.number}" ${target.number === source.number ? 'disabled' : ''}><b>№${target.number}</b><span>${esc(draftSeatLabel(target))}</span></button>`).join('')}</div>
     <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Скасувати</button></div>
+  </div></div>`;
+}
+
+function setupAvatarModalHtml() {
+  const seat = app.draft?.seats.find(item => item.number === Number(app.modal.seat));
+  const player = seat?.profileId ? playerById(seat.profileId) : null;
+  if (!seat || !editableManualPlayer(player)) return '';
+  const busy = Boolean(app.modal.busy);
+  const occupiedPresets = new Set(app.draft.seats
+    .filter(item => item.number !== seat.number && item.profileId)
+    .map(item => playerById(item.profileId)?.avatarPreset)
+    .filter(Boolean));
+  const choices = ANIMAL_AVATARS.map(source => {
+    const fileName = source.split('/').at(-1);
+    const label = ANIMAL_AVATAR_LABELS[fileName] || 'Аватар';
+    const occupied = occupiedPresets.has(source);
+    return `<button class="setup-avatar-choice ${player.avatarPreset === source ? 'selected' : ''}" type="button" data-action="choose-setup-avatar" data-seat="${seat.number}" data-avatar="${esc(source)}" aria-label="${esc(label)}${occupied ? ' · уже використовується' : ''}" title="${esc(label)}" ${busy || occupied ? 'disabled' : ''}><img src="${esc(source)}" alt=""></button>`;
+  }).join('');
+  return `<div class="modal-backdrop" ${busy ? '' : 'data-action="close-modal"'}><div class="card modal setup-avatar-modal" role="dialog" aria-modal="true" aria-labelledby="setup-avatar-title" aria-busy="${busy}">
+    <div class="section-title section-heading"><div><span class="eyebrow">Місце ${seat.number}</span><h2 id="setup-avatar-title">Аватар гравця</h2><p>${esc(preferredPlayerName(player))}</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити" ${busy ? 'disabled' : ''}>×</button></div>
+    <p class="setup-avatar-help">Оберіть один із базових аватарів. Зміна збережеться у ручному профілі та буде видима іншим ведучим.</p>
+    <div class="setup-avatar-grid">${choices}</div>
+    <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal" ${busy ? 'disabled' : ''}>Скасувати</button></div>
   </div></div>`;
 }
 
@@ -1463,6 +1633,34 @@ function mediaModalHtml() {
   </div></div>`;
 }
 
+function orderDrinkIcon(key) {
+  const paths = {
+    coffee: '<path d="M5 8h11v5a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V8Zm11 2h2a2 2 0 0 1 0 4h-2M4 21h15M9 3c-1 1-.8 2 0 3m4-3c-1 1-.8 2 0 3"/>',
+    tea: '<path d="M5 9h11v4a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V9Zm11 2h2a2 2 0 0 1 0 4h-2M4 21h15M11 8c0-3 2-5 5-5 0 3-2 5-5 5Z"/>',
+    cappuccino: '<path d="M5 10h11v4a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4v-4Zm11 2h2a2 2 0 0 1 0 4h-2M4 21h15"/><path d="M7 9c0-2 2-3 3.5-1C12 6 14 7 14 9"/>',
+    latte: '<path d="M7 4h10l-1 16H8L7 4Zm1 5h8M8 14h8M5 21h14M10 2h4"/>'
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[key]}</svg>`;
+}
+
+function orderModalHtml() {
+  const order = app.order;
+  const lastLabel = ORDER_MENU.find(item => item.key === order.lastItem)?.label || '';
+  const status = order.status === 'success'
+    ? statePanel('success', `«${lastLabel}» — замовлення надіслано`, 'Повідомлення передано тестовому одержувачу в Telegram.', '', true)
+    : order.status === 'error'
+      ? statePanel('error', 'Замовлення не надіслано', order.error, '', true)
+      : '';
+  return `<div class="modal-backdrop order-backdrop" ${order.busy ? '' : 'data-action="close-modal"'}><div class="card modal order-modal" role="dialog" aria-modal="true" aria-labelledby="order-panel-title" aria-busy="${order.busy}">
+    <div class="section-title section-heading"><div><span class="eyebrow">Кав’ярня Enjoy</span><h2 id="order-panel-title">Замовлення напою</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити" ${order.busy ? 'disabled' : ''}>×</button></div>
+    <p class="order-intro">Оберіть напій — повідомлення відразу піде в Telegram.</p>
+    ${status}
+    <div class="order-menu-grid">${ORDER_MENU.map(item => `<button class="order-menu-item" type="button" data-action="place-order" data-item="${item.key}" ${order.busy ? 'disabled' : ''}>${orderDrinkIcon(item.key)}<b>${item.label}</b></button>`).join('')}</div>
+    <p class="privacy-note order-recipient-note">Тестовий одержувач: @Chemelev</p>
+    <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal" ${order.busy ? 'disabled' : ''}>Закрити</button></div>
+  </div></div>`;
+}
+
 function modalHtml() {
   if (!app.modal) return '';
   if (app.modal.type === 'player') return playerModalHtml();
@@ -1474,9 +1672,11 @@ function modalHtml() {
   if (app.modal.type === 'confirm') return confirmModalHtml();
   if (app.modal.type === 'game-settings') return gameSettingsModalHtml();
   if (app.modal.type === 'setup-move') return setupMoveModalHtml();
+  if (app.modal.type === 'setup-avatar') return setupAvatarModalHtml();
   if (app.modal.type === 'delete-account') return deleteAccountModalHtml();
   if (app.modal.type === 'media') return mediaModalHtml();
-  if (app.modal.type === 'winner') return `<div class="modal-backdrop"><div class="card modal game-modal decision-modal" role="dialog" aria-modal="true"><div class="game-dialog-head"><div><span class="eyebrow">Завершення гри</span>${titleHelp('h2', 'Хто переміг?', 'Ручне завершення потрібне для нестандартної ситуації або рішення судді.')}</div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div><p class="game-dialog-copy">Оберіть команду-переможця. Результат одразу потрапить до протоколу та статистики.</p><div class="winner-choice-grid"><button class="btn primary winner-choice" data-action="finish-red"><span>●</span><strong>Мирне місто</strong><small>Червона команда</small></button><button class="btn danger winner-choice" data-action="finish-black"><span>◆</span><strong>Мафія</strong><small>Чорна команда</small></button></div><div class="modal-actions"><button class="btn secondary" data-action="close-modal">Скасувати</button></div></div></div>`;
+  if (app.modal.type === 'order') return orderModalHtml();
+  if (app.modal.type === 'winner') return `<div class="modal-backdrop"><div class="card modal game-modal decision-modal" role="dialog" aria-modal="true"><div class="game-dialog-head"><div><span class="eyebrow">Завершення гри</span>${titleHelp('h2', 'Результат гри', 'Ручне завершення потрібне для нестандартної ситуації, нічиєї або рішення судді.')}</div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div><p class="game-dialog-copy">Оберіть результат. Він одразу потрапить до протоколу та статистики.</p><div class="winner-choice-grid"><button class="btn primary winner-choice" data-action="finish-red"><span>●</span><strong>Мирне місто</strong><small>Червона команда</small></button><button class="btn danger winner-choice" data-action="finish-black"><span>◆</span><strong>Мафія</strong><small>Чорна команда</small></button><button class="btn secondary winner-choice winner-draw-choice" data-action="finish-draw"><span>＝</span><strong>Нічия</strong><small>Без переможця</small></button></div><div class="modal-actions"><button class="btn secondary" data-action="close-modal">Скасувати</button></div></div></div>`;
   return '';
 }
 
@@ -1525,6 +1725,7 @@ function render() {
   }
   appRoot.setAttribute('aria-busy', 'false');
   syncObserverTimer();
+  if (['game', 'reveal'].includes(app.route)) requestAnimationFrame(requestGameWakeLock);
 }
 
 function showTooltip(button) {
@@ -1546,7 +1747,9 @@ function closeOverlays() {
 }
 
 async function refreshData() {
-  [app.localPlayers, app.localGames] = await Promise.all([getAll('players'), getAll('games')]);
+  const [players, games] = await Promise.all([getAll('players'), getAll('games')]);
+  app.localPlayers = players;
+  app.localGames = games.map(game => normalizeGameState(game, DEFAULT_SETTINGS));
   mergePlayerSources();
   mergeGameSources();
   const active = activeGames()[0];
@@ -1554,12 +1757,7 @@ async function refreshData() {
 }
 
 function shuffled(values) {
-  const result = [...values];
-  for (let index = result.length - 1; index > 0; index--) {
-    const random = Math.floor(Math.random() * (index + 1));
-    [result[index], result[random]] = [result[random], result[index]];
-  }
-  return result;
+  return secureShuffle(values);
 }
 
 function createGameFromDraft() {
@@ -1575,7 +1773,7 @@ function createGameFromDraft() {
       number: index + 1,
       profileId: profile?.id || null,
       name: preferredPlayerName(profile) || draftSeat.name.trim() || missingGuestNames.shift(),
-      avatar: profile?.avatar || fallbackAvatars.get(setupAvatarKey(draftSeat, profile)) || ANIMAL_AVATARS[index % ANIMAL_AVATARS.length],
+      avatar: profile?.avatar || profile?.avatarPreset || fallbackAvatars.get(setupAvatarKey(draftSeat, profile)) || ANIMAL_AVATARS[index % ANIMAL_AVATARS.length],
       role: roles[index],
       status: 'alive', faults: 0, nominatedBy: null, noVote: false,
       restrictionDay: null, shortSpeechDay: null, eliminatedReason: ''
@@ -1588,11 +1786,13 @@ function createGameFromDraft() {
     createdAt: timestamp, startedAt: timestamp, updatedAt: timestamp, endedAt: null,
     status: 'active', phase: 'reveal', subphase: '', day: 1, winner: null, durationSeconds: 0,
     settings: { ...app.draft.settings }, seats, revealIndex: 0, revealOpen: false,
+    zeroNight: { step: 0 },
     speakerIndex: 0, speakerOrder: seats.map(seat => seat.number), nominations: [],
     vote: { counts: {}, tied: [], tieKey: '', tieRound: 0, yes: 0, no: 0 },
     night: { step: 0, target: null, donCheck: null, sheriffCheck: null, resultOpen: false },
+    bestMove: { seat: null, selected: [] },
     timer: { remaining: app.draft.settings.speech, running: false, purpose: 'speech' },
-    lastWordSeat: null, pendingLastWords: [], afterNightKill: false, showSecrets: false,
+    lastWordSeat: null, pendingLastWords: [], pendingWinner: null, afterNightKill: false, showSecrets: false,
     history: [{ at: timestamp, time: new Date(timestamp).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }), text: 'Створено нову гру та випадково розподілено ролі.', secret: true }]
   };
 }
@@ -1603,6 +1803,7 @@ function publicGame(game) {
   clean.seats.forEach(seat => { delete seat.role; delete seat.profileId; });
   clean.history = clean.history.filter(event => !event.secret);
   clean.night = { step: clean.night.step, target: clean.night.step >= 4 ? clean.night.target : null };
+  delete clean.pendingWinner;
   clean.showSecrets = false;
   return clean;
 }
@@ -1636,6 +1837,8 @@ async function flushActiveGamePublish(gameId) {
 
 async function saveGame({ broadcast = true } = {}) {
   if (!app.game || app.game.publicOnly || !canManageGame(app.game)) return;
+  const stateErrors = gameStateErrors(app.game);
+  if (stateErrors.length) throw new Error(`Гру не збережено: ${stateErrors[0]}`);
   app.game.updatedAt = nowIso();
   app.game.timer.running = Boolean(app.game.timer.running);
   await putOne('games', app.game);
@@ -1670,14 +1873,30 @@ function stopTimer() {
   app.wakeLock = null;
 }
 
+function requestGameWakeLock() {
+  if (!['game', 'reveal'].includes(app.route) || document.hidden || app.wakeLock) return;
+  navigator.wakeLock?.request('screen').then(lock => {
+    app.wakeLock = lock;
+    lock.addEventListener?.('release', () => { if (app.wakeLock === lock) app.wakeLock = null; });
+  }).catch(() => {});
+}
+
 function timerBase() {
   const purpose = app.game.timer.purpose;
   if (purpose === 'tie') return app.game.settings.tieSpeech;
   if (purpose === 'lastWord') return app.game.settings.lastWord;
   if (purpose === 'night') return app.game.settings.nightCheck;
+  if (purpose === 'mafiaMeet') return app.game.settings.mafiaMeet;
+  if (purpose === 'sheriffMark') return app.game.settings.sheriffMark;
+  if (purpose === 'freeSeating') return app.game.settings.freeSeating;
+  if (purpose === 'bestMove') return app.game.settings.bestMove;
+  return speechTimerBase();
+}
+
+function speechTimerBase() {
   const speaker = currentSpeaker();
   if (speaker?.shortSpeechDay && app.game.day >= speaker.shortSpeechDay) return 30;
-  if (speaker?.restrictionDay && app.game.day >= speaker.restrictionDay) return 0;
+  if (speaker?.restrictionDay && app.game.day >= speaker.restrictionDay) return aliveSeats().length <= 4 ? 30 : 0;
   return app.game.settings.speech;
 }
 
@@ -1691,7 +1910,7 @@ function startTimer() {
   prepareTimerAudio();
   app.game.timer.running = true;
   app.game.timer.endsAt = Date.now() + app.game.timer.remaining * 1000;
-  navigator.wakeLock?.request('screen').then(lock => { app.wakeLock = lock; }).catch(() => {});
+  requestGameWakeLock();
   clearInterval(app.timerHandle);
   let lastSecond = app.game.timer.remaining;
   app.timerHandle = setInterval(async () => {
@@ -1731,7 +1950,7 @@ async function beginDay(increment = false) {
   app.game.nominations = [];
   app.game.seats.forEach(seat => { seat.nominatedBy = null; });
   app.game.vote = { counts: {}, tied: [], tieKey: '', tieRound: 0, yes: 0, no: 0 };
-  setTimer(app.game.settings.speech, 'speech');
+  setTimer(speechTimerBase(), 'speech');
   addLog(`Починається день ${app.game.day}.`);
   await saveGame();
   render();
@@ -1818,27 +2037,35 @@ async function finishVote() {
     app.game.vote.counts[last] = (app.game.vote.counts[last] || 0) + voterCount() - used;
     used = voterCount();
   }
-  if (used !== voterCount()) return toast(used > voterCount() ? 'Голосів більше, ніж виборців' : `Не зафіксовано ${voterCount() - used} голосів`);
+  const resolution = resolveVote({
+    candidates,
+    counts: app.game.vote.counts,
+    voterCount: voterCount(),
+    phase: app.game.phase,
+    previousTieKey: app.game.vote.tieKey
+  });
+  if (resolution.kind === 'invalid') return toast(resolution.message);
   pushUndo();
-  const max = Math.max(...candidates.map(number => app.game.vote.counts[number] || 0));
-  const top = candidates.filter(number => (app.game.vote.counts[number] || 0) === max);
   addLog(`Голосування: ${candidates.map(number => `№${number} — ${app.game.vote.counts[number] || 0}`).join(', ')}.`);
-  if (top.length === 1) return eliminate(top[0], 'денне голосування', true);
-  const key = [...top].sort((a, b) => a - b).join('-');
-  if (app.game.phase === 'tieVote' && key === app.game.vote.tieKey) {
+  if (resolution.kind === 'eliminate') return eliminate(resolution.number, 'денне голосування', true);
+  if (resolution.kind === 'allTie') {
+    if (!canLiftTiedCandidates({ day: app.game.day, aliveCount: aliveSeats().length, tiedCount: resolution.tied.length })) {
+      addLog(`Підйом ${resolution.tied.length} кандидатів у цій ігровій ситуації не проводиться.`);
+      return goNight();
+    }
     app.game.phase = 'allTie';
-    app.game.vote.tied = top;
+    app.game.vote.tied = resolution.tied;
     app.game.vote.yes = 0;
     app.game.vote.no = 0;
-    addLog(`Повторна нічия між ${top.map(number => `№${number}`).join(', ')}.`);
+    addLog(`Повторна нічия між ${resolution.tied.map(number => `№${number}`).join(', ')}.`);
   } else {
-    app.game.vote.tieKey = key;
-    app.game.vote.tied = top;
+    app.game.vote.tieKey = resolution.tieKey;
+    app.game.vote.tied = resolution.tied;
     app.game.vote.counts = {};
     app.game.phase = 'tieSpeech';
     app.game.speakerIndex = 0;
     setTimer(app.game.settings.tieSpeech, 'tie');
-    addLog(`Автокатастрофа: ${top.map(number => `№${number}`).join(', ')}.`);
+    addLog(`Автокатастрофа: ${resolution.tied.map(number => `№${number}`).join(', ')}.`);
   }
   await saveGame(); render();
 }
@@ -1864,7 +2091,7 @@ async function finishAllTie() {
     const numbers = [...app.game.vote.tied];
     addLog(`Більшість за вихід усіх: ${numbers.map(number => `№${number}`).join(', ')}.`);
     numbers.forEach(number => eliminateSeatOnly(number, 'автокатастрофа'));
-    if (await checkVictory()) return;
+    app.game.pendingWinner = victoryForSeats(app.game.seats);
     app.game.phase = 'lastWord';
     app.game.lastWordSeat = numbers.shift();
     app.game.pendingLastWords = numbers;
@@ -1880,17 +2107,35 @@ async function finishAllTie() {
 function eliminateSeatOnly(number, reason) {
   const seat = seatByNo(number);
   if (!seat || seat.status !== 'alive') return;
+  const currentNumber = currentSpeaker()?.number;
+  const removedSpeakerIndex = app.game.phase === 'day' && app.game.subphase === 'speeches'
+    ? app.game.speakerOrder.indexOf(number)
+    : -1;
   seat.status = 'dead';
   seat.eliminatedReason = reason;
   seat.nominatedBy = null;
   app.game.nominations = app.game.nominations.filter(value => value !== number);
+  if (removedSpeakerIndex >= 0) {
+    app.game.speakerOrder.splice(removedSpeakerIndex, 1);
+    if (removedSpeakerIndex < app.game.speakerIndex) app.game.speakerIndex -= 1;
+    if (!app.game.speakerOrder.length) {
+      app.game.speakerIndex = 0;
+      app.game.subphase = 'dayEnd';
+      stopTimer();
+    } else if (currentNumber === number) {
+      app.game.speakerIndex = Math.min(removedSpeakerIndex, app.game.speakerOrder.length - 1);
+      setTimer(timerBase(), 'speech');
+    }
+  }
   addLog(`№${number} ${seat.name} вибуває (${reason}).`);
 }
 
 async function eliminate(number, reason, lastWord = true) {
   eliminateSeatOnly(number, reason);
-  if (await checkVictory()) return;
+  const winner = victoryForSeats(app.game.seats);
+  if (winner && !lastWord) return finishGame(winner);
   if (lastWord) {
+    app.game.pendingWinner = winner;
     app.game.phase = 'lastWord';
     app.game.lastWordSeat = number;
     app.game.pendingLastWords = [];
@@ -1907,8 +2152,30 @@ async function finishLastWord() {
     setTimer(app.game.settings.lastWord, 'lastWord');
     await saveGame(); render(); return;
   }
+  if (app.game.pendingWinner) {
+    const winner = app.game.pendingWinner;
+    app.game.pendingWinner = null;
+    return finishGame(winner);
+  }
   if (app.game.afterNightKill) return beginDay(true);
   return goNight();
+}
+
+async function finishBestMove(skip = false) {
+  const selected = app.game.bestMove?.selected || [];
+  if (!skip && selected.length !== 3) return toast(`Оберіть ще ${3 - selected.length} ${selected.length === 2 ? 'номер' : 'номери'} або натисніть «Без КХ»`);
+  pushUndo();
+  stopTimer();
+  const seatNumber = app.game.bestMove?.seat || app.game.lastWordSeat;
+  addLog(skip
+    ? `Кращий хід №${seatNumber}: без трійки.`
+    : `Кращий хід №${seatNumber}: ${selected.map(number => `№${number}`).join(', ')}.`);
+  app.game.phase = 'lastWord';
+  app.game.lastWordSeat = seatNumber;
+  app.game.pendingLastWords = [];
+  app.game.afterNightKill = true;
+  setTimer(app.game.settings.lastWord, 'lastWord');
+  await saveGame(); render();
 }
 
 async function goNight() {
@@ -1926,11 +2193,16 @@ async function finishNightCheck() {
   const isDon = app.game.night.step === 2;
   const number = isDon ? app.game.night.donCheck : app.game.night.sheriffCheck;
   if (!number) return;
+  if (!app.game.night.resultOpen) return toast('Спочатку покажіть гравцеві сигнал результату');
   const seat = seatByNo(number);
+  if (!seat || seat.status !== 'alive') return toast('Цей гравець уже вибув — оберіть іншу ціль');
+  pushUndo();
   const hit = isDon ? seat.role === 'sheriff' : teamOf(seat) === 'black';
   addLog(`${isDon ? 'Дон' : 'Шериф'} перевіряє №${number}: ${isDon ? (hit ? 'Шериф' : 'не Шериф') : (hit ? 'чорний' : 'червоний')}.`, true);
   app.game.night.resultOpen = false;
   app.game.night.step += 1;
+  if (app.game.night.step < 4) setTimer(app.game.settings.nightCheck, 'night');
+  else stopTimer();
   await saveGame(); render();
 }
 
@@ -1938,8 +2210,22 @@ async function wakeCity() {
   pushUndo();
   const number = app.game.night.target;
   if (number == null || number === -1) return beginDay(true);
+  const target = seatByNo(number);
+  if (!target || target.status !== 'alive') return toast('Нічна ціль уже вибула — виправте постріл');
+  const departedBeforeShot = app.game.seats.filter(seat => seat.status === 'dead').length;
+  const firstNightKill = app.game.day === 1 && departedBeforeShot < 2 && !app.game.seats.some(seat => seat.eliminatedReason === 'нічний постріл');
   eliminateSeatOnly(number, 'нічний постріл');
-  if (await checkVictory()) return;
+  app.game.pendingWinner = victoryForSeats(app.game.seats);
+  if (firstNightKill) {
+    app.game.phase = 'bestMove';
+    app.game.lastWordSeat = number;
+    app.game.bestMove = { seat: number, selected: [] };
+    app.game.pendingLastWords = [];
+    app.game.afterNightKill = true;
+    setTimer(app.game.settings.bestMove, 'bestMove');
+    addLog(`Гравець №${number} отримує право на Кращий хід.`);
+    await saveGame(); render(); return;
+  }
   app.game.phase = 'lastWord';
   app.game.lastWordSeat = number;
   app.game.pendingLastWords = [];
@@ -1949,22 +2235,21 @@ async function wakeCity() {
 }
 
 async function checkVictory() {
-  const alive = aliveSeats();
-  const black = alive.filter(seat => teamOf(seat) === 'black').length;
-  const red = alive.length - black;
-  if (black === 0) return finishGame('red');
-  if (black >= red) return finishGame('black');
+  const winner = victoryForSeats(app.game.seats);
+  if (winner) return finishGame(winner);
   return false;
 }
 
 async function finishGame(winner) {
+  if (!['red', 'black', 'draw'].includes(winner)) return false;
   stopTimer();
   app.game.phase = 'finished';
   app.game.status = 'finished';
   app.game.winner = winner;
+  app.game.pendingWinner = null;
   app.game.endedAt = nowIso();
   app.game.durationSeconds = Math.max(0, Math.round((new Date(app.game.endedAt) - new Date(app.game.startedAt)) / 1000));
-  addLog(winner === 'red' ? 'Перемога мирного міста.' : 'Перемога чорної команди.');
+  addLog(winner === 'red' ? 'Перемога мирного міста.' : winner === 'black' ? 'Перемога чорної команди.' : 'Гру завершено нічиєю.');
   await saveGame();
   try {
     await publishFinishedGame(app.game);
@@ -1994,6 +2279,54 @@ async function compressImage(file) {
     if (encoded.length <= 350000) return encoded;
   }
   throw new Error('Не вдалося достатньо стиснути фото');
+}
+
+async function presetAvatarDataUrl(source) {
+  if (!ANIMAL_AVATARS.includes(source)) throw new Error('Невідомий базовий аватар');
+  if (presetAvatarDataUrls.has(source)) return presetAvatarDataUrls.get(source);
+  const response = await fetch(source);
+  if (!response.ok) throw new Error('Не вдалося завантажити базовий аватар');
+  const blob = await response.blob();
+  const encoded = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Не вдалося прочитати аватар'));
+    reader.readAsDataURL(blob);
+  });
+  if (!/^data:image\/(?:webp|jpeg|png);base64,/i.test(encoded) || encoded.length > 350000) throw new Error('Базовий аватар має некоректний формат');
+  presetAvatarDataUrls.set(source, encoded);
+  return encoded;
+}
+
+async function saveSetupPlayerAvatar(seatNumber, source) {
+  const seat = app.draft?.seats.find(item => item.number === Number(seatNumber));
+  const current = seat?.profileId ? playerById(seat.profileId) : null;
+  if (!seat || !editableManualPlayer(current)) throw new Error('Аватар можна змінювати лише для ручного профілю поза активною грою');
+  const avatarDataUrl = await presetAvatarDataUrl(source);
+  const locallyStored = app.localPlayers.some(item => item.id === current.id);
+  const player = { ...current, avatar: avatarDataUrl, avatarPreset: source, updatedAt: nowIso() };
+  if (locallyStored) await putOne('players', player);
+  let directorySynced = LOCAL_AUTH_TEST;
+  if (!LOCAL_AUTH_TEST && app.authUser) {
+    try {
+      const shared = await saveSharedManualPlayer(app.authUser, app.hostProfile, player, { force: true });
+      player.cloudManualId = shared.id;
+      player.cloudOwnerUid = shared.ownerUid;
+      player.source = locallyStored ? 'local+shared-manual' : 'shared-manual';
+      if (locallyStored) await putOne('players', player);
+      directorySynced = true;
+    } catch (error) {
+      if (!locallyStored) throw error;
+    }
+  }
+  if (locallyStored) {
+    const localIndex = app.localPlayers.findIndex(item => item.id === player.id);
+    if (localIndex >= 0) app.localPlayers[localIndex] = clone(player);
+  }
+  const cloudIndex = app.cloudPlayers.findIndex(item => player.cloudManualId && item.cloudManualId === player.cloudManualId);
+  if (cloudIndex >= 0) app.cloudPlayers[cloudIndex] = { ...app.cloudPlayers[cloudIndex], avatar: avatarDataUrl, avatarPreset: source, updatedAt: player.updatedAt };
+  mergePlayerSources();
+  return directorySynced;
 }
 
 function captureHostProfileDraft() {
@@ -2029,6 +2362,7 @@ async function savePlayer(form) {
     contact: String(data.get('contact') || '').trim(),
     notes: String(data.get('notes') || '').trim(),
     avatar: current.avatar || '',
+    avatarPreset: current.avatarPreset || '',
     cloudManualId: current.cloudManualId || '',
     cloudOwnerUid: current.cloudOwnerUid || '',
     source: current.source || '',
@@ -2088,6 +2422,7 @@ async function loadHostProfile() {
     createdAt: stored?.createdAt || timestamp,
     updatedAt: stored?.updatedAt || timestamp
   };
+  app.profilePhotoSync = { status: app.hostProfile.avatar ? 'pending' : 'idle' };
   if (!stored || stored.email !== app.authUser.email || stored.googleName !== app.authUser.googleName || stored.googlePhotoURL !== app.authUser.googlePhotoURL) {
     await setSetting('hostProfile', app.hostProfile);
   }
@@ -2104,6 +2439,7 @@ async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
   if (!app.authUser || LOCAL_AUTH_TEST) return;
   if (cloudDirectoryPromise) return cloudDirectoryPromise;
   app.cloudDirectory = { status: 'loading', error: '', fromCache: false };
+  if (app.hostProfile?.avatar) app.profilePhotoSync = { status: 'syncing' };
   render();
   cloudDirectoryPromise = (async () => {
     const remote = await reconcileOwnCommunityProfile(app.authUser, app.hostProfile, { hasLocalProfile });
@@ -2120,7 +2456,16 @@ async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
       };
       await setSetting('hostProfile', app.hostProfile);
     }
+    app.profilePhotoSync = {
+      status: app.hostProfile?.avatar && remote?.photoDataURL === app.hostProfile.avatar
+        ? 'synced'
+        : app.hostProfile?.avatar ? 'pending' : 'idle'
+    };
     await subscribeCommunityProfiles((members, metadata) => {
+      const ownMember = members.find(member => member.uid === app.authUser?.uid);
+      if (app.hostProfile?.avatar && ownMember?.photoDataURL === app.hostProfile.avatar) {
+        app.profilePhotoSync = { status: 'synced' };
+      }
       app.cloudPlayers = members.map(cloudPlayer);
       mergePlayerSources();
       app.cloudDirectory = {
@@ -2130,6 +2475,7 @@ async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
       };
       render();
     }, error => {
+      if (app.hostProfile?.avatar) app.profilePhotoSync = { status: 'error' };
       app.cloudDirectory = { status: 'error', error: cloudDirectoryError(error), fromCache: false };
       render();
     });
@@ -2138,6 +2484,7 @@ async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
   try {
     await cloudDirectoryPromise;
   } catch (error) {
+    if (app.hostProfile?.avatar) app.profilePhotoSync = { status: 'error' };
     app.cloudDirectory = { status: 'error', error: cloudDirectoryError(error), fromCache: false };
     render();
   } finally {
@@ -2336,6 +2683,29 @@ async function deleteGameEverywhere(game) {
   await refreshData();
 }
 
+async function rememberFinishedGameDelete(gameId) {
+  const pending = [...new Set([...(await getSetting('pendingFinishedGameDeletes', [])), gameId])];
+  await setSetting('pendingFinishedGameDeletes', pending);
+}
+
+async function flushPendingFinishedGameDeletes() {
+  if (!app.authUser || LOCAL_AUTH_TEST || !navigator.onLine) return;
+  const pending = await getSetting('pendingFinishedGameDeletes', []);
+  const remaining = [];
+  for (const gameId of pending) {
+    try { await deleteFinishedCommunityGame(app.authUser, gameId); }
+    catch { remaining.push(gameId); }
+  }
+  await setSetting('pendingFinishedGameDeletes', remaining);
+}
+
+async function removeFinishedResultForReopen(gameId) {
+  app.cloudGames = app.cloudGames.filter(game => !(game.id === gameId && game.status === 'finished'));
+  if (LOCAL_AUTH_TEST) return;
+  try { await deleteFinishedCommunityGame(app.authUser, gameId); }
+  catch { await rememberFinishedGameDelete(gameId); }
+}
+
 async function deleteCurrentAppAccount() {
   if (profileIsInActiveGame(`google_${app.authUser?.uid || ''}`)) {
     throw new Error('Завершіть поточну гру перед видаленням профілю');
@@ -2383,6 +2753,7 @@ async function saveHostProfile(form) {
     updatedAt: nowIso()
   };
   await setSetting('hostProfile', app.hostProfile);
+  app.profilePhotoSync = { status: app.hostProfile.avatar ? 'syncing' : 'idle' };
   let cloudSaved = true;
   if (!LOCAL_AUTH_TEST) {
     try {
@@ -2392,6 +2763,9 @@ async function saveHostProfile(form) {
       app.cloudDirectory = { status: 'error', error: cloudDirectoryError(error), fromCache: false };
     }
   }
+  app.profilePhotoSync = {
+    status: app.hostProfile.avatar ? (cloudSaved ? 'synced' : 'error') : 'idle'
+  };
   app.modal = null;
   render();
   toast(cloudSaved ? 'Профіль Enjoy синхронізовано' : 'Збережено локально; хмарна синхронізація не вдалася');
@@ -2399,7 +2773,7 @@ async function saveHostProfile(form) {
 
 function protocolText(game = app.game) {
   if (!game) return '';
-  const winner = game.winner === 'red' ? 'Мирне місто' : game.winner === 'black' ? 'Чорна команда' : 'не визначено';
+  const winner = game.winner === 'red' ? 'Мирне місто' : game.winner === 'black' ? 'Чорна команда' : game.winner === 'draw' ? 'Нічия' : 'не визначено';
   return [
     'MAFIA DESK — ПРОТОКОЛ',
     `Гра: ${game.title}`,
@@ -2425,8 +2799,25 @@ async function copyText(text, success = 'Скопійовано') {
   toast(success);
 }
 
+const GUARDED_GAME_ACTIONS = new Set([
+  'start-game', 'reveal-next', 'zero-night-sheriff', 'zero-night-free-seating', 'zero-to-day',
+  'timer-toggle', 'next-speaker', 'back-to-speeches', 'start-vote', 'finish-vote',
+  'next-tie-speaker', 'finish-all-tie', 'finish-last-word', 'finish-best-move', 'skip-best-move',
+  'night-next', 'night-miss', 'night-shot-done', 'night-check-done', 'night-skip-check', 'wake-city',
+  'add-fault', 'remove-fault', 'nominate', 'remove-nomination', 'manual-eliminate', 'restore-seat',
+  'undo', 'finish-red', 'finish-black', 'finish-draw'
+]);
+
 async function handleAction(action, element, sourceEvent) {
   const number = Number(element.dataset.seat);
+  const guardedGameAction = GUARDED_GAME_ACTIONS.has(action);
+  if (guardedGameAction && app.gameTransitionBusy) return;
+  if (guardedGameAction) {
+    app.gameTransitionBusy = true;
+    element.disabled = true;
+    element.setAttribute('aria-busy', 'true');
+  }
+  try {
   if (action === 'auth-signin') {
     app.authBusy = true; app.authError = ''; render();
     try {
@@ -2458,6 +2849,36 @@ async function handleAction(action, element, sourceEvent) {
     location.reload();
   } else if (action === 'edit-host-profile') {
     app.modal = { type: 'host-profile' }; render();
+  } else if (action === 'open-order-panel') {
+    app.order = { busy: false, status: 'idle', error: '', lastItem: '' };
+    app.modal = { type: 'order' };
+    render();
+  } else if (action === 'place-order') {
+    if (app.modal?.type !== 'order' || app.order.busy) return;
+    const item = element.dataset.item;
+    if (!ORDER_MENU.some(option => option.key === item)) return toast('Невідома позиція меню');
+    app.order = { busy: true, status: 'loading', error: '', lastItem: item };
+    render();
+    try {
+      const idToken = LOCAL_AUTH_TEST ? '' : await getFirebaseIdToken();
+      const activeGame = app.game?.status === 'active' && canManageGame(app.game)
+        ? app.game
+        : activeGames().find(game => canManageGame(game));
+      await sendTelegramOrder({
+        idToken,
+        item,
+        sender: app.hostProfile?.nickname || app.hostProfile?.displayName || app.authUser?.googleName || 'Гість Enjoy',
+        game: activeGame?.title || '',
+        testMode: LOCAL_AUTH_TEST
+      });
+      app.order = { busy: false, status: 'success', error: '', lastItem: item };
+      render();
+      vibrate([40, 30, 70]);
+      toast('Замовлення надіслано');
+    } catch (error) {
+      app.order = { busy: false, status: 'error', error: error?.message || 'Не вдалося надіслати замовлення', lastItem: item };
+      render();
+    }
   } else if (action === 'open-media-panel') {
     app.modal = { type: 'media' }; render();
   } else if (action === 'media-play') {
@@ -2593,6 +3014,26 @@ async function handleAction(action, element, sourceEvent) {
     if (!app.draft?.seats.some(seat => seat.number === number)) return;
     app.modal = { type: 'setup-move', seat: number };
     render();
+  } else if (action === 'open-setup-avatar') {
+    const seat = app.draft?.seats.find(item => item.number === number);
+    const player = seat?.profileId ? playerById(seat.profileId) : null;
+    if (!editableManualPlayer(player)) return toast('Базовий аватар можна змінити лише для ручного профілю');
+    app.modal = { type: 'setup-avatar', seat: number, busy: false };
+    render();
+  } else if (action === 'choose-setup-avatar') {
+    if (app.modal?.type !== 'setup-avatar' || app.modal.busy) return;
+    app.modal.busy = true;
+    render();
+    try {
+      const synced = await saveSetupPlayerAvatar(number, element.dataset.avatar);
+      app.modal = null;
+      render();
+      toast(synced ? 'Аватар профілю оновлено' : 'Аватар збережено на пристрої · синхронізуємо пізніше');
+    } catch (error) {
+      if (app.modal?.type === 'setup-avatar') app.modal.busy = false;
+      render();
+      toast(error?.message || 'Не вдалося змінити аватар');
+    }
   } else if (action === 'move-setup-to') {
     const source = app.draft?.seats.find(seat => seat.number === Number(element.dataset.from));
     const target = app.draft?.seats.find(seat => seat.number === Number(element.dataset.to));
@@ -2616,6 +3057,9 @@ async function handleAction(action, element, sourceEvent) {
     app.draft.seats.forEach((seat, index) => Object.assign(seat, { profileId: selectedPlayers[index].id, name: preferredPlayerName(selectedPlayers[index]), autoGuestName: false }));
     render(); toast('Обрано інших випадкових 10 гравців');
   } else if (action === 'start-game') {
+    const existingActiveGame = activeGames().find(game => !game.publicOnly && canManageGame(game));
+    if (existingActiveGame) return toast(`Спочатку завершіть активну гру «${existingActiveGame.title}»`);
+    prepareTimerAudio();
     const selected = app.draft.seats.map(seat => seat.profileId).filter(Boolean);
     if (new Set(selected).size !== selected.length) return toast('Один профіль не можна посадити двічі');
     const devicePreferences = { theme: app.settings.theme, sound: app.settings.sound, haptics: app.settings.haptics };
@@ -2628,20 +3072,40 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'resume-game') {
     const game = gameById(element.dataset.id);
     if (!game || game.publicOnly || !canManageGame(game)) return toast('Цю гру може продовжити лише її ведучий на пристрої, де її створено');
-    app.game = game; app.undo = []; navigate(app.game.phase === 'reveal' ? 'reveal' : 'game');
+    app.game = normalizeGameState(game, DEFAULT_SETTINGS, { closeReveal: true }); app.undo = []; navigate(app.game.phase === 'reveal' ? 'reveal' : 'game');
   } else if (action === 'watch-game') {
     const game = gameById(element.dataset.id);
     if (!game || game.status !== 'active') return toast('Ця гра вже завершена або недоступна');
     app.game = game; app.undo = []; navigate(`observer/${game.id}`);
   } else if (action === 'reveal-role') {
-    app.game.revealOpen = true; await saveGame({ broadcast: false }); render();
+    app.game.revealOpen = true; render();
   } else if (action === 'reveal-next') {
     app.game.revealOpen = false;
     if (app.game.revealIndex < app.game.seats.length - 1) app.game.revealIndex += 1;
-    else { app.game.phase = 'zeroNight'; setTimer(app.game.settings.nightCheck, 'night'); addLog('Нульова ніч: чорна команда знайомиться.'); }
+    else {
+      app.game.phase = 'zeroNight';
+      app.game.zeroNight = { step: 0 };
+      setTimer(app.game.settings.mafiaMeet, 'mafiaMeet');
+      addLog('Нульова ніч: чорна команда знайомиться, Дон задає порядок відстрілу.');
+    }
     await saveGame();
     if (app.game.phase === 'zeroNight') navigate('game'); else render();
+  } else if (action === 'zero-night-sheriff') {
+    if (app.game.phase !== 'zeroNight' || app.game.zeroNight?.step !== 0) return;
+    pushUndo();
+    app.game.zeroNight.step = 1;
+    setTimer(app.game.settings.sheriffMark, 'sheriffMark');
+    addLog('Нульова ніч: Мафія засинає, Шериф позначає себе ведучому.', true);
+    await saveGame(); render();
+  } else if (action === 'zero-night-free-seating') {
+    if (app.game.phase !== 'zeroNight' || app.game.zeroNight?.step !== 1) return;
+    pushUndo();
+    app.game.zeroNight.step = 2;
+    setTimer(app.game.settings.freeSeating, 'freeSeating');
+    addLog('Нульова ніч: починається фаза вільної посадки.');
+    await saveGame(); render();
   } else if (action === 'zero-to-day') {
+    if (app.game.phase !== 'zeroNight' || app.game.zeroNight?.step !== 2) return toast('Спочатку завершіть усі кроки нульової ночі');
     pushUndo(); await beginDay(false);
   } else if (action === 'timer-toggle') {
     app.game.timer.running ? stopTimer() : startTimer(); await saveGame(); render();
@@ -2678,24 +3142,62 @@ async function handleAction(action, element, sourceEvent) {
   else if (action === 'all-plus' || action === 'all-minus') { const kind = element.dataset.kind; const delta = action === 'all-plus' ? 1 : -1; const used = app.game.vote.yes + app.game.vote.no; if (!(delta > 0 && used >= voterCount())) app.game.vote[kind] = Math.max(0, app.game.vote[kind] + delta); await saveGame(); render(); }
   else if (action === 'finish-all-tie') await finishAllTie();
   else if (action === 'finish-last-word') await finishLastWord();
-  else if (action === 'night-next') { pushUndo(); app.game.night.step += 1; setTimer(app.game.settings.nightCheck, 'night'); await saveGame(); render(); }
-  else if (action === 'night-target') { if (app.game.night.step === 1) app.game.night.target = number; if (app.game.night.step === 2) app.game.night.donCheck = number; if (app.game.night.step === 3) app.game.night.sheriffCheck = number; app.game.night.resultOpen = false; await saveGame(); render(); }
-  else if (action === 'night-miss') { pushUndo(); app.game.night.target = -1; app.game.night.step = 2; addLog(`Ніч ${app.game.day}: мафія промахнулася.`); await saveGame(); render(); }
-  else if (action === 'night-shot-done') { pushUndo(); addLog(`Ніч ${app.game.day}: постріл у №${app.game.night.target}.`, true); app.game.night.step = 2; await saveGame(); render(); }
-  else if (action === 'night-show-result') { app.game.night.resultOpen = true; render(); }
-  else if (action === 'night-hide-result') { app.game.night.resultOpen = false; render(); }
+  else if (action === 'best-move-target') {
+    const allowed = aliveSeats().map(seat => seat.number);
+    app.game.bestMove.selected = toggleBestMoveCandidate(app.game.bestMove?.selected, number, allowed);
+    render();
+  }
+  else if (action === 'finish-best-move') await finishBestMove(false);
+  else if (action === 'skip-best-move') await finishBestMove(true);
+  else if (action === 'night-next') {
+    if (app.game.phase !== 'night' || app.game.night.step !== 0) return;
+    pushUndo(); app.game.night.step = 1; setTimer(app.game.settings.nightCheck, 'night'); await saveGame(); render();
+  }
+  else if (action === 'night-target') {
+    if (!nightTargetIsAllowed(app.game, number)) return toast('Можна обрати лише живого гравця');
+    if (app.game.night.step === 1) app.game.night.target = number;
+    if (app.game.night.step === 2) app.game.night.donCheck = number;
+    if (app.game.night.step === 3) app.game.night.sheriffCheck = number;
+    app.game.night.resultOpen = false; await saveGame(); render();
+  }
+  else if (action === 'night-miss') {
+    if (app.game.night.step !== 1) return;
+    pushUndo(); app.game.night.target = -1; app.game.night.step = 2; setTimer(app.game.settings.nightCheck, 'night'); addLog(`Ніч ${app.game.day}: мафія промахнулася.`); await saveGame(); render();
+  }
+  else if (action === 'night-shot-done') {
+    if (!nightTargetIsAllowed(app.game, app.game.night.target)) return toast('Оберіть живу ціль пострілу');
+    pushUndo(); addLog(`Ніч ${app.game.day}: постріл у №${app.game.night.target}.`, true); app.game.night.step = 2; setTimer(app.game.settings.nightCheck, 'night'); await saveGame(); render();
+  }
+  else if (action === 'night-show-result') {
+    const target = app.game.night.step === 2 ? app.game.night.donCheck : app.game.night.sheriffCheck;
+    if (!nightTargetIsAllowed(app.game, target)) return toast('Оберіть живого гравця для перевірки');
+    stopTimer(); app.game.night.resultOpen = true; render();
+  }
+  else if (action === 'night-hide-result') { app.game.night.resultOpen = false; setTimer(app.game.settings.nightCheck, 'night'); render(); }
   else if (action === 'night-check-done') await finishNightCheck();
-  else if (action === 'night-skip-check') { app.game.night.step += 1; app.game.night.resultOpen = false; await saveGame(); render(); }
+  else if (action === 'night-skip-check') {
+    pushUndo(); app.game.night.step += 1; app.game.night.resultOpen = false;
+    if (app.game.night.step < 4) setTimer(app.game.settings.nightCheck, 'night'); else stopTimer();
+    await saveGame(); render();
+  }
   else if (action === 'wake-city') await wakeCity();
   else if (action === 'toggle-secret') { app.game.showSecrets = !app.game.showSecrets; await saveGame({ broadcast: false }); render(); }
   else if (action === 'undo') {
     if (!app.undo.length) return toast('Немає дії для скасування');
-    stopTimer(); app.game = app.undo.pop(); app.game.timer.running = false; await saveGame(); render(); toast('Останню дію скасовано');
+    const finishedGameId = app.game?.status === 'finished' ? app.game.id : '';
+    stopTimer();
+    app.game = normalizeGameState(app.undo.pop(), DEFAULT_SETTINGS, { closeReveal: true });
+    if (finishedGameId) await removeFinishedResultForReopen(finishedGameId);
+    await saveGame(); render(); toast(finishedGameId ? 'Результат скасовано · гру відновлено' : 'Останню дію скасовано');
   } else if (action === 'copy-protocol') await copyText(protocolText(element.dataset.id ? gameById(element.dataset.id) : app.game), 'Протокол скопійовано');
   else if (action === 'view-protocol') { app.modal = { type: 'protocol', gameId: element.dataset.id }; render(); }
   else if (action === 'open-observer') window.open(`${location.pathname}${location.search}#observer/${app.game?.id || ''}`, '_blank', 'noopener');
   else if (action === 'end-game-manual') { app.modal = { type: 'confirm', title: 'Завершити гру?', text: 'Оберіть переможця після підтвердження: поточна версія зафіксує результат за співвідношенням живих команд.', confirmLabel: 'Завершити', confirm: { kind: 'finish' } }; render(); }
-  else if (action === 'finish-red' || action === 'finish-black') { app.modal = null; await finishGame(action === 'finish-red' ? 'red' : 'black'); }
+  else if (action === 'finish-red' || action === 'finish-black' || action === 'finish-draw') {
+    pushUndo();
+    app.modal = null;
+    await finishGame(action === 'finish-red' ? 'red' : action === 'finish-black' ? 'black' : 'draw');
+  }
   else if (action === 'rematch') {
     const previous = app.game; app.draft = createDraft(); app.draft.title = `${previous.title} · реванш`; app.draft.venue = previous.venue; app.draft.seats = previous.seats.map(seat => ({ number: seat.number, profileId: seat.profileId || '', name: seat.name, autoGuestName: false })); navigate('setup');
   } else if (action === 'setting-sound' || action === 'setting-haptics') {
@@ -2719,6 +3221,16 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'drive-disconnect') { clearDriveAccess(); render(); toast('Google Drive відключено'); }
   else if (action === 'cloud-push') { try { toast('Створюю резервну копію…'); await pushToDrive(); app.cloudSync = await getSetting('lastCloudSync'); render(); toast('Збережено у Google Drive'); } catch (error) { toast(error.message); } }
   else if (action === 'cloud-pull') { try { toast('Відновлюю дані…'); await pullFromDrive(); await loadAppData(); await syncLocalFinishedGames(); render(); toast('Дані відновлено й архів синхронізовано'); } catch (error) { toast(error.message); } }
+  } finally {
+    if (guardedGameAction) {
+      app.gameTransitionBusy = false;
+      requestGameWakeLock();
+      if (element.isConnected) {
+        element.disabled = false;
+        element.removeAttribute('aria-busy');
+      }
+    }
+  }
 }
 
 async function handleInput(element) {
@@ -2766,6 +3278,7 @@ async function handleChange(element) {
     try {
       toast(element.dataset.input === 'avatar-camera' ? 'Обробляю знімок…' : 'Обробляю фото…');
       app.modal.player.avatar = await compressImage(element.files[0]);
+      app.modal.player.avatarPreset = '';
       render();
       toast('Фото готове');
     } catch (error) { toast(error.message); }
@@ -2814,6 +3327,7 @@ async function activateAuthenticatedUser(user) {
       connectCloudArchive(),
       connectPlayerLinks()
     ]);
+    await flushPendingFinishedGameDeletes();
   })();
   try { await activationPromise; }
   catch (error) {
@@ -2840,6 +3354,7 @@ function clearAuthenticatedState() {
   activationUid = null;
   app.authUser = null;
   app.hostProfile = null;
+  app.profilePhotoSync = { status: 'idle' };
   app.localPlayers = [];
   app.cloudPlayers = [];
   app.players = [];
@@ -2879,12 +3394,12 @@ async function loadAppData() {
   app.route = route.route;
   if (route.id) app.game = await getOne('games', route.id) || app.game;
   if (!app.game) app.game = activeGames()[0] || null;
-  if (app.game?.timer) app.game.timer.running = false;
-  if (app.game?.timer) delete app.game.timer.endsAt;
+  if (app.game) app.game = normalizeGameState(app.game, DEFAULT_SETTINGS, { closeReveal: true });
   return hasLocalProfile;
 }
 
 async function onRouteChange() {
+  if (app.route === 'reveal' && app.game?.revealOpen) app.game.revealOpen = false;
   const moderatorTimerWasRunning = Boolean(app.route !== 'observer' && app.game?.timer?.running && !app.game.publicOnly && canManageGame(app.game));
   if (moderatorTimerWasRunning) {
     stopTimer();
@@ -2901,6 +3416,8 @@ async function onRouteChange() {
   app.modal = null;
   closeOverlays();
   render();
+  if (['game', 'reveal'].includes(app.route)) requestGameWakeLock();
+  else if (app.wakeLock) { app.wakeLock.release?.().catch(() => {}); app.wakeLock = null; }
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
@@ -2914,7 +3431,12 @@ document.addEventListener('click', async event => {
   if (!target) return;
   if (target.classList.contains('modal-backdrop') && target !== event.target) return;
   event.preventDefault();
-  await handleAction(target.dataset.action, target, event);
+  try {
+    await handleAction(target.dataset.action, target, event);
+  } catch (error) {
+    console.error(error);
+    toast(error?.message || 'Не вдалося виконати дію. Стан гри не змінено.');
+  }
 });
 
 document.addEventListener('input', event => handleInput(event.target));
@@ -2929,7 +3451,7 @@ document.addEventListener('submit', async event => {
   } else if (event.target.dataset.form === 'game-settings') {
     event.preventDefault();
     const data = new FormData(event.target);
-    for (const key of ['speech', 'tieSpeech', 'lastWord', 'nightCheck']) {
+    for (const key of ['speech', 'tieSpeech', 'lastWord', 'nightCheck', 'mafiaMeet', 'sheriffMark', 'freeSeating', 'bestMove']) {
       app.game.settings[key] = Math.max(5, Math.min(180, Number(data.get(key)) || DEFAULT_SETTINGS[key]));
     }
     app.game.settings.penaltyMode = data.get('penaltyMode') === 'club' ? 'club' : 'tournament';
@@ -2956,9 +3478,20 @@ window.addEventListener('online', () => {
   if (app.authUser && ['error', 'offline'].includes(app.cloudArchive.status)) connectCloudArchive();
   if (app.authUser) syncSharedManualPlayers().catch(() => {});
   if (app.authUser) connectPlayerLinks().catch(() => {});
+  if (app.authUser) flushPendingFinishedGameDeletes().catch(() => {});
 });
 window.addEventListener('offline', () => toast('Офлайн-режим: локальна гра продовжується'));
-window.addEventListener('pagehide', () => { if (app.route === 'game' && app.game?.timer.running) { stopTimer(); saveGame(); } });
+window.addEventListener('pagehide', () => {
+  if (app.game?.phase === 'reveal') app.game.revealOpen = false;
+  if (app.route === 'game' && app.game?.timer.running) { stopTimer(); saveGame().catch(() => {}); }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && app.game?.phase === 'reveal' && app.game.revealOpen) {
+    app.game.revealOpen = false;
+    saveGame({ broadcast: false }).catch(() => {});
+  }
+  if (!document.hidden) requestGameWakeLock();
+});
 
 channel?.addEventListener('message', event => {
   if (event.data?.type !== 'game' || app.route !== 'observer') return;

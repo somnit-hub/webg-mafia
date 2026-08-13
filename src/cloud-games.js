@@ -1,7 +1,8 @@
 import { getCommunityFirestore } from './cloud-profiles.js';
+import { ACTIVE_GAME_PHASES } from './game-engine.js';
 
 const COMMUNITY_ID = 'enjoy';
-const ACTIVE_PHASES = new Set(['reveal', 'zeroNight', 'day', 'vote', 'tieSpeech', 'tieVote', 'allTie', 'lastWord', 'night']);
+const ACTIVE_PHASES = new Set(ACTIVE_GAME_PHASES);
 let stopArchive = null;
 
 function clean(value, maximum) {
@@ -95,7 +96,7 @@ export function createActiveGameDocument(user, profile, game) {
 }
 
 export function createFinishedGameDocument(user, profile, game) {
-  if (game?.status !== 'finished' || !['red', 'black'].includes(game.winner)) {
+  if (game?.status !== 'finished' || !['red', 'black', 'draw'].includes(game.winner)) {
     throw new Error('До спільного архіву можна додати лише завершену гру');
   }
   return {
@@ -129,7 +130,7 @@ function finishedGameFromSnapshot(snapshot) {
     updatedAt: clean(data.gameUpdatedAt || data.endedAt, 40),
     status: 'finished',
     phase: 'finished',
-    winner: ['red', 'black'].includes(data.winner) ? data.winner : null,
+    winner: ['red', 'black', 'draw'].includes(data.winner) ? data.winner : null,
     durationSeconds: integer(data.durationSeconds, 0, 31536000),
     day: integer(data.day, 1, 100),
     seats: Array.isArray(data.seats) ? data.seats.slice(0, 10).map(sharedSeat) : [],

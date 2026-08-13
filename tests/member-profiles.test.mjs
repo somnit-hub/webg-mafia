@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createOwnCommunityProfileFields } from '../src/cloud-profiles.js';
+import { createOwnCommunityProfileFields, resolveOwnProfilePhotoDataURL } from '../src/cloud-profiles.js';
 
 const user = {
   uid: 'google-user',
@@ -34,5 +34,12 @@ const externalImage = createOwnCommunityProfileFields(user, {
   avatar: 'https://example.com/not-allowed.jpg'
 });
 assert.equal(externalImage.photoDataURL, '');
+
+const olderLocalAvatar = 'data:image/webp;base64,LOCAL';
+assert.equal(resolveOwnProfilePhotoDataURL(olderLocalAvatar, ''), olderLocalAvatar);
+assert.equal(
+  resolveOwnProfilePhotoDataURL(olderLocalAvatar, 'data:image/webp;base64,REMOTE'),
+  'data:image/webp;base64,REMOTE'
+);
 
 console.log('Member profile avatar model passed.');

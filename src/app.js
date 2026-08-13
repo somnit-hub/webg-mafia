@@ -763,7 +763,8 @@ function headerControlIcon(name) {
     bluetooth: '<path d="M7 7l10 10-5 4V3l5 4L7 17"/><path d="m4 8 8 8m-8 0 8-8"/>',
     play: '<path d="m8 5 11 7-11 7V5Z"/>',
     pause: '<path d="M8 5v14m8-14v14"/>',
-    order: '<path d="M4 16h16M6 16a6 6 0 0 1 12 0M3 20h18M12 6v2"/><circle cx="12" cy="4" r="1"/>'
+    order: '<path d="M4 16h16M6 16a6 6 0 0 1 12 0M3 20h18M12 6v2"/><circle cx="12" cy="4" r="1"/>',
+    cancelGame: '<circle cx="12" cy="12" r="8"/><path d="m9 9 6 6m0-6-6 6"/>'
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]}</svg>`;
 }
@@ -777,7 +778,13 @@ function headerHtml() {
   const profileLabel = app.hostProfile?.displayName || app.authUser?.googleName || app.authUser?.email || 'Google';
   const hasTrack = Boolean(app.media.trackName);
   const bluetoothLabel = 'Bluetooth і музика';
-  return `<header class="shell-header ${app.installPrompt && !['game', 'reveal'].includes(app.route) ? 'has-install' : ''}">
+  const cancelableGame = app.game?.status === 'active' && !app.game.publicOnly && canManageGame(app.game)
+    ? app.game
+    : activeGames().find(game => !game.publicOnly && canManageGame(game));
+  const cancelGameButton = cancelableGame
+    ? `<button class="icon-btn header-media-btn cancel-game-btn" type="button" data-action="cancel-active-game" data-id="${esc(cancelableGame.id)}" aria-label="Скасувати активну гру" title="Скасувати активну гру" aria-haspopup="dialog">${headerControlIcon('cancelGame')}</button>`
+    : '';
+  return `<header class="shell-header ${app.installPrompt && !['game', 'reveal'].includes(app.route) ? 'has-install' : ''} ${cancelableGame ? 'has-cancel-game' : ''}">
     <a class="brand" href="#home" aria-label="Mafia — головна">
       <img class="brand-mark" src="./assets/logo-mafia.webp" alt="" width="44" height="44" aria-hidden="true">
     </a>
@@ -789,6 +796,7 @@ function headerHtml() {
         <button class="icon-btn header-media-btn pause-btn" data-action="media-pause" aria-label="Призупинити музику" title="Призупинити музику" ${!hasTrack || !app.media.playing ? 'disabled' : ''}>${headerControlIcon('pause')}</button>
       </div>
       <div class="header-profile-actions">
+        ${cancelGameButton}
         <button class="icon-btn header-media-btn bluetooth-btn browser-bluetooth-btn ${app.bluetooth.deviceName ? 'connected' : ''}" data-action="open-media-panel" aria-label="${bluetoothLabel}" title="${bluetoothLabel}" aria-haspopup="dialog">${headerControlIcon('bluetooth')}</button>
         <button class="btn small secondary profile-btn" data-action="edit-host-profile" aria-label="Профіль ведучого">${hostAvatar('tiny')}<span>${esc(profileLabel)}</span></button>
       </div>
@@ -931,14 +939,13 @@ function gameRow(game) {
 
 function activeGameRow(game) {
   const resumable = canManageGame(game) && !game.publicOnly;
-  const cancelable = canManageGame(game);
   const host = preferredGameHostName(game);
   const alive = game.seats.filter(seat => seat.status === 'alive').length;
   const gameId = esc(game.id);
   const primaryAction = resumable
     ? `<button class="btn danger active-game-action" data-action="resume-game" data-id="${gameId}">Продовжити</button>`
     : `<button class="btn secondary active-game-action watch-game-action" data-action="watch-game" data-id="${gameId}">${eyeIcon()}<span>Спостерігати</span></button>`;
-  const actions = `<div class="active-game-actions">${primaryAction}${cancelable ? `<button class="btn small danger-outline active-game-cancel" data-action="cancel-active-game" data-id="${gameId}">Скасувати</button>` : ''}</div>`;
+  const actions = `<div class="active-game-actions">${primaryAction}</div>`;
   return `<article class="active-game-row"><div class="active-game-copy"><div class="eyebrow">Триває зараз</div><h3>${esc(game.title)}</h3><div class="continue-meta">${phaseLabel(game)} · ${alive}/10 за столом${host ? ` · ведучий ${esc(host)}` : ''} · оновлено ${formatDate(game.updatedAt, true)}</div></div>${actions}</article>`;
 }
 
@@ -1214,10 +1221,10 @@ function revealView() {
         return `<button class="number-role-card ${selectedCard === card ? 'selected' : ''}" type="button" data-action="select-role-card" data-card="${card}" aria-pressed="${selectedCard === card}" aria-label="Карта ${card}"><span>${card}</span></button>`;
       }).join('')}</div>${selectedCard ? `<div class="number-role-confirm">Обрано карту <b>№${selectedCard}</b>. Суддя показує її лише цьому гравцеві.</div>` : '<div class="number-role-confirm muted">Торкніться цифри, яку показав гравець.</div>'}</div>`;
     const confirmButton = `<button class="btn primary wide game-lead-action" data-action="confirm-number-role" ${!isLastCard && !selectedCard ? 'disabled' : ''}>${isLastCard ? 'Показати останню роль' : selectedCard ? `Показати роль за картою №${selectedCard}` : 'Спочатку оберіть цифру'}</button>`;
-    actions = `${selectedCard ? `<div class="number-deal-main-actions"><button class="btn secondary" data-action="change-role-card">Змінити цифру</button>${confirmButton}</div>` : confirmButton}<button class="btn danger-outline wide reveal-cancel-action" data-action="cancel-active-game">Скасувати гру</button>`;
+    actions = selectedCard ? `<div class="number-deal-main-actions"><button class="btn secondary" data-action="change-role-card">Змінити цифру</button>${confirmButton}</div>` : confirmButton;
   } else {
     content = `<div class="reveal-privacy"><div class="reveal-privacy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg></div><h2>Екран бачить лише гравець №${seat.number}</h2><p>${numberDeal ? 'Карту вже визначено. Суддя відкриває роль лише перед відповідним гравцем.' : 'Після перегляду роль автоматично сховається перед передачею телефона наступному гравцеві.'}</p></div>`;
-    actions = '<button class="btn primary wide game-lead-action" data-action="reveal-role">Показати мою роль</button><button class="btn danger-outline wide reveal-cancel-action" data-action="cancel-active-game">Скасувати гру</button>';
+    actions = '<button class="btn primary wide game-lead-action" data-action="reveal-role">Показати мою роль</button>';
   }
   return `<main class="page reveal-page"><section class="card reveal-card ${numberDeal ? 'number-deal' : ''} ${game.revealOpen ? 'role-open' : 'role-ready'}">
     <div class="reveal-progress"><span class="eyebrow">Роздача ролей</span><div><b>${game.revealIndex + 1}</b><span> / ${game.seats.length}</span>${helpIcon('Браузер не може гарантовано заблокувати скриншоти. Показуйте роль так, щоб екран бачив лише відповідний гравець.', 'Безпека показу ролі')}</div></div>
@@ -1481,7 +1488,7 @@ function moderatorSideHtml() {
   const black = game.seats.filter(seat => teamOf(seat) === 'black');
   return `<section class="card card-pad"><div class="section-title section-heading">${titleHelp('h3', 'Панель ведучого', 'Ця панель містить приватну інформацію. Ролі початково приховані від випадкового погляду.')}<button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати' : 'Ролі'}</button></div>${game.showSecrets ? `<div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}<div class="divider"></div><div class="actions"><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button><button class="btn small secondary" data-action="copy-protocol">Копіювати протокол</button><button class="btn small secondary" data-action="open-observer">Оглядач</button></div></section>
     <section class="card card-pad"><div class="section-title section-heading"><div><h3>Протокол</h3><p>${game.history.length} подій</p></div></div><div class="quick-log">${game.history.slice(0, 25).map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('') || statePanel('empty', 'Подій ще немає', '', '', true)}</div></section>
-    <div class="game-end-actions"><button class="btn danger" data-action="end-game-manual">Завершити гру</button><button class="btn danger-outline" data-action="cancel-active-game">Скасувати гру</button></div>`;
+    <div class="game-end-actions"><button class="btn danger" data-action="end-game-manual">Завершити гру</button></div>`;
 }
 
 function observerSideHtml() {

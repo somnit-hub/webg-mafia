@@ -15,7 +15,8 @@ import { ENJOY_CAFE } from './enjoy.js';
 import {
   reconcileOwnCommunityProfile, saveOwnCommunityProfile, deleteOwnCommunityProfile,
   deleteAllOwnedManualPlayers, deleteSharedManualPlayer, isPersistentManualPlayer,
-  saveSharedManualPlayer, subscribeCommunityProfiles, stopCommunityProfiles
+  profileWasRecentlyActive, saveSharedManualPlayer, subscribeCommunityProfiles,
+  stopCommunityProfiles, touchOwnCommunityProfilePresence
 } from './cloud-profiles.js';
 import {
   acceptPlayerLink, deleteOwnedPlayerLink, deleteAllOwnedPlayerLinks, findPendingPlayerLinks,
@@ -118,6 +119,7 @@ const CLIENT_PLATFORM = /Android/i.test(navigator.userAgent)
 document.documentElement.dataset.platform = CLIENT_PLATFORM;
 
 const CHANNEL_NAME = 'mafia-desk-live';
+const PROFILE_PRESENCE_HEARTBEAT_MS = 60000;
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel(CHANNEL_NAME) : null;
 const $ = selector => document.querySelector(selector);
 const appRoot = $('#app');
@@ -184,6 +186,7 @@ let cloudDirectoryPromise = null;
 let cloudArchivePromise = null;
 let cloudArchiveMigrationStarted = false;
 let activeGamePublishPromise = null;
+let profilePresenceHandle = null;
 const pendingActiveGames = new Map();
 const presetAvatarDataUrls = new Map();
 
@@ -329,7 +332,8 @@ function cloudPlayer(member) {
     contact: member.club || 'Enjoy',
     notes: member.description || '',
     avatar: member.photoDataURL || member.photoURL || '',
-    updatedAt: member.profileUpdatedAt || ''
+    updatedAt: member.profileUpdatedAt || '',
+    lastSeenAt: member.lastSeenAt || 0
   };
 }
 function preferredPlayerName(player) {
@@ -720,6 +724,11 @@ function eyeIcon() {
   return '<svg class="button-eye-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="3"/></svg>';
 }
 
+function randomActionIcon(kind) {
+  if (kind === 'dice') return '<svg class="button-random-icon button-dice-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="10" height="10" rx="2"/><circle cx="6.5" cy="11.5" r=".8"/><circle cx="9.5" cy="14.5" r=".8"/><rect x="11" y="4" width="10" height="10" rx="2"/><circle cx="14.5" cy="7.5" r=".8"/><circle cx="17.5" cy="10.5" r=".8"/></svg>';
+  return '<svg class="button-random-icon button-shuffle-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2.5c4.5 0 6.5 12 11 12H21"/><path d="m18 15 3 3-3 3"/><path d="M4 18h2.5c1.8 0 3.1-2 4.3-4.4M13.2 9.8C14.4 7.7 15.7 6 17.5 6H21"/><path d="m18 3 3 3-3 3"/></svg>';
+}
+
 function externalAppIcon(name) {
   if (name === 'instagram') return `<svg class="external-app-icon instagram-app-icon" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="instagram-app-gradient" x1="3" y1="21" x2="21" y2="3" gradientUnits="userSpaceOnUse"><stop stop-color="#ffd600"/><stop offset=".46" stop-color="#ff0169"/><stop offset="1" stop-color="#7638fa"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#instagram-app-gradient)"/><rect x="5.7" y="5.7" width="12.6" height="12.6" rx="4" fill="none" stroke="white" stroke-width="1.8"/><circle cx="12" cy="12" r="3.1" fill="none" stroke="white" stroke-width="1.8"/><circle cx="17.1" cy="6.9" r="1.1" fill="white"/></svg>`;
   return `<svg class="external-app-icon maps-app-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285f4" d="M12 1.5a7.4 7.4 0 0 1 7.4 7.4c0 5.4-7.4 13.6-7.4 13.6S4.6 14.3 4.6 8.9A7.4 7.4 0 0 1 12 1.5Z"/><path fill="#34a853" d="M4.6 8.9c0 3.2 2.7 7.4 4.8 10.2l2.6-4.4-4.1-7.1-3.3 1.3Z"/><path fill="#fbbc04" d="m9.4 19.1 2.6 3.4 2.8-3.7-2.8-4.1-2.6 4.4Z"/><path fill="#ea4335" d="M12 1.5a7.4 7.4 0 0 1 6.4 3.7L12 8.9 8 3.1A7.3 7.3 0 0 1 12 1.5Z"/><circle cx="12" cy="8.9" r="2.8" fill="white"/></svg>`;
@@ -916,7 +925,7 @@ function playersView() {
       ? `${app.cloudPlayers.length} з офлайн-кешу`
       : app.cloudDirectory.status === 'loading' ? 'Синхронізація…' : 'Каталог недоступний';
   return `<main class="page tab-page players-page">
-    ${pageHeader('Гравці', 'Google-профілі доступні всій спільноті, але змінюються лише власниками. Ручні профілі може редагувати й видаляти будь-який авторизований користувач. Профілі учасників активної гри заблоковані до її завершення.', '<div class="actions"><button class="btn primary" data-action="new-player">+ Додати гравця</button></div>')}
+    ${pageHeader('Гравці', 'Google-профілі доступні всій спільноті, але змінюються лише власниками. Статус «Онлайн» означає активність у застосунку протягом останніх двох хвилин. Ручні профілі може редагувати й видаляти будь-який авторизований користувач. Профілі учасників активної гри заблоковані до її завершення.', '<div class="actions"><button class="btn primary" data-action="new-player">+ Додати гравця</button></div>')}
     ${statusStrip(app.cloudDirectory.status, cloudLabel, app.cloudDirectory.error, 'Ручні профілі синхронізуються для всіх користувачів. Автоматично згенеровані тимчасові прізвиська до каталогу не додаються.', '<button class="btn small secondary" data-action="cloud-refresh">Оновити</button>')}
     ${nextGameQueueView()}
     <div class="search-row"><input class="input" type="search" data-input="player-search" value="${esc(app.search)}" placeholder="Пошук за ім’ям, ніком, клубом або описом"><button class="btn secondary icon" data-action="new-player" aria-label="Додати гравця">+</button></div>
@@ -955,15 +964,21 @@ function playerCard(player) {
   const queueIndex = normalizeLineup(app.nextGameQueue).indexOf(player.id);
   const queued = queueIndex >= 0;
   const profileLocked = profileIsInActiveGame(player.id);
+  const online = isGoogleProfile && (ownCloudProfile
+    ? navigator.onLine && !document.hidden
+    : profileWasRecentlyActive(player.lastSeenAt));
+  const presence = isGoogleProfile
+    ? `<span class="badge presence-badge ${online ? 'online' : 'offline'}" data-presence="${online ? 'online' : 'offline'}" title="${online ? 'Активність протягом останніх двох хвилин' : 'Активності не було понад дві хвилини'}"><i aria-hidden="true"></i>${online ? 'Онлайн' : 'Офлайн'}</span>`
+    : '';
   const lockedButton = '<button class="icon-btn player-edit" type="button" aria-label="Профіль заблоковано до завершення гри" title="Профіль зараз у грі" disabled>🔒</button>';
   const editButton = profileLocked
     ? lockedButton
     : isGoogleProfile
       ? (ownCloudProfile ? '<button class="icon-btn player-edit" data-action="edit-host-profile" aria-label="Редагувати власний профіль">•••</button>' : '')
       : `<button class="icon-btn player-edit" data-action="edit-player" data-id="${player.id}" aria-label="Редагувати ${esc(player.name)}">•••</button>`;
-  return `<article class="card player-card ${isCloud ? 'cloud' : 'local'}">
+  return `<article class="card player-card ${isCloud ? 'cloud' : 'local'} ${isGoogleProfile ? 'google-profile' : ''}">
     ${avatar(player)}
-    <div><h3>${esc(player.name)}</h3><p>${esc(player.nickname ? `«${player.nickname}» · ${player.notes || player.contact || 'без опису'}` : player.notes || player.contact || 'Без додаткового опису')}</p><div class="player-stats"><span class="badge ${isCloud ? 'green' : ''}">${player.linkAccepted ? 'Google · об’єднано' : isGoogleProfile ? 'Google · Enjoy' : 'Додано ведучим'}</span>${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span></div></div>
+    <div><h3>${esc(player.name)}</h3><p>${esc(player.nickname ? `«${player.nickname}» · ${player.notes || player.contact || 'без опису'}` : player.notes || player.contact || 'Без додаткового опису')}</p><div class="player-stats"><span class="badge ${isCloud ? 'green' : ''}">${player.linkAccepted ? 'Google · об’єднано' : isGoogleProfile ? 'Google · Enjoy' : 'Додано ведучим'}</span>${presence}${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span></div></div>
     <div class="player-card-actions"><button class="queue-player-btn ${queued ? 'selected' : ''}" data-action="toggle-next-player" data-id="${esc(player.id)}" aria-label="${queued ? `Прибрати ${esc(preferredPlayerName(player))} зі складу наступної гри` : `Додати ${esc(preferredPlayerName(player))} до наступної гри`}" aria-pressed="${queued}"><span aria-hidden="true">${queued ? '✓' : '+'}</span>${queued ? `<small>${queueIndex + 1}</small>` : ''}</button>${editButton}</div>
   </article>`;
 }
@@ -1010,7 +1025,7 @@ function setupView() {
         <div class="field"><label>${help('Система фолів', FOUL_SYSTEM_HELP)}</label><select class="select" data-draft-setting="penaltyMode"><option value="tournament" ${app.draft.settings.penaltyMode === 'tournament' ? 'selected' : ''}>Турнірна</option><option value="club" ${app.draft.settings.penaltyMode === 'club' ? 'selected' : ''}>Клубна</option></select></div>
       `)}
     </div>
-    ${collapsiblePanel('setupSeating', 'Розсадка', seatingHelp, `<div class="actions panel-actions"><button class="btn small secondary" data-action="random-table" ${app.players.length >= TABLE_SIZE ? '' : 'disabled'}>Інші випадкові 10</button><button class="btn small secondary" data-action="shuffle-seats">Перемішати місця</button></div><div class="seat-setup">${app.draft.seats.map(setupSeat).join('')}</div><div class="actions panel-footer-actions"><button class="btn secondary" data-action="new-player">+ Новий профіль</button><button class="btn danger" data-action="start-game">Роздати ролі</button></div>`, 'setup-seating-panel')}
+    ${collapsiblePanel('setupSeating', 'Розсадка', seatingHelp, `<div class="actions panel-actions"><button class="btn small secondary setup-random-action" data-action="random-table" ${app.players.length >= TABLE_SIZE ? '' : 'disabled'}>${randomActionIcon('dice')}<span>Інші випадкові 10</span></button><button class="btn small secondary setup-random-action" data-action="shuffle-seats">${randomActionIcon('shuffle')}<span>Перемішати місця</span></button></div><div class="seat-setup">${app.draft.seats.map(setupSeat).join('')}</div><div class="actions panel-footer-actions"><button class="btn secondary" data-action="new-player">+ Новий профіль</button><button class="btn danger" data-action="start-game">Роздати ролі</button></div>`, 'setup-seating-panel')}
     ${collapsiblePanel('setupRules', 'Правила спортивної «Мафії»', 'Регламент, жести ведучого та турнірні процедури. Перед турніром звіряйте редакцію з регламентом організатора.', `<div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div>`, 'setup-rules-panel')}
     <div class="setup-fab-group" role="group" aria-label="Дії нової гри"><button class="mobile-fab primary-fab" type="button" data-action="new-player" aria-label="Додати гравця" title="Додати гравця">${addPlayerIcon()}</button><button class="mobile-fab danger-fab" type="button" data-action="start-game" aria-label="Роздати ролі" title="Роздати ролі">${dealRolesIcon()}</button></div>
   </main>`;
@@ -2435,6 +2450,29 @@ function cloudDirectoryError(error) {
   return 'Не вдалося синхронізувати каталог Enjoy.';
 }
 
+function stopProfilePresence() {
+  clearInterval(profilePresenceHandle);
+  profilePresenceHandle = null;
+}
+
+async function publishProfilePresence() {
+  if (!app.authUser || LOCAL_AUTH_TEST || !navigator.onLine || document.hidden) return;
+  try {
+    await touchOwnCommunityProfilePresence(app.authUser);
+  } catch {
+    // Presence is best-effort and must never interrupt local gameplay.
+  }
+}
+
+function startProfilePresence() {
+  stopProfilePresence();
+  if (!app.authUser || LOCAL_AUTH_TEST) return;
+  profilePresenceHandle = setInterval(() => {
+    void publishProfilePresence();
+    if (app.route === 'players') render();
+  }, PROFILE_PRESENCE_HEARTBEAT_MS);
+}
+
 async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
   if (!app.authUser || LOCAL_AUTH_TEST) return;
   if (cloudDirectoryPromise) return cloudDirectoryPromise;
@@ -2479,6 +2517,7 @@ async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
       app.cloudDirectory = { status: 'error', error: cloudDirectoryError(error), fromCache: false };
       render();
     });
+    startProfilePresence();
     syncSharedManualPlayers().catch(() => {});
   })();
   try {
@@ -3346,6 +3385,7 @@ function clearAuthenticatedState() {
   stopCommunityProfiles();
   stopCommunityGames();
   stopPlayerLinks();
+  stopProfilePresence();
   cloudDirectoryPromise = null;
   cloudArchivePromise = null;
   cloudArchiveMigrationStarted = false;
@@ -3479,6 +3519,7 @@ window.addEventListener('online', () => {
   if (app.authUser) syncSharedManualPlayers().catch(() => {});
   if (app.authUser) connectPlayerLinks().catch(() => {});
   if (app.authUser) flushPendingFinishedGameDeletes().catch(() => {});
+  if (app.authUser) publishProfilePresence();
 });
 window.addEventListener('offline', () => toast('Офлайн-режим: локальна гра продовжується'));
 window.addEventListener('pagehide', () => {
@@ -3490,7 +3531,11 @@ document.addEventListener('visibilitychange', () => {
     app.game.revealOpen = false;
     saveGame({ broadcast: false }).catch(() => {});
   }
-  if (!document.hidden) requestGameWakeLock();
+  if (!document.hidden) {
+    requestGameWakeLock();
+    publishProfilePresence();
+    if (app.route === 'players') render();
+  }
 });
 
 channel?.addEventListener('message', event => {

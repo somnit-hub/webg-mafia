@@ -4,6 +4,7 @@ const FIREBASE_VERSION = '12.16.0';
 const APP_SDK = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`;
 const FIRESTORE_SDK = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-firestore.js`;
 const COMMUNITY_ID = 'enjoy';
+export const PROFILE_ONLINE_WINDOW_MS = 120000;
 const MANUAL_AVATAR_PRESETS = new Set([
   './assets/avatars/raccoon.webp', './assets/avatars/cat.webp', './assets/avatars/capybara.webp',
   './assets/avatars/pug.webp', './assets/avatars/fox.webp', './assets/avatars/owl.webp',
@@ -17,6 +18,20 @@ let stopDirectory = [];
 
 function clean(value, maximum) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, maximum);
+}
+
+export function profileLastSeenMillis(value) {
+  if (Number.isFinite(value)) return Number(value);
+  if (value instanceof Date) return value.getTime();
+  if (typeof value?.toMillis === 'function') return Number(value.toMillis()) || 0;
+  if (Number.isFinite(value?.seconds)) return (Number(value.seconds) * 1000) + Math.floor(Number(value.nanoseconds || 0) / 1000000);
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function profileWasRecentlyActive(lastSeenAt, now = Date.now(), windowMs = PROFILE_ONLINE_WINDOW_MS) {
+  const lastSeen = profileLastSeenMillis(lastSeenAt);
+  return lastSeen > 0 && Number(now) >= lastSeen && Number(now) - lastSeen <= windowMs;
 }
 
 function profilePath(sdk, database, uid) {
@@ -129,7 +144,8 @@ function memberFromSnapshot(snapshot) {
     photoURL: clean(data.photoURL, 2048),
     photoDataURL: sharedAvatar(data.photoDataURL),
     discoverable: data.discoverable !== false,
-    profileUpdatedAt: clean(data.profileUpdatedAt, 40)
+    profileUpdatedAt: clean(data.profileUpdatedAt, 40),
+    lastSeenAt: profileLastSeenMillis(data.lastSeenAt)
   };
 }
 
@@ -223,6 +239,14 @@ export async function saveOwnCommunityProfile(user, profile) {
   const reference = profilePath(sdk, database, user.uid);
   const snapshot = await sdk.getDoc(reference);
   await writeOwnProfile(user, profile, snapshot.exists() ? snapshot.data().createdAt : null);
+}
+
+export async function touchOwnCommunityProfilePresence(user) {
+  if (!user?.uid) return;
+  const { database, sdk } = await loadDatabase();
+  await sdk.updateDoc(profilePath(sdk, database, user.uid), {
+    lastSeenAt: sdk.serverTimestamp()
+  });
 }
 
 export async function deleteOwnCommunityProfile(user) {

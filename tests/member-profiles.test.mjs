@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { createOwnCommunityProfileFields, resolveOwnProfilePhotoDataURL } from '../src/cloud-profiles.js';
+import {
+  createOwnCommunityProfileFields, profileLastSeenMillis, profileWasRecentlyActive,
+  resolveOwnProfilePhotoDataURL
+} from '../src/cloud-profiles.js';
 
 const user = {
   uid: 'google-user',
@@ -41,5 +44,11 @@ assert.equal(
   resolveOwnProfilePhotoDataURL(olderLocalAvatar, 'data:image/webp;base64,REMOTE'),
   'data:image/webp;base64,REMOTE'
 );
+
+const now = Date.parse('2026-08-13T12:00:00.000Z');
+assert.equal(profileLastSeenMillis({ seconds: now / 1000, nanoseconds: 0 }), now);
+assert.equal(profileWasRecentlyActive(now - 120000, now), true);
+assert.equal(profileWasRecentlyActive(now - 180000, now), false);
+assert.equal(profileWasRecentlyActive(0, now), false);
 
 console.log('Member profile avatar model passed.');

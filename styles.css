@@ -462,6 +462,9 @@ img { display: block; max-width: 100%; }
 .continue-meta { color: var(--muted); font-size: 12px; }
 .hero .actions .btn, .active-game-action { font-size: 16px; }
 .button-eye-icon { width: 20px; height: 20px; flex: 0 0 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.button-random-icon { width: 20px; height: 20px; flex: 0 0 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.button-dice-icon circle { fill: currentColor; stroke: none; }
+.setup-random-action span { min-width: 0; }
 .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .stat-card { padding: 15px; }
 .stat-card b { display: block; margin-bottom: 3px; font-size: 27px; font-variant-numeric: tabular-nums; }
@@ -488,6 +491,11 @@ img { display: block; max-width: 100%; }
 .player-card h3 { margin: 0; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
 .player-card p { margin: 4px 0 0; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .player-stats { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 7px; color: var(--subtle); font-size: 10px; }
+.presence-badge { gap: 5px; }
+.presence-badge i { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--subtle); }
+.presence-badge.online { border-color: #32664a; color: #caffe0; }
+.presence-badge.online i { background: var(--green); box-shadow: 0 0 0 3px rgb(88 183 124 / 12%); }
+.presence-badge.offline { color: var(--subtle); }
 .player-card-actions { width: 48px; display: grid; justify-items: center; gap: 5px; }
 .queue-player-btn {
   position: relative;

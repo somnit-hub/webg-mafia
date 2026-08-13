@@ -39,7 +39,7 @@
       "**/node_modules/**",
       "README.md",
       "firestore.rules",
-      "firebase-debug.log",
+      "**/*.log",
       "tests/**",
       "test-results/**"
     ],

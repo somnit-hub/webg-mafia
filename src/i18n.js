@@ -637,6 +637,22 @@ Object.assign(COPY.fr, {
   'Зберігаємо анонімно…': 'Enregistrement anonyme…', 'Ваш вибір бачите тільки ви. Іншим учасникам доступне лише спільне зведення після трьох оцінок.': 'Vous seul voyez votre choix. Les autres participants ne voient que le résumé après trois évaluations.'
 });
 
+Object.assign(COPY.it, {
+  'Спосіб роздачі ролей': 'Modalità di distribuzione dei ruoli',
+  'За обраною цифрою': 'Per numero scelto',
+  'Автоматично': 'Automaticamente'
+});
+Object.assign(COPY.en, {
+  'Спосіб роздачі ролей': 'Role dealing method',
+  'За обраною цифрою': 'By chosen number',
+  'Автоматично': 'Automatically'
+});
+Object.assign(COPY.fr, {
+  'Спосіб роздачі ролей': 'Mode de distribution des rôles',
+  'За обраною цифрою': 'Par numéro choisi',
+  'Автоматично': 'Automatiquement'
+});
+
 const PATTERNS = {
   it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+)% перемог/g, '$1% vittorie'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
   en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+)% перемог/g, '$1% wins'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],

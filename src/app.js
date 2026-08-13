@@ -1040,8 +1040,6 @@ function setupView() {
         <div class="field"><label for="game-title">Назва</label><input id="game-title" class="input" data-draft="title" value="${esc(app.draft.title)}" maxlength="80"></div>
         <div class="field"><label for="game-venue">Місце / клуб</label><input id="game-venue" class="input" data-draft="venue" value="${esc(app.draft.venue)}" maxlength="100" placeholder="Необов’язково"></div>
         <div class="field"><label for="game-notes">Нотатка ведучого</label><textarea id="game-notes" class="textarea" data-draft="notes" maxlength="500" placeholder="Турнір, номер столу, особливі умови…">${esc(app.draft.notes)}</textarea></div>
-        <div class="divider"></div>
-        <div class="field"><label>${help('Спосіб роздачі ролей', 'За обраною цифрою: гравці по черзі жестом показують число в межах карт, що залишилися, а суддя відкриває відповідну карту. Якщо число завелике — гравець обирає повторно; остання карта видається автоматично.')}</label><select class="select" data-draft-setting="dealMode"><option value="number" ${app.draft.settings.dealMode !== 'automatic' ? 'selected' : ''}>За обраною цифрою</option><option value="automatic" ${app.draft.settings.dealMode === 'automatic' ? 'selected' : ''}>Автоматично</option></select></div>
       </div>`)}
       ${collapsiblePanel('setupTimers', 'Правила й таймери', 'Ці значення можна змінити й під час гри.', `
         <div class="setup-options">
@@ -1058,7 +1056,7 @@ function setupView() {
         <div class="field"><label>${help('Система фолів', FOUL_SYSTEM_HELP)}</label><select class="select" data-draft-setting="penaltyMode"><option value="tournament" ${app.draft.settings.penaltyMode === 'tournament' ? 'selected' : ''}>Турнірна</option><option value="club" ${app.draft.settings.penaltyMode === 'club' ? 'selected' : ''}>Клубна</option></select></div>
       `)}
     </div>
-    ${collapsiblePanel('setupSeating', 'Розсадка', seatingHelp, `<div class="actions panel-actions"><button class="btn small secondary setup-random-action" data-action="random-table" ${app.players.length >= TABLE_SIZE ? '' : 'disabled'}>${randomActionIcon('dice')}<span>Інші випадкові 10</span></button><button class="btn small secondary setup-random-action" data-action="shuffle-seats">${randomActionIcon('shuffle')}<span>Перемішати місця</span></button></div><div class="seat-setup">${app.draft.seats.map(setupSeat).join('')}</div><div class="actions panel-footer-actions"><button class="btn secondary" data-action="new-player">+ Новий профіль</button><button class="btn danger" data-action="start-game">Роздати ролі</button></div>`, 'setup-seating-panel')}
+    ${collapsiblePanel('setupSeating', 'Розсадка', seatingHelp, `<div class="actions panel-actions"><div class="setup-deal-action"><div class="setup-deal-caption"><span>Спосіб роздачі ролей</span>${helpIcon('За обраною цифрою: гравці по черзі жестом показують число в межах карт, що залишилися, а суддя відкриває відповідну карту. Якщо число завелике — гравець обирає повторно; остання карта видається автоматично.', 'Пояснення: Спосіб роздачі ролей')}</div><select class="select" data-draft-setting="dealMode" aria-label="Спосіб роздачі ролей"><option value="number" ${app.draft.settings.dealMode !== 'automatic' ? 'selected' : ''}>За обраною цифрою</option><option value="automatic" ${app.draft.settings.dealMode === 'automatic' ? 'selected' : ''}>Автоматично</option></select></div><button class="btn small secondary setup-random-action" data-action="shuffle-seats">${randomActionIcon('shuffle')}<span>Перемішати місця</span></button></div><div class="seat-setup">${app.draft.seats.map(setupSeat).join('')}</div><div class="actions panel-footer-actions"><button class="btn secondary" data-action="new-player">+ Новий профіль</button><button class="btn danger" data-action="start-game">Роздати ролі</button></div>`, 'setup-seating-panel')}
     ${collapsiblePanel('setupRules', 'Правила спортивної «Мафії»', 'Регламент, жести ведучого та турнірні процедури. Перед турніром звіряйте редакцію з регламентом організатора.', `<div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div>`, 'setup-rules-panel')}
     <div class="setup-fab-group" role="group" aria-label="Дії нової гри"><button class="mobile-fab primary-fab" type="button" data-action="new-player" aria-label="Додати гравця" title="Додати гравця">${addPlayerIcon()}</button><button class="mobile-fab danger-fab" type="button" data-action="start-game" aria-label="Роздати ролі" title="Роздати ролі">${dealRolesIcon()}</button></div>
   </main>`;
@@ -3454,11 +3452,6 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'shuffle-seats') {
     const shuffledSeats = shuffled(app.draft.seats.map(seat => ({ profileId: seat.profileId, name: seat.name, autoGuestName: seat.autoGuestName })));
     app.draft.seats.forEach((seat, index) => Object.assign(seat, shuffledSeats[index])); render();
-  } else if (action === 'random-table') {
-    if (app.players.length < 10) return toast('Для випадкового столу потрібно щонайменше 10 профілів');
-    const selectedPlayers = shuffled(app.players).slice(0, 10);
-    app.draft.seats.forEach((seat, index) => Object.assign(seat, { profileId: selectedPlayers[index].id, name: preferredPlayerName(selectedPlayers[index]), autoGuestName: false }));
-    render(); toast('Обрано інших випадкових 10 гравців');
   } else if (action === 'start-game') {
     const existingActiveGame = activeGames().find(game => !game.publicOnly && canManageGame(game));
     if (existingActiveGame) return toast(`Спочатку завершіть активну гру «${existingActiveGame.title}»`);

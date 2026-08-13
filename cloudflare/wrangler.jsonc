@@ -1,0 +1,46 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4/config-schema.json",
+  "name": "enjoy-mafia-orders",
+  "main": "order-worker.js",
+  "compatibility_date": "2026-08-13",
+  "workers_dev": true,
+  "vars": {
+    "FIREBASE_WEB_API_KEY": "AIzaSyCTn_hp0SkDibKJ3IP6OZENOpQATahFYQM",
+    "FIREBASE_PROJECT_ID": "somnit-mafia-desk"
+  },
+  "secrets": {
+    "required": [
+      "TELEGRAM_BOT_TOKEN",
+      "ORDER_TELEGRAM_CHAT_ID"
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ORDER_LIMITER",
+        "class_name": "OrderRateLimiter"
+      },
+      {
+        "name": "GAME_FEEDBACK",
+        "class_name": "GameFeedbackStore"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "OrderRateLimiter"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "GameFeedbackStore"
+      ]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

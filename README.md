@@ -78,15 +78,15 @@ npm run telegram:chat-id
 ```
 
 5. Скопіюйте надрукований рядок `ORDER_TELEGRAM_CHAT_ID=...` у `functions/.secret.local`.
-6. Для production збережіть обидва значення в захищеному сховищі та опублікуйте функцію:
+6. Для production опублікуйте Cloudflare Worker, передавши локальний файл секретів без додавання його до Git:
 
 ```powershell
-npx --yes firebase-tools@15.26.0 functions:secrets:set TELEGRAM_BOT_TOKEN
-npx --yes firebase-tools@15.26.0 functions:secrets:set ORDER_TELEGRAM_CHAT_ID
-npx --yes firebase-tools@15.26.0 deploy --only functions:sendTelegramOrder
+npx --yes wrangler@4 deploy --config cloudflare/wrangler.jsonc --secrets-file functions/.secret.local
 ```
 
-Розгортання Cloud Functions потребує тарифу Firebase Blaze. Сам токен ніколи не потрапляє в браузер: сервер перевіряє Google-сесію, приймає лише чотири дозволені позиції меню й обмежує частоту замовлень. `functions/.env.local` містить несекретні ідентифікатори Google/Firebase та тестовий Telegram-нік, а `functions/.secret.local` — приватні значення; обидва файли виключені з Git, Firebase Hosting і GitHub Pages.
+Worker працює окремо від Firebase Hosting і Firestore, тому для замовлень не потрібен тариф Firebase Blaze. Сам токен ніколи не потрапляє в браузер: Worker перевіряє Firebase-сесію через офіційний Auth REST API, приймає лише чотири дозволені позиції меню й обмежує частоту замовлень через Durable Object. `functions/.env.local` містить несекретні ідентифікатори Google/Firebase та тестовий Telegram-нік, а `functions/.secret.local` — приватні значення; обидва файли виключені з Git, Firebase Hosting і GitHub Pages. Production endpoint: `https://enjoy-mafia-orders.webg-mafia.workers.dev/orders`.
+
+Цей самий Worker обслуговує анонімні оцінки завершених ігор за адресою `/ratings`. Перед записом він перевіряє Google-сесію та наявність профілю користувача серед учасників гри. Окремий голос зберігається у Durable Object під SHA-256-ключем без email або імені; застосунок отримує власний вибір і лише агреговане зведення. Щоб ведучий не міг визначити першого автора, зведення відкривається після трьох оцінок.
 
 ## Публікація
 

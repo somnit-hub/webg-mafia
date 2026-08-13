@@ -12,7 +12,9 @@ Thumbs.db
 *.log
 node_modules/
 .firebase/
+**/.wrangler/
 .tmp-chrome-*/
+.tmp-*.png
 
 # Local test artifacts
 coverage/

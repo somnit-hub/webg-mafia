@@ -498,7 +498,7 @@ img { display: block; max-width: 100%; }
 .presence-badge.online { border-color: #32664a; color: #caffe0; }
 .presence-badge.online i { background: var(--green); box-shadow: 0 0 0 3px rgb(88 183 124 / 12%); }
 .presence-badge.offline { color: var(--subtle); }
-.player-card-actions { width: 48px; display: grid; justify-items: center; gap: 5px; }
+.player-card-actions { width: 48px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-items: center; gap: 5px; }
 .queue-player-btn {
   position: relative;
   width: 48px;
@@ -513,6 +513,7 @@ img { display: block; max-width: 100%; }
   font-weight: 800;
   line-height: 1;
   touch-action: manipulation;
+  grid-column: 1 / -1;
 }
 .queue-player-btn > span { font-size: 28px; transform: translateY(-1px); }
 .queue-player-btn.selected { border-color: var(--green); color: var(--on-primary); background: var(--green); }
@@ -533,7 +534,9 @@ img { display: block; max-width: 100%; }
   font-size: 9px;
   font-variant-numeric: tabular-nums;
 }
-.player-edit { width: 34px; height: 28px; min-height: 28px; font-size: 11px; }
+.player-edit, .player-stats-button { width: 22px; height: 28px; min-height: 28px; padding: 2px; font-size: 11px; }
+.player-stats-button, .profile-stats-shortcut { color: var(--gold); }
+.player-stats-icon { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .next-game-lineup { margin-bottom: 10px; padding: 12px; overflow: hidden; border-left: 3px solid var(--gold); }
 .lineup-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .lineup-head > div { min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
@@ -601,6 +604,41 @@ img { display: block; max-width: 100%; }
 .account-delete-btn { flex: 0 0 46px; width: 46px; height: 46px; margin-left: auto; border-color: #71343b; color: var(--danger); background: #32171b; }
 .account-delete-btn svg, .account-delete-mark svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: square; stroke-linejoin: miter; }
 .profile-modal-title-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.profile-stats-shortcut { width: 44px; height: 44px; }
+.player-stats-modal { width: min(760px, 100%); }
+.player-stats-title { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.player-stats-title .avatar.large { width: 58px; height: 58px; flex-basis: 58px; }
+.player-stats-title h2 { margin: 3px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.personal-stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 14px 0; }
+.personal-stat-grid .stat-card { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.personal-stat-grid .stat-card::before { left: 50%; transform: translateX(-50%); }
+.personal-stat-grid .stat-card:last-child b { font-family: var(--font-ui); font-size: 16px; letter-spacing: 0; }
+.feedback-privacy-note { margin: 0 0 14px !important; font-size: 12px; }
+.personal-history-title { margin: 10px 0 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.personal-history-title h3 { margin: 0; font-size: 17px; }
+.personal-history-title span { min-width: 25px; height: 25px; padding: 0 6px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 4px; color: var(--gold); background: var(--row-bg); font-size: 11px; font-weight: 800; }
+.personal-game-list { display: grid; gap: 8px; }
+.personal-game-card { padding: 12px; border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: 5px; background: var(--row-bg); }
+.personal-game-head { min-width: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.personal-game-head > div { min-width: 0; }
+.personal-game-head h3 { margin: 0; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.personal-game-head p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.game-feedback { margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--soft-line); }
+.sentiment-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.feedback-choice, .emotion-choice { border: 1px solid var(--line); color: var(--text); background: var(--control-bg); cursor: pointer; touch-action: manipulation; }
+.feedback-choice { min-height: 48px; padding: 7px 10px; border-radius: 5px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.feedback-choice span { font-size: 23px; }
+.feedback-choice b { font-size: 14px; }
+.feedback-choice.selected, .emotion-choice.selected { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 17%, var(--control-bg)); box-shadow: inset 0 -2px var(--gold); }
+.emotion-picker { margin-top: 6px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+.emotion-choice { min-width: 0; min-height: 67px; padding: 5px 2px; border-radius: 5px; display: grid; place-items: center; align-content: center; gap: 3px; }
+.emotion-choice span { font-size: 25px; line-height: 1; }
+.emotion-choice small { overflow: hidden; font-size: 8px; line-height: 1.1; text-align: center; }
+.feedback-choice:disabled, .emotion-choice:disabled { opacity: .58; cursor: wait; }
+.feedback-status, .feedback-threshold { margin: 7px 0 0 !important; color: var(--muted); font-size: 10px; line-height: 1.35; }
+.feedback-summary { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
+.feedback-summary span { padding: 4px 7px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); font-size: 11px; font-weight: 800; }
+.personal-protocol-button { width: 100%; margin-top: 9px; }
 .language-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .language-choice { min-width: 0; min-height: 58px; padding: 9px; border: 1px solid var(--line); border-radius: 7px; display: grid; place-items: center; color: var(--text); background: var(--control-bg); cursor: pointer; }
 .language-flag { width: 54px; height: 36px; display: block; border: 1px solid rgb(255 255 255 / 18%); border-radius: 5px; background: var(--row-bg); box-shadow: 0 2px 7px rgb(0 0 0 / 22%); overflow: hidden; }
@@ -1471,6 +1509,14 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .player-card { grid-template-columns: auto minmax(0, 1fr) 44px; padding: 9px 8px; gap: 8px; }
   .player-card-actions, .queue-player-btn { width: 44px; }
   .queue-player-btn { height: 44px; }
+  .personal-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .player-stats-title { gap: 8px; }
+  .player-stats-title .avatar.large { width: 48px; height: 48px; flex-basis: 48px; }
+  .personal-game-card { padding: 10px 8px; }
+  .emotion-picker { gap: 3px; }
+  .emotion-choice { min-height: 61px; }
+  .emotion-choice span { font-size: 23px; }
+  .emotion-choice small { font-size: 7px; }
   .next-game-lineup { margin-bottom: 8px; padding: 10px 9px; }
   .lineup-actions .btn { flex: 1 1 0; min-width: 0; }
 

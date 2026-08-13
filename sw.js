@@ -1,4 +1,4 @@
-const CACHE = 'mafia-desk-v114';
+const CACHE = 'mafia-desk-v116';
 const APP_SHELL = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './assets/logo-mafia.webp', './assets/favicon-32.png', './assets/favicon-64.png', './assets/favicon.ico',
@@ -9,7 +9,7 @@ const APP_SHELL = [
   './assets/signals/citizen.webp', './assets/signals/mafia.webp',
   './assets/signals/don.webp', './assets/signals/sheriff.webp',
   './assets/signals/don-found-sheriff.webp', './assets/signals/don-not-sheriff.webp',
-  './src/app.js', './src/auth.js', './src/cloud-profiles.js', './src/cloud-games.js', './src/game-engine.js', './src/order-service.js', './src/player-links.js', './src/timer.js', './src/lineup.js', './src/guest-names.js', './src/i18n.js', './src/firebase-config.js', './src/db.js', './src/google-sync.js', './src/enjoy.js'
+  './src/app.js', './src/auth.js', './src/cloud-profiles.js', './src/cloud-games.js', './src/game-feedback.js', './src/game-engine.js', './src/order-service.js', './src/player-links.js', './src/timer.js', './src/lineup.js', './src/guest-names.js', './src/i18n.js', './src/firebase-config.js', './src/db.js', './src/google-sync.js', './src/enjoy.js'
 ];
 const FIREBASE_SDK = [
   'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js',

@@ -40,6 +40,9 @@ import {
 import { pickFunnyGuestNames } from './guest-names.js';
 import { LANGUAGES, applyLanguage, languageLocale, localizeDom, normalizeLanguage } from './i18n.js';
 import { sendTelegramOrder } from './order-service.js';
+import {
+  GAME_EMOTIONS, loadGameFeedbackBatch, personalPlayerStats, saveGameFeedback
+} from './game-feedback.js';
 
 const ROLE_DECK = [
   { key: 'sheriff', label: 'Шериф', team: 'red', symbol: '★', description: 'Щоночі перевіряє одного гравця та дізнається колір його команди.' },
@@ -164,6 +167,7 @@ let app = {
   media: { trackName: '', playing: false, error: '' },
   order: { busy: false, status: 'idle', error: '', lastItem: '' },
   profilePhotoSync: { status: 'idle' },
+  gameFeedback: {},
   pendingActiveGameDeletes: [],
   bluetooth: {
     supported: 'bluetooth' in navigator,
@@ -335,6 +339,19 @@ function cloudPlayer(member) {
     avatar: member.photoDataURL || member.photoURL || '',
     updatedAt: member.profileUpdatedAt || '',
     lastSeenAt: member.lastSeenAt || 0
+  };
+}
+function ownProfilePlayer() {
+  const id = `google_${app.authUser?.uid || ''}`;
+  return playerById(id) || {
+    id,
+    cloudUid: app.authUser?.uid || '',
+    source: 'cloud-own',
+    name: app.hostProfile?.displayName || app.authUser?.googleName || 'Мій профіль',
+    nickname: app.hostProfile?.nickname || '',
+    contact: app.hostProfile?.club || 'Enjoy',
+    notes: app.hostProfile?.description || '',
+    avatar: app.hostProfile?.avatar || app.authUser?.googlePhotoURL || ''
   };
 }
 function preferredPlayerName(player) {
@@ -728,6 +745,10 @@ function eyeIcon() {
   return '<svg class="button-eye-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="3"/></svg>';
 }
 
+function playerStatsIcon() {
+  return '<svg class="player-stats-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11m7 9V4m7 16v-6"/><path d="M3 20h18"/></svg>';
+}
+
 function randomActionIcon(kind) {
   if (kind === 'dice') return '<svg class="button-random-icon button-dice-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="10" height="10" rx="2"/><circle cx="6.5" cy="11.5" r=".8"/><circle cx="9.5" cy="14.5" r=".8"/><rect x="11" y="4" width="10" height="10" rx="2"/><circle cx="14.5" cy="7.5" r=".8"/><circle cx="17.5" cy="10.5" r=".8"/></svg>';
   return '<svg class="button-random-icon button-shuffle-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2.5c4.5 0 6.5 12 11 12H21"/><path d="m18 15 3 3-3 3"/><path d="M4 18h2.5c1.8 0 3.1-2 4.3-4.4M13.2 9.8C14.4 7.7 15.7 6 17.5 6H21"/><path d="m18 3 3 3-3 3"/></svg>';
@@ -960,9 +981,7 @@ function nextGameQueueView() {
 }
 
 function statsForPlayer(playerId) {
-  const appearances = finishedGames().flatMap(game => game.seats.map(seat => ({ game, seat }))).filter(item => item.seat.profileId === playerId);
-  const wins = appearances.filter(({ game, seat }) => game.winner && game.winner === teamOf(seat)).length;
-  return { games: appearances.length, wins, winRate: appearances.length ? Math.round(wins / appearances.length * 100) : 0 };
+  return personalPlayerStats(finishedGames(), playerId);
 }
 
 function playerCard(player) {
@@ -989,7 +1008,7 @@ function playerCard(player) {
   return `<article class="card player-card ${isCloud ? 'cloud' : 'local'} ${isGoogleProfile ? 'google-profile' : ''}">
     ${avatar(player)}
     <div><h3>${esc(player.name)}</h3><p>${esc(player.nickname ? `«${player.nickname}» · ${player.notes || player.contact || 'без опису'}` : player.notes || player.contact || 'Без додаткового опису')}</p><div class="player-stats"><span class="badge ${isCloud ? 'green' : ''}">${player.linkAccepted ? 'Google · об’єднано' : isGoogleProfile ? 'Google · Enjoy' : 'Додано ведучим'}</span>${presence}${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span></div></div>
-    <div class="player-card-actions"><button class="queue-player-btn ${queued ? 'selected' : ''}" data-action="toggle-next-player" data-id="${esc(player.id)}" aria-label="${queued ? `Прибрати ${esc(preferredPlayerName(player))} зі складу наступної гри` : `Додати ${esc(preferredPlayerName(player))} до наступної гри`}" aria-pressed="${queued}"><span aria-hidden="true">${queued ? '✓' : '+'}</span>${queued ? `<small>${queueIndex + 1}</small>` : ''}</button>${editButton}</div>
+    <div class="player-card-actions"><button class="queue-player-btn ${queued ? 'selected' : ''}" data-action="toggle-next-player" data-id="${esc(player.id)}" aria-label="${queued ? `Прибрати ${esc(preferredPlayerName(player))} зі складу наступної гри` : `Додати ${esc(preferredPlayerName(player))} до наступної гри`}" aria-pressed="${queued}"><span aria-hidden="true">${queued ? '✓' : '+'}</span>${queued ? `<small>${queueIndex + 1}</small>` : ''}</button><button class="icon-btn player-stats-button" type="button" data-action="open-player-stats" data-id="${esc(player.id)}" aria-label="Статистика ${esc(preferredPlayerName(player))}" title="Персональна статистика">${playerStatsIcon()}</button>${editButton}</div>
   </article>`;
 }
 
@@ -1134,7 +1153,7 @@ function settingsView() {
       <section class="card card-pad">
         <div class="section-title section-heading">${titleHelp('h2', 'Профіль Enjoy', 'Google-акаунт і спільний каталог гравців. Email приватний. Email ручного профілю використовується лише для запрошення на об’єднання і доступний цьому ведучому та відповідному підтвердженому Google-акаунту. Ім’я, нікнейм, клуб, опис і вибраний аватар синхронізуються у каталозі.')}<span class="badge ${app.cloudDirectory.status === 'online' ? 'green' : ''}">${esc(directoryStatus)}</span></div>
         <div class="host-profile-summary">${hostAvatar('large')}<div><h3>${esc(app.hostProfile?.displayName || app.authUser?.googleName || 'Ведучий')}</h3><p>${esc(app.authUser?.email || '')}</p><div class="host-profile-badges">${app.hostProfile?.club ? `<span class="badge gold">${esc(app.hostProfile.club)}</span>` : ''}${profilePhotoSyncHtml()}</div></div></div>
-        <div class="actions profile-actions"><button class="btn secondary" data-action="edit-host-profile">Редагувати</button><button class="btn secondary" data-action="auth-signout">Вийти</button><button class="icon-btn account-delete-btn" type="button" data-action="delete-account" aria-label="Видалити профіль Mafia" title="Видалити профіль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/></svg></button></div>
+        <div class="actions profile-actions"><button class="btn secondary" data-action="edit-host-profile">Редагувати</button><button class="icon-btn profile-stats-shortcut" type="button" data-action="open-player-stats" data-id="google_${esc(app.authUser?.uid || '')}" aria-label="Моя статистика" title="Моя статистика">${playerStatsIcon()}</button><button class="btn secondary" data-action="auth-signout">Вийти</button><button class="icon-btn account-delete-btn" type="button" data-action="delete-account" aria-label="Видалити профіль Mafia" title="Видалити профіль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/></svg></button></div>
       </section>
       <section class="card card-pad">
         <div class="section-title section-heading">${titleHelp('h2', 'На цьому пристрої', 'Активна гра та приватні дані працюють офлайн.')}</div>
@@ -1469,7 +1488,7 @@ function playerModalHtml() {
   const sharedProfile = Boolean(player.cloudManualId);
   const email = player.email || (isValidPlayerEmail(player.contact) ? normalizePlayerEmail(player.contact) : '');
   return `<div class="modal-backdrop" data-action="close-modal"><form class="card modal" data-form="player" aria-modal="true" role="dialog">
-    <div class="section-title section-heading">${titleHelp('h2', editing ? 'Профіль гравця' : 'Новий гравець', 'Ручні профілі та аватари зберігаються у спільному каталозі. Будь-який авторизований користувач може їх редагувати або видаляти. Google-профіль змінює лише його власник.')}<button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div>
+    <div class="section-title section-heading">${titleHelp('h2', editing ? 'Профіль гравця' : 'Новий гравець', 'Ручні профілі та аватари зберігаються у спільному каталозі. Будь-який авторизований користувач може їх редагувати або видаляти. Google-профіль змінює лише його власник.')}<div class="profile-modal-title-actions">${editing ? `<button class="icon-btn profile-stats-shortcut" type="button" data-action="open-player-stats" data-id="${esc(player.id)}" aria-label="Статистика гравця" title="Персональна статистика">${playerStatsIcon()}</button>` : ''}<button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div></div>
     <div class="avatar-editor">${avatar(player, 'large')}<div><div class="avatar-source-actions"><label class="btn primary" for="avatar-camera">${cameraIcon()}<span>Зробити фото</span></label><input id="avatar-camera" class="visually-hidden" type="file" accept="image/*" capture="environment" data-input="avatar-camera"><label class="btn secondary" for="avatar-gallery">Обрати з галереї</label><input id="avatar-gallery" class="visually-hidden" type="file" accept="image/*" data-input="avatar-gallery"></div></div></div>
     <div class="stack">
       <div class="field"><label for="player-name">Ім’я *</label><input id="player-name" class="input" name="name" value="${esc(player.name || '')}" maxlength="60" required autofocus></div>
@@ -1488,7 +1507,7 @@ function hostProfileModalHtml() {
   const photoDraftChanged = Boolean(app.modal?.profileDraft && Object.hasOwn(app.modal.profileDraft, 'avatar') && profile.avatar !== app.hostProfile?.avatar);
   const photoSyncStatus = photoDraftChanged ? 'pending' : app.profilePhotoSync.status;
   return `<div class="modal-backdrop host-profile-backdrop" data-action="close-modal"><form class="card modal host-profile-modal" data-form="host-profile" aria-modal="true" role="dialog" tabindex="-1">
-    <div class="section-title section-heading">${titleHelp('h2', 'Мій профіль Enjoy', 'Ці дані допоможуть ведучим знайти вас і додати на стіл. Власний аватар стискається локально; видалення власного фото повертає фотографію Google.')}<div class="profile-modal-title-actions"><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div></div>
+    <div class="section-title section-heading">${titleHelp('h2', 'Мій профіль Enjoy', 'Ці дані допоможуть ведучим знайти вас і додати на стіл. Власний аватар стискається локально; видалення власного фото повертає фотографію Google.')}<div class="profile-modal-title-actions"><button class="icon-btn profile-stats-shortcut" type="button" data-action="open-player-stats" data-id="google_${esc(app.authUser?.uid || '')}" aria-label="Моя статистика" title="Моя статистика">${playerStatsIcon()}</button><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div></div>
     <div class="avatar-editor">${avatar({ name: profile.displayName || app.authUser?.googleName, avatar: photo }, 'large')}<div><div class="avatar-source-actions"><label class="btn primary" for="host-avatar-camera">${cameraIcon()}<span>Зробити фото</span></label><input id="host-avatar-camera" class="visually-hidden" type="file" accept="image/*" capture="environment" data-input="host-avatar-camera"><label class="btn secondary" for="host-avatar-gallery">Обрати з галереї</label><input id="host-avatar-gallery" class="visually-hidden" type="file" accept="image/*" data-input="host-avatar-gallery">${app.authUser?.googlePhotoURL && profile.avatar ? '<button class="btn secondary" type="button" data-action="host-use-google-photo">Фото Google</button>' : ''}</div>${profilePhotoSyncHtml(Boolean(profile.avatar), photoSyncStatus)}</div></div>
     <div class="stack">
       <div class="field"><label for="host-display-name">Ім’я для відображення *</label><input id="host-display-name" class="input" name="displayName" value="${esc(profile.displayName || app.authUser?.googleName || '')}" maxlength="60" required></div>
@@ -1501,6 +1520,64 @@ function hostProfileModalHtml() {
     </div>
     <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Скасувати</button><button class="btn primary" type="submit">Зберегти профіль</button></div>
   </form></div>`;
+}
+
+function roleLabel(roleKey) {
+  return ROLE_DECK.find(role => role.key === roleKey)?.label || 'Роль не вказана';
+}
+
+function feedbackSummaryHtml(feedback) {
+  if (!feedback?.summary) return '';
+  const summary = feedback.summary;
+  if (!summary.visible) {
+    return `<p class="feedback-threshold">🔒 Анонімне зведення відкриється після 3 оцінок · ${Math.min(summary.total || 0, 3)}/3</p>`;
+  }
+  const leadingEmotion = GAME_EMOTIONS
+    .map(item => ({ ...item, count: Number(summary.emotions?.[item.key] || 0) }))
+    .sort((left, right) => right.count - left.count)[0];
+  return `<div class="feedback-summary" aria-label="Анонімне зведення оцінок"><span>👍 ${Number(summary.sentiment?.up || 0)}</span><span>👎 ${Number(summary.sentiment?.down || 0)}</span>${leadingEmotion?.count ? `<span>${leadingEmotion.icon} ${leadingEmotion.count}</span>` : ''}</div>`;
+}
+
+function gameFeedbackControls(game, state) {
+  const busy = ['loading', 'saving'].includes(state?.status);
+  const mine = state?.data?.mine || { sentiment: '', emotion: '' };
+  const status = state?.status === 'error'
+    ? `<p class="feedback-status danger-text">${esc(state.error || 'Не вдалося завантажити оцінку')}</p>`
+    : state?.status === 'saving'
+      ? '<p class="feedback-status">Зберігаємо анонімно…</p>'
+      : state?.status === 'saved'
+        ? '<p class="feedback-status success-text">Оцінку збережено анонімно</p>'
+        : '';
+  return `<div class="game-feedback" data-feedback-game="${esc(game.id)}">
+    <div class="sentiment-picker" role="group" aria-label="Чи сподобалась гра">
+      <button class="feedback-choice ${mine.sentiment === 'up' ? 'selected' : ''}" type="button" data-action="rate-game-sentiment" data-id="${esc(game.id)}" data-value="up" aria-pressed="${mine.sentiment === 'up'}" ${busy ? 'disabled' : ''}><span aria-hidden="true">👍</span><b>Зайшла</b></button>
+      <button class="feedback-choice ${mine.sentiment === 'down' ? 'selected' : ''}" type="button" data-action="rate-game-sentiment" data-id="${esc(game.id)}" data-value="down" aria-pressed="${mine.sentiment === 'down'}" ${busy ? 'disabled' : ''}><span aria-hidden="true">👎</span><b>Гірчить</b></button>
+    </div>
+    <div class="emotion-picker" role="group" aria-label="Емоція від гри">${GAME_EMOTIONS.map(item => `<button class="emotion-choice ${mine.emotion === item.key ? 'selected' : ''}" type="button" data-action="rate-game-emotion" data-id="${esc(game.id)}" data-value="${item.key}" aria-label="${esc(item.label)}" title="${esc(item.label)}" aria-pressed="${mine.emotion === item.key}" ${busy ? 'disabled' : ''}><span aria-hidden="true">${item.icon}</span><small>${esc(item.label)}</small></button>`).join('')}</div>
+    ${status}${feedbackSummaryHtml(state?.data)}
+  </div>`;
+}
+
+function playerStatsModalHtml() {
+  const playerId = app.modal.playerId;
+  const player = playerId === `google_${app.authUser?.uid || ''}` ? ownProfilePlayer() : playerById(playerId);
+  if (!player) return `<div class="modal-backdrop" data-action="close-modal"><div class="card modal player-stats-modal" role="dialog" aria-modal="true"><div class="section-title"><h2>Профіль не знайдено</h2><button class="icon-btn" data-action="close-modal" aria-label="Закрити">×</button></div></div></div>`;
+  const stats = personalPlayerStats(finishedGames(), player.id);
+  const canRate = Boolean(player.cloudUid && player.cloudUid === app.authUser?.uid);
+  const backAction = app.modal.returnModal ? 'back-to-profile' : 'close-modal';
+  const history = stats.history.length
+    ? `<div class="personal-game-list">${stats.history.map(({ game, seat, won }) => {
+      const result = game.winner === 'draw' ? 'Нічия' : won ? 'Перемога' : 'Поразка';
+      return `<article class="personal-game-card"><div class="personal-game-head"><div><h3>${esc(game.title)}</h3><p>${formatDate(game.endedAt || game.updatedAt, true)} · місце ${seat.number} · ${esc(roleLabel(seat.role))}</p></div><span class="badge ${won ? 'green' : game.winner === 'draw' ? 'gold' : 'red'}">${result}</span></div>${canRate ? gameFeedbackControls(game, app.gameFeedback[game.id]) : ''}<button class="btn small secondary personal-protocol-button" type="button" data-action="view-protocol" data-id="${esc(game.id)}">Протокол</button></article>`;
+    }).join('')}</div>`
+    : statePanel('empty', 'Ігор у профілі ще немає', 'Історія з’явиться, коли цей профіль буде додано до завершеної гри.');
+  return `<div class="modal-backdrop player-stats-backdrop" data-action="close-modal"><div class="card modal player-stats-modal" role="dialog" aria-modal="true" aria-labelledby="player-stats-title" tabindex="-1">
+    <div class="section-title section-heading"><div class="player-stats-title">${avatar(player, 'large')}<div><span class="eyebrow">Персональна статистика</span><h2 id="player-stats-title">${esc(preferredPlayerName(player))}</h2></div></div><button class="icon-btn" type="button" data-action="${backAction}" aria-label="${app.modal.returnModal ? 'Повернутися до профілю' : 'Закрити'}">${app.modal.returnModal ? '←' : '×'}</button></div>
+    <section class="stat-grid personal-stat-grid"><article class="stat-card"><b>${stats.games}</b><span>ігор</span></article><article class="stat-card"><b>${stats.wins}</b><span>перемог</span></article><article class="stat-card"><b>${stats.winRate}%</b><span>результативність</span></article><article class="stat-card"><b>${esc(stats.favoriteRole ? roleLabel(stats.favoriteRole) : '—')}</b><span>часта роль</span></article></section>
+    ${canRate ? `<p class="privacy-note feedback-privacy-note">Ваш вибір бачите тільки ви. Іншим учасникам доступне лише спільне зведення після трьох оцінок.</p>` : ''}
+    <div class="personal-history-title"><h3>Історія ігор</h3><span>${stats.games}</span></div>
+    ${history}
+  </div></div>`;
 }
 
 function migrationModalHtml() {
@@ -1701,6 +1778,7 @@ function modalHtml() {
   if (!app.modal) return '';
   if (app.modal.type === 'player') return playerModalHtml();
   if (app.modal.type === 'host-profile') return hostProfileModalHtml();
+  if (app.modal.type === 'player-stats') return playerStatsModalHtml();
   if (app.modal.type === 'legacy-migration') return migrationModalHtml();
   if (app.modal.type === 'player-link-offer') return playerLinkOfferModalHtml();
   if (app.modal.type === 'seat') return seatModalHtml();
@@ -2366,6 +2444,20 @@ async function saveSetupPlayerAvatar(seatNumber, source) {
   return directorySynced;
 }
 
+function captureManualPlayerDraft() {
+  const form = document.querySelector('[data-form="player"]');
+  if (!form || app.modal?.type !== 'player') return;
+  const data = new FormData(form);
+  app.modal.player = {
+    ...app.modal.player,
+    name: String(data.get('name') || ''),
+    nickname: String(data.get('nickname') || ''),
+    email: String(data.get('email') || ''),
+    contact: String(data.get('contact') || ''),
+    notes: String(data.get('notes') || '')
+  };
+}
+
 function captureHostProfileDraft() {
   const form = document.querySelector('[data-form="host-profile"]');
   if (!form || app.modal?.type !== 'host-profile') return;
@@ -2732,6 +2824,58 @@ async function connectCloudArchive() {
   }
 }
 
+async function loadPersonalGameFeedback(playerId) {
+  if (playerId !== `google_${app.authUser?.uid || ''}`) return;
+  const history = personalPlayerStats(finishedGames(), playerId).history.slice(0, 25);
+  const pending = history.filter(({ game }) => !app.gameFeedback[game.id]?.data);
+  if (!pending.length) return;
+  pending.forEach(({ game }) => { app.gameFeedback[game.id] = { status: 'loading', data: null, error: '' }; });
+  render();
+  let idToken = '';
+  try {
+    idToken = LOCAL_AUTH_TEST ? '' : await getFirebaseIdToken();
+  } catch (error) {
+    pending.forEach(({ game }) => { app.gameFeedback[game.id] = { status: 'error', data: null, error: error.message }; });
+    render();
+    return;
+  }
+  try {
+    const ratings = await loadGameFeedbackBatch({ idToken, gameIds: pending.map(({ game }) => game.id), testMode: LOCAL_AUTH_TEST });
+    pending.forEach(({ game }) => {
+      app.gameFeedback[game.id] = ratings[game.id]
+        ? { status: 'ready', data: ratings[game.id], error: '' }
+        : { status: 'error', data: null, error: 'Оцінка недоступна' };
+    });
+  } catch (error) {
+    pending.forEach(({ game }) => { app.gameFeedback[game.id] = { status: 'error', data: null, error: error.message || 'Оцінка недоступна' }; });
+  }
+  if (app.modal?.type === 'player-stats' && app.modal.playerId === playerId) render();
+}
+
+async function updatePersonalGameFeedback(gameId, field, value) {
+  const game = gameById(gameId);
+  const playerId = `google_${app.authUser?.uid || ''}`;
+  const participated = game?.status === 'finished' && game.seats?.some(seat => seat.profileId === playerId);
+  if (!participated) throw new Error('Оцінювати гру можуть лише її учасники');
+  const previous = app.gameFeedback[gameId]?.data || {
+    mine: { sentiment: '', emotion: '' },
+    summary: { visible: false, total: 0, sentiment: { up: 0, down: 0 }, emotions: {} }
+  };
+  const vote = { ...previous.mine, [field]: value };
+  app.gameFeedback[gameId] = { status: 'saving', data: { ...previous, mine: vote }, error: '' };
+  render();
+  try {
+    const idToken = LOCAL_AUTH_TEST ? '' : await getFirebaseIdToken();
+    const data = await saveGameFeedback({ idToken, gameId, vote, testMode: LOCAL_AUTH_TEST });
+    app.gameFeedback[gameId] = { status: 'saved', data, error: '' };
+    vibrate(35);
+    render();
+  } catch (error) {
+    app.gameFeedback[gameId] = { status: 'error', data: previous, error: error.message || 'Не вдалося зберегти оцінку' };
+    render();
+  }
+}
+
 async function deleteGameEverywhere(game) {
   if (!canManageGame(game)) throw new Error('Цю гру може видалити лише її ведучий');
   const remote = app.cloudGames.find(item => item.id === game.id);
@@ -2981,6 +3125,23 @@ async function handleAction(action, element, sourceEvent) {
     location.reload();
   } else if (action === 'edit-host-profile') {
     app.modal = { type: 'host-profile' }; render();
+  } else if (action === 'open-player-stats') {
+    if (app.modal?.type === 'host-profile') captureHostProfileDraft();
+    if (app.modal?.type === 'player') captureManualPlayerDraft();
+    const returnModal = ['host-profile', 'player'].includes(app.modal?.type) ? clone(app.modal) : null;
+    const playerId = element.dataset.id || `google_${app.authUser?.uid || ''}`;
+    if (playerId !== `google_${app.authUser?.uid || ''}` && !playerById(playerId)) return toast('Профіль не знайдено');
+    app.modal = { type: 'player-stats', playerId, returnModal };
+    render();
+    void loadPersonalGameFeedback(playerId);
+  } else if (action === 'back-to-profile') {
+    const returnModal = app.modal?.returnModal;
+    app.modal = returnModal || null;
+    render();
+  } else if (action === 'rate-game-sentiment') {
+    await updatePersonalGameFeedback(element.dataset.id, 'sentiment', element.dataset.value);
+  } else if (action === 'rate-game-emotion') {
+    await updatePersonalGameFeedback(element.dataset.id, 'emotion', element.dataset.value);
   } else if (action === 'open-order-panel') {
     app.order = { busy: false, status: 'idle', error: '', lastItem: '' };
     app.modal = { type: 'order' };
@@ -3472,6 +3633,7 @@ async function activateAuthenticatedUser(user) {
   activationUid = user.uid;
   activationPromise = (async () => {
     app.authUser = user;
+    app.gameFeedback = {};
     app.authError = '';
     app.authBusy = false;
     useDatabaseForUser(user.uid);
@@ -3514,6 +3676,7 @@ function clearAuthenticatedState() {
   app.authUser = null;
   app.hostProfile = null;
   app.profilePhotoSync = { status: 'idle' };
+  app.gameFeedback = {};
   app.localPlayers = [];
   app.cloudPlayers = [];
   app.players = [];

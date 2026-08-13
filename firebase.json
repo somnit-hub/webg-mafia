@@ -36,6 +36,7 @@
       ".firebase/**",
       ".tmp-chrome-*/**",
       "functions/**",
+      "cloudflare/**",
       "**/node_modules/**",
       "README.md",
       "firestore.rules",

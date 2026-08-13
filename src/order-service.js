@@ -1,4 +1,4 @@
-const ORDER_ENDPOINT = 'https://europe-west1-somnit-mafia-desk.cloudfunctions.net/sendTelegramOrder';
+const ORDER_ENDPOINT = 'https://enjoy-mafia-orders.webg-mafia.workers.dev/orders';
 
 export async function sendTelegramOrder({ idToken, item, sender, game, testMode = false }) {
   if (testMode) {

@@ -615,6 +615,31 @@ Object.assign(COPY.it, {
   'Музика відтворюється локально, не завантажується в мережу й діє до закриття вкладки. Звук піде на колонку, якщо вона вже підключена до телефона.': 'La musica viene riprodotta localmente, non viene caricata online e resta disponibile fino alla chiusura della scheda. L’audio verrà riprodotto dall’altoparlante già collegato al telefono.'
 });
 
+Object.assign(COPY.it, {
+  'Персональна статистика': 'Statistiche personali', 'Моя статистика': 'Le mie statistiche', 'Історія ігор': 'Cronologia partite',
+  'перемог': 'vittorie', 'результативність': 'percentuale di vittorie', 'часта роль': 'ruolo più frequente',
+  'Ігор у профілі ще немає': 'Nessuna partita in questo profilo', 'Зайшла': 'Mi è piaciuta', 'Гірчить': 'Non mi è piaciuta',
+  'Мозок закипів': 'Cervello in fiamme', 'Оскар за брехню': 'Oscar per la bugia', 'Стіл палав': 'Tavolo in fiamme',
+  'Цирк Enjoy': 'Circo Enjoy', 'Винесли красиво': 'Eliminato con stile', 'Оцінку збережено анонімно': 'Valutazione salvata in forma anonima',
+  'Зберігаємо анонімно…': 'Salvataggio anonimo…', 'Ваш вибір бачите тільки ви. Іншим учасникам доступне лише спільне зведення після трьох оцінок.': 'Solo tu puoi vedere la tua scelta. Gli altri partecipanti vedono soltanto il riepilogo dopo tre valutazioni.'
+});
+Object.assign(COPY.en, {
+  'Персональна статистика': 'Personal statistics', 'Моя статистика': 'My statistics', 'Історія ігор': 'Game history',
+  'перемог': 'wins', 'результативність': 'win rate', 'часта роль': 'most frequent role',
+  'Ігор у профілі ще немає': 'No games in this profile yet', 'Зайшла': 'Loved it', 'Гірчить': 'Not for me',
+  'Мозок закипів': 'Brain overheated', 'Оскар за брехню': 'Oscar-worthy lie', 'Стіл палав': 'Table on fire',
+  'Цирк Enjoy': 'Enjoy circus', 'Винесли красиво': 'Eliminated in style', 'Оцінку збережено анонімно': 'Rating saved anonymously',
+  'Зберігаємо анонімно…': 'Saving anonymously…', 'Ваш вибір бачите тільки ви. Іншим учасникам доступне лише спільне зведення після трьох оцінок.': 'Only you can see your choice. Other participants see only the summary after three ratings.'
+});
+Object.assign(COPY.fr, {
+  'Персональна статистика': 'Statistiques personnelles', 'Моя статистика': 'Mes statistiques', 'Історія ігор': 'Historique des parties',
+  'перемог': 'victoires', 'результативність': 'taux de victoire', 'часта роль': 'rôle le plus fréquent',
+  'Ігор у профілі ще немає': 'Aucune partie dans ce profil', 'Зайшла': 'J’ai adoré', 'Гірчить': 'Pas pour moi',
+  'Мозок закипів': 'Cerveau en surchauffe', 'Оскар за брехню': 'Oscar du mensonge', 'Стіл палав': 'Table en feu',
+  'Цирк Enjoy': 'Cirque Enjoy', 'Винесли красиво': 'Éliminé avec style', 'Оцінку збережено анонімно': 'Note enregistrée anonymement',
+  'Зберігаємо анонімно…': 'Enregistrement anonyme…', 'Ваш вибір бачите тільки ви. Іншим учасникам доступне лише спільне зведення після трьох оцінок.': 'Vous seul voyez votre choix. Les autres participants ne voient que le résumé après trois évaluations.'
+});
+
 const PATTERNS = {
   it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+)% перемог/g, '$1% vittorie'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
   en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+)% перемог/g, '$1% wins'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],

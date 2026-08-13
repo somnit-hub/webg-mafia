@@ -1115,12 +1115,13 @@ const nomination = await evaluate(`({
   latestLog: document.querySelector('.quick-log')?.innerText.split('\\n').slice(0, 2)
 })`);
 const offlineShell = await evaluate(`navigator.serviceWorker.ready.then(async () => {
-  const cache = await caches.open('mafia-desk-v113');
+  const cache = await caches.open('mafia-desk-v116');
   const keys = (await cache.keys()).map(request => request.url);
   return {
     authModule: keys.some(url => url.endsWith('/src/auth.js')),
     cloudProfilesModule: keys.some(url => url.endsWith('/src/cloud-profiles.js')),
     cloudGamesModule: keys.some(url => url.endsWith('/src/cloud-games.js')),
+    gameFeedbackModule: keys.some(url => url.endsWith('/src/game-feedback.js')),
     gameEngineModule: keys.some(url => url.endsWith('/src/game-engine.js')),
     orderServiceModule: keys.some(url => url.endsWith('/src/order-service.js')),
     playerLinksModule: keys.some(url => url.endsWith('/src/player-links.js')),
@@ -1284,6 +1285,46 @@ const queueAfterGame = await evaluate(`({
   positions: [...document.querySelectorAll('.queue-player-btn.selected small')].map(item => Number(item.textContent)).sort((a, b) => a - b)
 })`);
 
+await evaluate(`(async () => {
+  const { getAll, putOne } = await import('./src/db.js');
+  const games = await getAll('games');
+  const game = games.find(item => item.status === 'finished');
+  if (!game) throw new Error('Finished game fixture not found');
+  game.seats[0].profileId = 'google_local-smoke-test';
+  game.updatedAt = new Date().toISOString();
+  await putOne('games', game);
+  location.hash = '#settings';
+  location.reload();
+})()`);
+await wait(750);
+const playerStatsShortcut = await evaluate(`({
+  settingsIcon: Boolean(document.querySelector('.profile-actions [data-action="open-player-stats"] .player-stats-icon')),
+  playerIcons: document.querySelectorAll('[data-action="open-player-stats"] .player-stats-icon').length
+})`);
+await click('.profile-actions [data-action="open-player-stats"]');
+await wait(180);
+const personalStatsModalFrame = await inspectModalFrame();
+const personalStats = await evaluate(`({
+  title: document.querySelector('.player-stats-modal h2')?.textContent,
+  games: document.querySelector('.personal-stat-grid .stat-card b')?.textContent,
+  history: document.querySelectorAll('.personal-game-card').length,
+  sentimentChoices: document.querySelectorAll('.sentiment-picker .feedback-choice').length,
+  emotions: [...document.querySelectorAll('.emotion-choice')].map(button => button.getAttribute('aria-label')),
+  privacy: document.querySelector('.feedback-privacy-note')?.textContent,
+  threshold: document.querySelector('.feedback-threshold')?.textContent,
+  scrollWidth: document.documentElement.scrollWidth
+})`);
+await captureScreenshot(process.env.SMOKE_PLAYER_STATS_SCREENSHOT);
+await click('[data-action="rate-game-sentiment"][data-value="up"]');
+await click('[data-action="rate-game-emotion"][data-value="circus"]');
+const personalFeedback = await evaluate(`({
+  sentiment: document.querySelector('[data-action="rate-game-sentiment"][data-value="up"]')?.getAttribute('aria-pressed'),
+  emotion: document.querySelector('[data-action="rate-game-emotion"][data-value="circus"]')?.getAttribute('aria-pressed'),
+  saved: document.querySelector('.feedback-status')?.textContent,
+  selected: document.querySelectorAll('.game-feedback .selected').length
+})`);
+await click('.player-stats-modal [data-action="close-modal"]');
+
 await evaluate(`location.hash = '#setup'`);
 await wait(180);
 await click('[data-action="start-game"]');
@@ -1356,10 +1397,10 @@ const foreignObserver = await evaluate(`({
 
 const nightSignals = { donMissSignal, donHitSignal, sheriffBlackSignal, sheriffRedSignal, nightResultAnnouncement };
 const chromeByTab = { home: homeChrome, players: playersChrome, setup: setupChrome, stats: statsChrome, settings: settingsChrome };
-const unifiedModalFrames = { mediaModalFrame, orderModalFrame, hostProfileModalFrame, accountDeleteModalFrame, playerModalFrame, setupMoveModalFrame, setupAvatarModalFrame, gameSettingsModalFrame, seatModalFrame, confirmModalFrame, winnerModalFrame, protocolModalFrame };
+const unifiedModalFrames = { mediaModalFrame, orderModalFrame, hostProfileModalFrame, accountDeleteModalFrame, playerModalFrame, setupMoveModalFrame, setupAvatarModalFrame, gameSettingsModalFrame, seatModalFrame, confirmModalFrame, winnerModalFrame, protocolModalFrame, personalStatsModalFrame };
 const languageSupport = { languageOptions, englishLanguage, frenchLanguage, italianLanguage, restoredUkrainianLanguage };
 const gameCardSystem = { roleReadyLayout, roleOpenLayout, gameSettingsAppearance, confirmModalAppearance, winnerModalAppearance, zeroNightSheriff, zeroNightFreeSeating, bestMoveLayout, bestMoveFarewell, afterBestMove };
-const result = { authenticatedHost, enjoyBrand, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, mediaPanel, preparedMedia, orderPanel, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersCollapsed, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
+const result = { authenticatedHost, enjoyBrand, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, mediaPanel, preparedMedia, orderPanel, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersCollapsed, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, playerStatsShortcut, personalStats, personalFeedback, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
 console.log(JSON.stringify(result, null, 2));
 
 if (process.env.SMOKE_SCREENSHOT) {
@@ -1402,7 +1443,7 @@ verify(settingsTechnicalTermsAbsent, 'technical storage terms absent from settin
 verify(rulesLinks.count === 2 && rulesLinks.ukrainian?.includes('imafia.org/game-rules') && rulesLinks.international?.includes('fiim.world/fiim-rules') && rulesLinks.externalSafety && rulesLinks.arrowsAbsent, 'rules links');
 verify(compactHelp.count >= 8 && compactHelp.visiblePageDescriptions === 0 && compactHelp.visibleSectionDescriptions === 0 && compactHelp.visibleFieldHints === 0 && compactHelp.circular && helpPopover.visible && helpPopover.role === 'tooltip' && helpPopover.text.includes('Спільнота') && helpPopover.insideViewport, 'compact help tooltips');
 verify(accountDeletion.trashIconOnly && accountDeletion.trashButtonSize >= 44 && accountDeletion.dialog && accountDeletion.title === 'Видалити профіль Mafia?' && accountDeletion.retentionCopyAbsent && accountDeletion.confirm === 'Видалити профіль' && accountDeletion.focused && accountDeletion.scrollTop === 0 && accountDeletion.top >= 6 && accountDeletion.top <= 8 && accountDeletion.left === 6 && accountDeletion.rightGap === 6 && accountDeletion.bottomWithinViewport && accountDeletion.backdropAlign === 'start' && accountDeletion.bordered, 'account deletion controls');
-verify(Object.values(unifiedModalFrames).length === 12 && Object.values(unifiedModalFrames).every(isUnifiedModal), 'unified mobile modal frames');
+verify(Object.values(unifiedModalFrames).length === 13 && Object.values(unifiedModalFrames).every(isUnifiedModal), 'unified mobile modal frames');
 verify(statsPanelDefault.expanded === 'false' && statsPanelDefault.hidden && statsPanelDefault.graphPresent && statsPanelExpanded.expanded === 'true' && !statsPanelExpanded.hidden && statsPanelExpanded.focused === 'statsRoles', 'collapsible statistics graph');
 verify(statsPlayersDefault.expanded === 'true' && !statsPlayersDefault.hidden && statsPlayersDefault.emptyState && statsPlayersCollapsed.expanded === 'false' && statsPlayersCollapsed.hidden && statsPlayersCollapsed.focused === 'statsPlayers' && statsPlayersCollapsed.panelHeight <= 72, 'collapsible statistics players section');
 verify(emptySharedStats.title === 'Статистика' && emptySharedStats.description.includes('усіх ведучих') && emptySharedStats.archiveTitle === 'Спільний архів ігор' && emptySharedStats.blackRate === '0%' && emptySharedStats.summaryCentered && emptySharedStats.technicalTermsAbsent && emptySharedStats.unifiedStates && emptySharedStats.emptyStates, 'empty shared statistics and unified states');
@@ -1410,6 +1451,7 @@ verify(cameraControl.cameraInput && cameraControl.captureMode === 'environment' 
 verify(presenceStatuses.googleCards === 2 && presenceStatuses.online === 1 && presenceStatuses.offline === 1 && presenceStatuses.manualPresenceAbsent && presenceStatuses.labels.includes('Онлайн') && presenceStatuses.labels.includes('Офлайн') && presenceStatuses.dots === 2, 'Google profile online and offline presence badges');
 verify(telegramImportAbsent.input && telegramImportAbsent.action && telegramImportAbsent.modal, 'Telegram import removed');
 verify(profile.cards === 13 && !profile.modalOpen && profile.pendingGoogleLink && lineupSelection.selected === 12 && lineupSelection.chips === 12 && lineupSelection.waitingChips === 2 && lineupSelection.status.includes('черга 2') && lineupSelection.positions.length === 12 && playersLayout.scrollWidth <= playersLayout.viewport && playersLayout.topActionHidden && playersLayout.searchActionHidden && playersLayout.textSeatingHidden && playersLayout.fabVisible && playersLayout.actionCount === 2 && playersLayout.fabSquare && playersLayout.addPlayerIcon && playersLayout.seatingIcon && playersLayout.addPlayerGold && playersLayout.seatingRed && playersLayout.fabCentered && playersLayout.fabAboveNavigation && JSON.stringify(playersLayout.labels) === JSON.stringify(['Додати гравця', 'До розсадки']) && playersCompactLayout.scrollWidth <= playersCompactLayout.viewport && playersCompactLayout.statusRight <= playersCompactLayout.viewport && playersCompactLayout.refreshWidth > 0 && playersCompactLayout.smallestQueueButton >= 44 && playersCompactLayout.fabLeft >= 0 && playersCompactLayout.fabRight <= playersCompactLayout.viewport, 'players layout, floating add and seating actions, and next-game queue');
+verify(playerStatsShortcut.settingsIcon && playerStatsShortcut.playerIcons >= 1 && personalStats.title === 'Smoke Нік' && personalStats.games === '1' && personalStats.history === 1 && personalStats.sentimentChoices === 2 && personalStats.emotions.length === 5 && personalStats.emotions.includes('Мозок закипів') && personalStats.emotions.includes('Цирк Enjoy') && personalStats.privacy.includes('тільки ви') && personalStats.threshold.includes('3 оцінок') && personalStats.scrollWidth <= 390 && personalFeedback.sentiment === 'true' && personalFeedback.emotion === 'true' && personalFeedback.saved.includes('анонімно') && personalFeedback.selected === 2, 'personal player history and anonymous two-part feedback');
 verify(setupPanelsDefault.setupGame.expanded === 'false' && setupPanelsDefault.setupGame.hidden && setupPanelsDefault.setupTimers.expanded === 'false' && setupPanelsDefault.setupTimers.hidden && setupPanelsDefault.setupRules.expanded === 'false' && setupPanelsDefault.setupRules.hidden && setupPanelsDefault.setupSeating.expanded === 'true' && !setupPanelsDefault.setupSeating.hidden && setupRulesLinks.expanded === 'true' && !setupRulesLinks.hidden && setupRulesLinks.count === 2 && setupRulesLinks.ukrainian?.includes('imafia.org/game-rules') && setupRulesLinks.international?.includes('fiim.world/fiim-rules') && setupRulesLinks.externalSafety && setupRulesLinks.arrowsAbsent && setupGameExpanded.expanded === 'true' && !setupGameExpanded.hidden && setupGameExpanded.focused === 'setupGame' && setupTimersCollapsed.expanded === 'false' && setupTimersCollapsed.hidden && setupSeatingCollapsed.expanded === 'false' && setupSeatingCollapsed.hidden, 'collapsible game setup panels');
 verify(setupPanelOrder.at(-2) === 'setupSeating' && setupPanelOrder.at(-1) === 'setupRules', 'rules follow seating');
 verify(Object.values(setupTypography).every(font => !/(Iowan|Palatino|Book Antiqua|Georgia|ui-serif)/i.test(font)), 'readable sans-serif typography');
@@ -1427,7 +1469,7 @@ verify(gameSettingsAppearance.gameModal && gameSettingsAppearance.context === '�
 verify(firstDay.seats === 10 && firstDay.seatColumns === 2 && firstDay.seatRows === 5 && firstDay.maxSeatHeight <= 60 && firstDay.aliveSeats === 10 && firstDay.deadSeats === 0 && firstDay.allSeatsVisible && firstDay.numberSize >= 21 && firstDay.numberWeight >= 900 && firstDay.aliveGreenAccent && firstDay.timerActionHeight >= 60 && firstDay.timerActionFontSize >= 18 && firstDay.timerActionFontWeight >= 900 && firstDay.timerAdjustments === 2 && JSON.stringify(firstDay.primaryActions) === JSON.stringify(['Старт', 'Скинути', 'Наступний →']) && firstDay.primaryActionsSameRow && firstDay.primaryActionsVisible, 'two-column compact table and one-row mobile game controls');
 verify(seatVisualStates.seatModalAppearance.number === '2' && seatVisualStates.seatModalAppearance.numberSize >= 58 && seatVisualStates.seatModalAppearance.numberWeight >= 900 && seatVisualStates.seatModalAppearance.alive && seatVisualStates.seatModalAppearance.status === 'За столом' && seatVisualStates.deadSeatAppearance.dead && !seatVisualStates.deadSeatAppearance.alive && seatVisualStates.deadSeatAppearance.opacity < 0.8 && seatVisualStates.deadSeatAppearance.grayscale && seatVisualStates.deadSeatAppearance.tag === 'вибув' && seatVisualStates.deadSeatModalAppearance.number === '10' && seatVisualStates.deadSeatModalAppearance.dead && seatVisualStates.deadSeatModalAppearance.status === 'Вибув' && seatVisualStates.restoredSeatAppearance.alive && !seatVisualStates.restoredSeatAppearance.dead, 'alive, eliminated and restored seat visuals');
 verify(nomination.candidates.length === 1 && !nomination.modalOpen && !browserErrors.length, 'nomination and browser errors');
-verify(offlineShell.authModule && offlineShell.cloudProfilesModule && offlineShell.cloudGamesModule && offlineShell.gameEngineModule && offlineShell.orderServiceModule && offlineShell.playerLinksModule && offlineShell.timerModule && offlineShell.lineupModule && offlineShell.guestNamesModule && offlineShell.i18nModule && offlineShell.enjoyModule && offlineShell.firebaseApp && offlineShell.firebaseAuth && offlineShell.firebaseFirestore && offlineShell.roleSignals === 6 && offlineShell.themeBackgrounds === 3 && offlineReload.hash === '#game' && offlineReload.phase === 'День 1' && offlineReload.signedIn, 'offline shell');
+verify(offlineShell.authModule && offlineShell.cloudProfilesModule && offlineShell.cloudGamesModule && offlineShell.gameFeedbackModule && offlineShell.gameEngineModule && offlineShell.orderServiceModule && offlineShell.playerLinksModule && offlineShell.timerModule && offlineShell.lineupModule && offlineShell.guestNamesModule && offlineShell.i18nModule && offlineShell.enjoyModule && offlineShell.firebaseApp && offlineShell.firebaseAuth && offlineShell.firebaseFirestore && offlineShell.roleSignals === 6 && offlineShell.themeBackgrounds === 3 && offlineReload.hash === '#game' && offlineReload.phase === 'День 1' && offlineReload.signedIn, 'offline shell');
 verify(donMissSignal.source.endsWith('/don-not-sheriff.webp') && donMissSignal.label === 'НЕ ШЕРИФ' && donMissSignal.instruction.includes('схрестіть руки'), 'Don miss signal');
 verify(donHitSignal.source.endsWith('/don-found-sheriff.webp') && donHitSignal.label === 'ЦЕ ШЕРИФ' && donHitSignal.instruction.includes('однією рукою'), 'Don hit signal');
 verify(sheriffBlackSignal.source.endsWith('/mafia.webp') && sheriffBlackSignal.label === 'ЧОРНИЙ' && sheriffBlackSignal.instruction.includes('палець униз'), 'Sheriff black signal');

@@ -1086,6 +1086,16 @@ img { display: block; max-width: 100%; }
   .player-card p { font-size: 13px; }
   .player-stats { font-size: 11px; }
   .host-profile-summary p, .identity-field { font-size: 13px; }
+  .settings-profile-layout { display: grid; grid-template-columns: 82px minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; column-gap: 10px; row-gap: 8px; }
+  .settings-profile-layout .host-profile-summary { display: contents; }
+  .settings-profile-layout .host-profile-summary > .avatar.large { width: 82px; height: 82px; grid-column: 1; grid-row: 1 / span 2; }
+  .settings-profile-layout .host-profile-summary > div { min-width: 0; grid-column: 2; grid-row: 1; }
+  .settings-profile-layout .host-profile-summary h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .settings-profile-layout .host-profile-summary p { margin-bottom: 5px; }
+  .settings-profile-layout .profile-actions { grid-column: 2; grid-row: 2; margin-top: 0; display: grid; grid-template-columns: minmax(0, 1fr) 42px; gap: 6px; }
+  .settings-profile-layout .profile-actions .btn { width: 100%; min-height: 42px; padding: 6px 8px; font-size: 14px; }
+  .settings-profile-layout .profile-stats-shortcut,
+  .settings-profile-layout .account-delete-btn { width: 42px; height: 42px; margin: 0; }
   .phase-copy h1 { font-size: 16px; }
   .phase-copy p { font-size: 11px; }
   .phase-stats { font-size: 12px; }

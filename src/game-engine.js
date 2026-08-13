@@ -33,6 +33,32 @@ export function secureShuffle(values, cryptoSource = globalThis.crypto) {
   return result;
 }
 
+export function createNumberRoleDeal(roleKeys, cryptoSource = globalThis.crypto) {
+  const roles = Array.isArray(roleKeys) ? roleKeys.filter(role => ROLE_KEYS.has(role)) : [];
+  if (roles.length !== roleKeys?.length) throw new Error('Колода містить некоректну роль');
+  return { mode: 'number', remainingRoles: secureShuffle(roles, cryptoSource), selectedCard: null };
+}
+
+export function selectNumberRoleCard(roleDeal, cardNumber) {
+  const remainingRoles = Array.isArray(roleDeal?.remainingRoles) ? [...roleDeal.remainingRoles] : [];
+  const selectedCard = Number(cardNumber);
+  if (!Number.isInteger(selectedCard) || selectedCard < 1 || selectedCard > remainingRoles.length) {
+    throw new Error(`Залишилося ${remainingRoles.length} карт: гравець має обрати число від 1 до ${remainingRoles.length}`);
+  }
+  return { mode: 'number', remainingRoles, selectedCard };
+}
+
+export function takeNumberRoleCard(roleDeal, cardNumber = roleDeal?.selectedCard) {
+  const selected = selectNumberRoleCard(roleDeal, cardNumber);
+  const remainingRoles = [...selected.remainingRoles];
+  const [role] = remainingRoles.splice(selected.selectedCard - 1, 1);
+  return {
+    role,
+    cardNumber: selected.selectedCard,
+    roleDeal: { mode: 'number', remainingRoles, selectedCard: null }
+  };
+}
+
 export function teamForRole(role) {
   return ['don', 'mafia'].includes(role) ? 'black' : ['citizen', 'sheriff'].includes(role) ? 'red' : null;
 }
@@ -91,6 +117,8 @@ export function toggleBestMoveCandidate(selected = [], number, allowedNumbers = 
 export function normalizeGameState(value, defaultSettings = {}, { closeReveal = false, now = Date.now() } = {}) {
   if (!value || typeof value !== 'object') return value;
   const game = clone(value);
+  const savedDealMode = ['number', 'automatic'].includes(value.settings?.dealMode) ? value.settings.dealMode : null;
+  const storedRoleDealMode = value.roleDeal?.mode === 'number' ? 'number' : null;
   game.settings = { ...defaultSettings, ...(game.settings || {}) };
   game.status = game.status === 'finished' ? 'finished' : 'active';
   game.phase = game.status === 'finished'
@@ -107,6 +135,23 @@ export function normalizeGameState(value, defaultSettings = {}, { closeReveal = 
     nominatedBy: Number.isInteger(Number(seat.nominatedBy)) ? Number(seat.nominatedBy) : null,
     eliminatedReason: String(seat.eliminatedReason || '')
   })) : [];
+  const allSeatsAlreadyHaveRoles = game.seats.length > 0 && game.seats.every(seat => ROLE_KEYS.has(seat.role));
+  game.settings.dealMode = storedRoleDealMode || savedDealMode || (game.phase === 'reveal' && allSeatsAlreadyHaveRoles ? 'automatic' : 'number');
+  if (game.phase === 'reveal' && game.settings.dealMode === 'number') {
+    const remainingRoles = Array.isArray(game.roleDeal?.remainingRoles)
+      ? game.roleDeal.remainingRoles.filter(role => ROLE_KEYS.has(role)).slice(0, 10)
+      : [];
+    const selectedCard = Number(game.roleDeal?.selectedCard);
+    game.roleDeal = {
+      mode: 'number',
+      remainingRoles,
+      selectedCard: closeReveal || !Number.isInteger(selectedCard) || selectedCard < 1 || selectedCard > remainingRoles.length
+        ? null
+        : selectedCard
+    };
+  } else {
+    delete game.roleDeal;
+  }
   const aliveNumbers = new Set(game.seats.filter(seat => seat.status === 'alive').map(seat => seat.number));
   game.revealIndex = integer(game.revealIndex, 0, Math.max(0, game.seats.length - 1));
   game.revealOpen = closeReveal ? false : Boolean(game.revealOpen);
@@ -167,14 +212,27 @@ export function gameStateErrors(game) {
   const numbers = (game.seats || []).map(seat => seat.number);
   if (new Set(numbers).size !== numbers.length || numbers.some((number, index) => number !== index + 1)) errors.push('Номери місць пошкоджено');
   if (!game.publicOnly) {
-    const roles = (game.seats || []).map(seat => seat.role);
+    const numberDealInProgress = game.phase === 'reveal' && game.settings?.dealMode === 'number';
+    const seatRoles = (game.seats || []).map(seat => seat.role).filter(role => ROLE_KEYS.has(role));
+    const remainingRoles = numberDealInProgress && Array.isArray(game.roleDeal?.remainingRoles)
+      ? game.roleDeal.remainingRoles
+      : [];
+    const roles = numberDealInProgress ? [...seatRoles, ...remainingRoles] : seatRoles;
     const roleCounts = role => roles.filter(value => value === role).length;
     if (roleCounts('don') !== 1 || roleCounts('sheriff') !== 1 || roleCounts('mafia') !== 2 || roleCounts('citizen') !== 6) {
       errors.push('Склад ролей повинен бути 6+1 червоних і 2+1 чорних');
     }
+    if (numberDealInProgress) {
+      const emptySeats = (game.seats || []).filter(seat => !ROLE_KEYS.has(seat.role)).length;
+      if (emptySeats !== remainingRoles.length) errors.push('Кількість нерозданих карт не відповідає кількості гравців');
+      const selectedCard = game.roleDeal?.selectedCard;
+      if (selectedCard != null && (!Number.isInteger(selectedCard) || selectedCard < 1 || selectedCard > remainingRoles.length)) {
+        errors.push('Обрана карта вже недоступна');
+      }
+    }
   }
   const determinedWinner = victoryForSeats(game.seats || []);
-  if (game.status === 'active' && determinedWinner && !['lastWord', 'bestMove'].includes(game.phase)) {
+  if (game.status === 'active' && game.phase !== 'reveal' && determinedWinner && !['lastWord', 'bestMove'].includes(game.phase)) {
     errors.push('Переможця вже визначено, але гра не перейшла до прощальної промови або фіналу');
   }
   if (game.phase === 'night') {

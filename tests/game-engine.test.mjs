@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  canLiftTiedCandidates, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
-  secureShuffle, toggleBestMoveCandidate, victoryForSeats
+  canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
+  secureShuffle, selectNumberRoleCard, takeNumberRoleCard, toggleBestMoveCandidate, victoryForSeats
 } from '../src/game-engine.js';
 
 function seats() {
@@ -35,6 +35,30 @@ test('secure role shuffle preserves every card', () => {
   const shuffled = secureShuffle(deck);
   assert.equal(shuffled.length, 10);
   assert.deepEqual([...shuffled].sort(), [...deck].sort());
+});
+
+test('number role deal removes the selected card and renumbers the remaining deck', () => {
+  const deck = ['sheriff', 'don', 'mafia', 'mafia', ...Array(6).fill('citizen')];
+  const predictableCrypto = { getRandomValues(buffer) { buffer[0] = 0; return buffer; } };
+  const roleDeal = createNumberRoleDeal(deck, predictableCrypto);
+  assert.equal(roleDeal.remainingRoles.length, 10);
+  const selected = selectNumberRoleCard(roleDeal, 4);
+  assert.equal(selected.selectedCard, 4);
+  const dealt = takeNumberRoleCard(selected);
+  assert.equal(dealt.cardNumber, 4);
+  assert.equal(dealt.role, roleDeal.remainingRoles[3]);
+  assert.equal(dealt.roleDeal.remainingRoles.length, 9);
+  assert.deepEqual(dealt.roleDeal.remainingRoles, roleDeal.remainingRoles.filter((_, index) => index !== 3));
+  assert.equal(dealt.roleDeal.selectedCard, null);
+});
+
+test('number role deal rejects a gesture beyond the cards that remain', () => {
+  const roleDeal = { mode: 'number', remainingRoles: ['don', 'citizen', 'sheriff'], selectedCard: null };
+  assert.throws(() => selectNumberRoleCard(roleDeal, 4), /від 1 до 3/);
+  assert.throws(() => selectNumberRoleCard(roleDeal, 0), /від 1 до 3/);
+  const last = takeNumberRoleCard({ mode: 'number', remainingRoles: ['don'], selectedCard: null }, 1);
+  assert.equal(last.role, 'don');
+  assert.deepEqual(last.roleDeal.remainingRoles, []);
 });
 
 test('victory is detected only at city clear or black parity', () => {
@@ -105,6 +129,23 @@ test('persisted game recovery closes role and check results and removes dead tar
   assert.equal(normalized.night.sheriffCheck, null);
   assert.equal(normalized.timer.running, false);
   assert.equal(normalized.settings.bestMove, 20);
+});
+
+test('persisted number deal keeps progress but closes the role and clears a pending tap', () => {
+  const state = game({
+    phase: 'reveal',
+    settings: { speech: 60, nightCheck: 10, dealMode: 'number' },
+    seats: seats().map((seat, index) => ({ ...seat, role: index < 2 ? seat.role : null })),
+    revealIndex: 2,
+    revealOpen: true,
+    roleDeal: { mode: 'number', remainingRoles: seats().slice(2).map(seat => seat.role), selectedCard: 5 }
+  });
+  const recovered = normalizeGameState(state, {}, { closeReveal: true });
+  assert.equal(recovered.revealIndex, 2);
+  assert.equal(recovered.revealOpen, false);
+  assert.equal(recovered.roleDeal.selectedCard, null);
+  assert.equal(recovered.roleDeal.remainingRoles.length, 8);
+  assert.deepEqual(gameStateErrors(recovered), []);
 });
 
 test('persisted running timer is paused at its real remaining time after recovery', () => {

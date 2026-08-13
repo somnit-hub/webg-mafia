@@ -30,8 +30,8 @@ import {
 } from './cloud-games.js';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
-  canLiftTiedCandidates, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
-  secureShuffle, toggleBestMoveCandidate, victoryForSeats
+  canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
+  secureShuffle, selectNumberRoleCard, takeNumberRoleCard, toggleBestMoveCandidate, victoryForSeats
 } from './game-engine.js';
 import {
   TABLE_SIZE, consumeSeatedPlayers, lineupStatus, normalizeLineup,
@@ -99,6 +99,7 @@ const DEFAULT_SETTINGS = {
   language: 'uk',
   firstDaySingleNoVote: true,
   lastGetsRemainder: true,
+  dealMode: 'number',
   penaltyMode: 'tournament'
 };
 
@@ -1032,6 +1033,8 @@ function setupView() {
         <div class="field"><label for="game-title">Назва</label><input id="game-title" class="input" data-draft="title" value="${esc(app.draft.title)}" maxlength="80"></div>
         <div class="field"><label for="game-venue">Місце / клуб</label><input id="game-venue" class="input" data-draft="venue" value="${esc(app.draft.venue)}" maxlength="100" placeholder="Необов’язково"></div>
         <div class="field"><label for="game-notes">Нотатка ведучого</label><textarea id="game-notes" class="textarea" data-draft="notes" maxlength="500" placeholder="Турнір, номер столу, особливі умови…">${esc(app.draft.notes)}</textarea></div>
+        <div class="divider"></div>
+        <div class="field"><label>${help('Спосіб роздачі ролей', 'За обраною цифрою: гравці по черзі жестом показують число в межах карт, що залишилися, а суддя відкриває відповідну карту. Якщо число завелике — гравець обирає повторно; остання карта видається автоматично.')}</label><select class="select" data-draft-setting="dealMode"><option value="number" ${app.draft.settings.dealMode !== 'automatic' ? 'selected' : ''}>За обраною цифрою</option><option value="automatic" ${app.draft.settings.dealMode === 'automatic' ? 'selected' : ''}>Автоматично</option></select></div>
       </div>`)}
       ${collapsiblePanel('setupTimers', 'Правила й таймери', 'Ці значення можна змінити й під час гри.', `
         <div class="setup-options">
@@ -1194,14 +1197,33 @@ function revealView() {
   if (!game) return missingGameView();
   const seat = game.seats[game.revealIndex];
   const role = roleOf(seat);
-  return `<main class="page reveal-page"><section class="card reveal-card ${game.revealOpen ? 'role-open' : 'role-ready'}">
+  const numberDeal = game.settings?.dealMode === 'number' && game.roleDeal?.mode === 'number';
+  const remaining = numberDeal ? game.roleDeal.remainingRoles.length : 0;
+  const selectedCard = numberDeal ? game.roleDeal.selectedCard : null;
+  let content;
+  let actions;
+  if (game.revealOpen && role) {
+    content = `<div class="role-reveal ${role.team === 'black' ? 'black' : 'red-team'}">${roleSignal(role.key, 'reveal-signal', `Ваша роль: ${role.label}`)}<div class="role-name">${role.label}</div><div class="badge ${role.team === 'red' ? 'green' : ''}">${role.team === 'red' ? 'Червона команда' : 'Чорна команда'}</div><p>${role.description}</p></div>`;
+    actions = '<button class="btn primary wide game-lead-action" data-action="reveal-next">Сховати й перейти до наступного</button>';
+  } else if (numberDeal && !role) {
+    const isLastCard = remaining === 1;
+    content = isLastCard
+      ? `<div class="reveal-privacy number-deal-last"><div class="reveal-privacy-icon role-card-back" aria-hidden="true"><b>1</b></div><h2>Остання карта</h2><p>Гравець №${seat.number} отримує останню карту автоматично. Перед показом переконайтеся, що екран бачить лише він.</p></div>`
+      : `<div class="number-role-deal"><div class="number-role-instruction"><h2>Гравець №${seat.number} обирає цифру</h2><p>Попросіть показати жестом число від <b>1</b> до <b>${remaining}</b>. Якщо число більше ${remaining} — гравець обирає повторно.</p></div><div class="number-role-grid" role="group" aria-label="Оберіть карту від 1 до ${remaining}">${Array.from({ length: remaining }, (_, index) => {
+        const card = index + 1;
+        return `<button class="number-role-card ${selectedCard === card ? 'selected' : ''}" type="button" data-action="select-role-card" data-card="${card}" aria-pressed="${selectedCard === card}" aria-label="Карта ${card}"><span>${card}</span></button>`;
+      }).join('')}</div>${selectedCard ? `<div class="number-role-confirm">Обрано карту <b>№${selectedCard}</b>. Суддя показує її лише цьому гравцеві.</div>` : '<div class="number-role-confirm muted">Торкніться цифри, яку показав гравець.</div>'}</div>`;
+    const confirmButton = `<button class="btn primary wide game-lead-action" data-action="confirm-number-role" ${!isLastCard && !selectedCard ? 'disabled' : ''}>${isLastCard ? 'Показати останню роль' : selectedCard ? `Показати роль за картою №${selectedCard}` : 'Спочатку оберіть цифру'}</button>`;
+    actions = `${selectedCard ? `<div class="number-deal-main-actions"><button class="btn secondary" data-action="change-role-card">Змінити цифру</button>${confirmButton}</div>` : confirmButton}<button class="btn danger-outline wide reveal-cancel-action" data-action="cancel-active-game">Скасувати гру</button>`;
+  } else {
+    content = `<div class="reveal-privacy"><div class="reveal-privacy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg></div><h2>Екран бачить лише гравець №${seat.number}</h2><p>${numberDeal ? 'Карту вже визначено. Суддя відкриває роль лише перед відповідним гравцем.' : 'Після перегляду роль автоматично сховається перед передачею телефона наступному гравцеві.'}</p></div>`;
+    actions = '<button class="btn primary wide game-lead-action" data-action="reveal-role">Показати мою роль</button><button class="btn danger-outline wide reveal-cancel-action" data-action="cancel-active-game">Скасувати гру</button>';
+  }
+  return `<main class="page reveal-page"><section class="card reveal-card ${numberDeal ? 'number-deal' : ''} ${game.revealOpen ? 'role-open' : 'role-ready'}">
     <div class="reveal-progress"><span class="eyebrow">Роздача ролей</span><div><b>${game.revealIndex + 1}</b><span> / ${game.seats.length}</span>${helpIcon('Браузер не може гарантовано заблокувати скриншоти. Показуйте роль так, щоб екран бачив лише відповідний гравець.', 'Безпека показу ролі')}</div></div>
-    <div class="reveal-player"><div class="reveal-seat"><span>Місце</span><strong>${seat.number}</strong></div>${avatar(seat, 'reveal-avatar')}<div class="reveal-player-copy"><div class="eyebrow">Передайте телефон особисто</div><h1>${esc(seat.name)}</h1></div></div>
-    <div class="reveal-content">${game.revealOpen
-      ? `<div class="role-reveal ${role.team === 'black' ? 'black' : 'red-team'}">${roleSignal(role.key, 'reveal-signal', `Ваша роль: ${role.label}`)}<div class="role-name">${role.label}</div><div class="badge ${role.team === 'red' ? 'green' : ''}">${role.team === 'red' ? 'Червона команда' : 'Чорна команда'}</div><p>${role.description}</p></div>`
-      : `<div class="reveal-privacy"><div class="reveal-privacy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg></div><h2>Екран бачить лише гравець №${seat.number}</h2><p>Після перегляду роль автоматично сховається перед передачею телефона наступному гравцеві.</p></div>`}
-    </div>
-    <div class="reveal-actions"><button class="btn primary wide game-lead-action" data-action="${game.revealOpen ? 'reveal-next' : 'reveal-role'}">${game.revealOpen ? 'Сховати й передати далі' : 'Показати мою роль'}</button>${game.revealOpen ? '' : '<button class="btn danger-outline wide reveal-cancel-action" data-action="cancel-active-game">Скасувати гру</button>'}</div>
+    <div class="reveal-player"><div class="reveal-seat"><span>Місце</span><strong>${seat.number}</strong></div>${avatar(seat, 'reveal-avatar')}<div class="reveal-player-copy"><div class="eyebrow">${numberDeal ? 'Суддя працює з колодою' : 'Передайте телефон особисто'}</div><h1>${esc(seat.name)}</h1></div></div>
+    <div class="reveal-content">${content}</div>
+    <div class="reveal-actions">${actions}</div>
   </section></main>`;
 }
 
@@ -1906,7 +1928,9 @@ function shuffled(values) {
 }
 
 function createGameFromDraft() {
-  const roles = shuffled(ROLE_DECK.map(role => role.key));
+  const dealMode = app.draft.settings.dealMode === 'automatic' ? 'automatic' : 'number';
+  const roleKeys = ROLE_DECK.map(role => role.key);
+  const roles = dealMode === 'automatic' ? shuffled(roleKeys) : [];
   const fallbackAvatars = setupAnimalAvatarMap();
   const missingGuestNames = pickFunnyGuestNames(
     app.draft.seats.filter(seat => !seat.profileId && !String(seat.name || '').trim()).length,
@@ -1919,7 +1943,7 @@ function createGameFromDraft() {
       profileId: profile?.id || null,
       name: preferredPlayerName(profile) || draftSeat.name.trim() || missingGuestNames.shift(),
       avatar: profile?.avatar || profile?.avatarPreset || fallbackAvatars.get(setupAvatarKey(draftSeat, profile)) || ANIMAL_AVATARS[index % ANIMAL_AVATARS.length],
-      role: roles[index],
+      role: dealMode === 'automatic' ? roles[index] : null,
       status: 'alive', faults: 0, nominatedBy: null, noVote: false,
       restrictionDay: null, shortSpeechDay: null, eliminatedReason: ''
     };
@@ -1930,7 +1954,8 @@ function createGameFromDraft() {
     ownerUid: app.authUser?.uid || '', hostName: String(app.hostProfile?.nickname || '').trim() || app.hostProfile?.displayName || app.authUser?.googleName || 'Ведучий',
     createdAt: timestamp, startedAt: timestamp, updatedAt: timestamp, endedAt: null,
     status: 'active', phase: 'reveal', subphase: '', day: 1, winner: null, durationSeconds: 0,
-    settings: { ...app.draft.settings }, seats, revealIndex: 0, revealOpen: false,
+    settings: { ...app.draft.settings, dealMode }, seats, revealIndex: 0, revealOpen: false,
+    ...(dealMode === 'number' ? { roleDeal: createNumberRoleDeal(roleKeys) } : {}),
     zeroNight: { step: 0 },
     speakerIndex: 0, speakerOrder: seats.map(seat => seat.number), nominations: [],
     vote: { counts: {}, tied: [], tieKey: '', tieRound: 0, yes: 0, no: 0 },
@@ -1938,7 +1963,7 @@ function createGameFromDraft() {
     bestMove: { seat: null, selected: [] },
     timer: { remaining: app.draft.settings.speech, running: false, purpose: 'speech' },
     lastWordSeat: null, pendingLastWords: [], pendingWinner: null, afterNightKill: false, showSecrets: false,
-    history: [{ at: timestamp, time: new Date(timestamp).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }), text: 'Створено нову гру та випадково розподілено ролі.', secret: true }]
+    history: [{ at: timestamp, time: new Date(timestamp).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }), text: dealMode === 'number' ? 'Створено нову гру. Ролі роздаються за цифрами, які по черзі обирають гравці.' : 'Створено нову гру та автоматично розподілено ролі.', secret: true }]
   };
 }
 
@@ -1946,6 +1971,7 @@ function publicGame(game) {
   if (!game) return null;
   const clean = clone(game);
   clean.seats.forEach(seat => { delete seat.role; delete seat.profileId; });
+  delete clean.roleDeal;
   clean.history = clean.history.filter(event => !event.secret);
   clean.night = { step: clean.night.step, target: clean.night.step >= 4 ? clean.night.target : null };
   delete clean.pendingWinner;
@@ -3107,7 +3133,7 @@ async function copyText(text, success = 'Скопійовано') {
 }
 
 const GUARDED_GAME_ACTIONS = new Set([
-  'start-game', 'reveal-next', 'zero-night-sheriff', 'zero-night-free-seating', 'zero-to-day',
+  'start-game', 'confirm-number-role', 'reveal-next', 'zero-night-sheriff', 'zero-night-free-seating', 'zero-to-day',
   'timer-toggle', 'next-speaker', 'back-to-speeches', 'start-vote', 'finish-vote',
   'next-tie-speaker', 'finish-all-tie', 'finish-last-word', 'finish-best-move', 'skip-best-move',
   'night-next', 'night-miss', 'night-shot-done', 'night-check-done', 'night-skip-check', 'wake-city',
@@ -3447,9 +3473,35 @@ async function handleAction(action, element, sourceEvent) {
     const game = gameById(element.dataset.id);
     if (!game || game.status !== 'active') return toast('Ця гра вже завершена або недоступна');
     app.game = game; app.undo = []; navigate(`observer/${game.id}`);
+  } else if (action === 'select-role-card') {
+    if (app.game?.phase !== 'reveal' || app.game.settings?.dealMode !== 'number' || app.game.revealOpen) return;
+    app.game.roleDeal = selectNumberRoleCard(app.game.roleDeal, Number(element.dataset.card));
+    await saveGame();
+    render();
+  } else if (action === 'change-role-card') {
+    if (app.game?.phase !== 'reveal' || app.game.settings?.dealMode !== 'number' || app.game.revealOpen) return;
+    app.game.roleDeal.selectedCard = null;
+    await saveGame();
+    render();
+  } else if (action === 'confirm-number-role') {
+    if (app.game?.phase !== 'reveal' || app.game.settings?.dealMode !== 'number' || app.game.revealOpen) return;
+    const seat = app.game.seats[app.game.revealIndex];
+    if (!seat || seat.role) return;
+    const remaining = app.game.roleDeal?.remainingRoles?.length || 0;
+    const chosenCard = remaining === 1 ? 1 : app.game.roleDeal?.selectedCard;
+    if (!chosenCard) return toast(`Попросіть гравця обрати число від 1 до ${remaining}`);
+    const dealt = takeNumberRoleCard(app.game.roleDeal, chosenCard);
+    seat.role = dealt.role;
+    app.game.roleDeal = dealt.roleDeal;
+    app.game.revealOpen = true;
+    addLog(`Гравець №${seat.number} отримав карту №${dealt.cardNumber}: ${roleOf(seat)?.label}.`, true);
+    await saveGame();
+    render();
   } else if (action === 'reveal-role') {
+    if (!roleOf(app.game?.seats?.[app.game.revealIndex])) return toast('Спочатку оберіть карту гравця');
     app.game.revealOpen = true; render();
   } else if (action === 'reveal-next') {
+    if (!roleOf(app.game?.seats?.[app.game.revealIndex])) return toast('Роль цього гравця ще не визначена');
     app.game.revealOpen = false;
     if (app.game.revealIndex < app.game.seats.length - 1) app.game.revealIndex += 1;
     else {
@@ -3614,7 +3666,9 @@ async function handleInput(element) {
     app.draft[element.dataset.draft] = element.value;
   } else if (element.dataset.draftSetting) {
     const key = element.dataset.draftSetting;
-    app.draft.settings[key] = key === 'penaltyMode' ? element.value : Math.max(5, Math.min(180, Number(element.value) || DEFAULT_SETTINGS[key]));
+    if (key === 'penaltyMode') app.draft.settings[key] = element.value === 'club' ? 'club' : 'tournament';
+    else if (key === 'dealMode') app.draft.settings[key] = element.value === 'automatic' ? 'automatic' : 'number';
+    else app.draft.settings[key] = Math.max(5, Math.min(180, Number(element.value) || DEFAULT_SETTINGS[key]));
   } else if (element.dataset.seatName) {
     const seat = app.draft.seats.find(item => item.number === Number(element.dataset.seatName));
     if (seat) {

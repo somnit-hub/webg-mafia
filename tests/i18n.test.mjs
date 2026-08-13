@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { LANGUAGES, languageLocale, normalizeLanguage } from '../src/i18n.js';
 
 test('Italian replaces Russian in the language picker', () => {
-  assert.deepEqual(LANGUAGES.map(language => language.code), ['uk', 'it', 'en', 'fr']);
-  assert.deepEqual(LANGUAGES.map(language => language.label), ['Українська', 'Italiano', 'English', 'Français']);
+  assert.deepEqual(LANGUAGES.map(language => language.code), ['uk', 'en', 'fr', 'it']);
+  assert.deepEqual(LANGUAGES.map(language => language.label), ['Українська', 'English', 'Français', 'Italiano']);
   assert.equal(languageLocale('it'), 'it-IT');
 });
 

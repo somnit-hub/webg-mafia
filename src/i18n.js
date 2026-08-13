@@ -1,8 +1,8 @@
 export const LANGUAGES = Object.freeze([
   { code: 'uk', label: 'Українська', locale: 'uk-UA' },
-  { code: 'it', label: 'Italiano', locale: 'it-IT' },
   { code: 'en', label: 'English', locale: 'en-US' },
-  { code: 'fr', label: 'Français', locale: 'fr-FR' }
+  { code: 'fr', label: 'Français', locale: 'fr-FR' },
+  { code: 'it', label: 'Italiano', locale: 'it-IT' }
 ]);
 
 const COPY = {

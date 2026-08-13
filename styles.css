@@ -1594,6 +1594,10 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .search-row { min-width: 0; margin-bottom: 8px; }
   .player-grid, .setup-grid { gap: 7px; }
   .setup-seating-panel, .setup-rules-panel { margin-top: 8px; }
+  .setup-page [data-panel="setupTimers"] .setup-options { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 7px; }
+  .setup-page [data-panel="setupTimers"] .setup-options .field { min-width: 0; }
+  .setup-page [data-panel="setupTimers"] .setup-options .input { min-width: 0; }
+  .setup-page [data-panel="setupTimers"] .setup-options .label-with-help > span:first-child { min-width: 0; overflow-wrap: anywhere; }
   .seat-setup { gap: 4px; }
   .seat-setup-row { grid-template-columns: 32px 40px 40px minmax(0, 1fr) 40px; padding: 0; gap: 6px; }
   .seat-player-picker { width: 40px; height: 44px; }

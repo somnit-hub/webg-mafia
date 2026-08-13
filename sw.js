@@ -1,4 +1,4 @@
-const CACHE = 'mafia-desk-v129';
+const CACHE = 'mafia-desk-v130';
 const APP_SHELL = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './assets/logo-mafia.webp', './assets/favicon-32.png', './assets/favicon-64.png', './assets/favicon.ico',

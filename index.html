@@ -13,12 +13,13 @@
     (() => {
       try {
         const theme = localStorage.getItem('mafia-desk-theme');
-        const language = localStorage.getItem('mafia-desk-language');
+        const storedLanguage = localStorage.getItem('mafia-desk-language');
+        const language = storedLanguage === 'ru' ? 'it' : storedLanguage;
         if (['dark', 'light', 'cafe'].includes(theme)) {
           document.documentElement.dataset.theme = theme;
           document.querySelector('meta[name="theme-color"]').content = { dark: '#0d0c0b', light: '#e9e2d6', cafe: '#1a100b' }[theme];
         }
-        if (['uk', 'ru', 'en', 'fr'].includes(language)) document.documentElement.lang = language;
+        if (['uk', 'it', 'en', 'fr'].includes(language)) document.documentElement.lang = language;
       } catch { /* The default dark theme remains available without storage. */ }
     })();
   </script>

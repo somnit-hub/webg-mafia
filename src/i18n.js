@@ -1,94 +1,94 @@
 export const LANGUAGES = Object.freeze([
   { code: 'uk', label: 'Українська', locale: 'uk-UA' },
-  { code: 'ru', label: 'Російська', locale: 'ru-RU' },
+  { code: 'it', label: 'Italiano', locale: 'it-IT' },
   { code: 'en', label: 'English', locale: 'en-US' },
   { code: 'fr', label: 'Français', locale: 'fr-FR' }
 ]);
 
 const COPY = {
-  ru: {
-    'Огляд': 'Обзор',
-    'Гравці': 'Игроки',
-    'Нова гра': 'Новая игра',
-    'Статистика': 'Статистика',
-    'Ще': 'Ещё',
-    'Основна навігація': 'Основная навигация',
-    'Mafia — головна': 'Mafia — главная',
-    'Встановити застосунок': 'Установить приложение',
-    'Профіль ведучого': 'Профиль ведущего',
-    'Пояснення': 'Подсказка',
-    'Відкрити пояснення': 'Открыть подсказку',
-    'Докладніше про синхронізацію': 'Подробнее о синхронизации',
-    'Додати гравців': 'Добавить игроков',
-    'Продовжити': 'Продолжить',
-    'Усі': 'Все',
-    'гравців у базі': 'игроков в базе',
-    'перемог міста': 'побед города',
-    'за ігровим столом': 'за игровым столом',
-    '+ Додати гравця': '+ Добавить игрока',
-    'Оновити': 'Обновить',
-    'Наступна гра': 'Следующая игра',
-    'До розсадки': 'К рассадке',
-    'Очистити': 'Очистить',
-    'Локальний': 'Локальный',
-    'Додано ведучим': 'Добавлен ведущим',
-    'Назва': 'Название',
-    'Правила й таймери': 'Правила и таймеры',
-    'Розсадка': 'Рассадка',
-    'Перемішати місця': 'Перемешать места',
-    '+ Новий профіль': '+ Новый профиль',
-    'Роздати ролі': 'Раздать роли',
-    'Правила спортивної «Мафії»': 'Правила спортивной «Мафии»',
-    'Правила iMafia українською': 'Правила iMafia на украинском',
-    'Міжнародний регламент ФІІМ': 'Международный регламент ФИИМ',
-    'Налаштування': 'Настройки',
-    'перемог мафії': 'побед мафии',
-    'загальний час': 'общее время',
-    'Результативність ролей': 'Результативность ролей',
-    'Протокол': 'Протокол',
-    'Видалити': 'Удалить',
-    'Домівка нашого мафія-клубу': 'Дом нашего мафия-клуба',
-    'Профіль Enjoy': 'Профиль Enjoy',
-    'Редагувати профіль': 'Редактировать профиль',
-    'Вийти': 'Выйти',
-    'На цьому пристрої': 'На этом устройстве',
-    'Мова застосунку': 'Язык приложения',
-    'Тема оформлення': 'Тема оформления',
-    'Темна': 'Тёмная',
-    'Світла': 'Светлая',
-    'Кав’ярня': 'Кофейня',
-    'Звукові сигнали таймера': 'Звуковые сигналы таймера',
-    'Вібрація важливих дій': 'Вибрация важных действий',
-    'Резервна копія Google Drive': 'Резервная копия Google Drive',
-    'Підключено': 'Подключено',
-    'Не підключено': 'Не подключено',
-    'Зберегти у Drive': 'Сохранить в Drive',
-    'Відновити з Drive': 'Восстановить из Drive',
-    'Відключити Drive': 'Отключить Drive',
-    'Увімкнути резервну копію': 'Включить резервную копию',
-    'Режим оглядача': 'Режим наблюдателя',
-    'Відкрити публічний екран': 'Открыть публичный экран',
-    'Про застосунок': 'О приложении',
-    'Мій профіль Enjoy': 'Мой профиль Enjoy',
-    'Зробити фото': 'Сделать фото',
-    'Обрати з галереї': 'Выбрать из галереи',
-    'Фото Google': 'Фото Google',
-    'Ім’я для відображення *': 'Отображаемое имя *',
-    'Нікнейм': 'Никнейм',
-    'Клуб або організація': 'Клуб или организация',
-    'Про себе': 'О себе',
-    'Показувати мене в каталозі Enjoy': 'Показывать меня в каталоге Enjoy',
-    'Google-акаунт': 'Google-аккаунт',
-    'Підтверджено': 'Подтверждено',
-    'Скасувати': 'Отменить',
-    'Зберегти профіль': 'Сохранить профиль',
-    'Видалити профіль': 'Удалить профиль',
-    'Закрити': 'Закрыть',
-    'Закрити це вікно': 'Закрыть это окно',
-    'Досвід ведення, улюблена кава…': 'Опыт ведения, любимый кофе…',
-    'Оберіть мову інтерфейсу. Налаштування зберігається на цьому пристрої.': 'Выберите язык интерфейса. Настройка сохраняется на этом устройстве.',
-    'Небезпечна дія': 'Опасное действие',
-    'Видалення профілю потребує окремого підтвердження.': 'Удаление профиля требует отдельного подтверждения.'
+  it: {
+    'Огляд': 'Panoramica',
+    'Гравці': 'Giocatori',
+    'Нова гра': 'Nuova partita',
+    'Статистика': 'Statistiche',
+    'Ще': 'Di più',
+    'Основна навігація': 'Navigazione principale',
+    'Mafia — головна': 'Mafia — casa',
+    'Встановити застосунок': 'Installa l\'app',
+    'Профіль ведучого': 'Profilo dell\'ospite',
+    'Пояснення': 'Aiuto',
+    'Відкрити пояснення': 'Apri la guida',
+    'Докладніше про синхронізацію': 'Informazioni sulla sincronizzazione',
+    'Додати гравців': 'Aggiungi giocatori',
+    'Продовжити': 'Continuare',
+    'Усі': 'Tutto',
+    'гравців у базі': 'giocatori nella directory',
+    'перемог міста': 'vince la città',
+    'за ігровим столом': 'alla partita table',
+    '+ Додати гравця': '+ Aggiungi giocatore',
+    'Оновити': 'Aggiorna',
+    'Наступна гра': 'Prossima partita',
+    'До розсадки': 'Posti a sedere aperti',
+    'Очистити': 'Chiaro',
+    'Локальний': 'Locale',
+    'Додано ведучим': 'Aggiunto dall\'host',
+    'Назва': 'Titolo',
+    'Правила й таймери': 'Regole e timer',
+    'Розсадка': 'Posti a sedere',
+    'Перемішати місця': 'Sedili mescolati',
+    '+ Новий профіль': '+ Nuovo profilo',
+    'Роздати ролі': 'Affrontare i ruoli',
+    'Правила спортивної «Мафії»': 'Regole sportive Mafia',
+    'Правила iMafia українською': 'iMafia regole in ucraino',
+    'Міжнародний регламент ФІІМ': 'FIIM regole internazionali',
+    'Налаштування': 'Impostazioni',
+    'перемог мафії': 'mafia vince',
+    'загальний час': 'tempo totale',
+    'Результативність ролей': 'Prestazioni di ruolo',
+    'Протокол': 'registro delle partite',
+    'Видалити': 'Eliminare',
+    'Домівка нашого мафія-клубу': 'Sede del nostro club Mafia',
+    'Профіль Enjoy': 'Profilo Enjoy',
+    'Редагувати': 'Modificare',
+    'Вийти': 'disconnessione',
+    'На цьому пристрої': 'Su questo dispositivo',
+    'Мова застосунку': 'Lingua dell\'app',
+    'Тема оформлення': 'Aspetto',
+    'Темна': 'Buio',
+    'Світла': 'Leggero',
+    'Кав’ярня': 'Caffetteria',
+    'Звукові сигнали таймера': 'Il timer suona',
+    'Вібрація важливих дій': 'Feedback tattile',
+    'Резервна копія Google Drive': 'Backup Google Drive',
+    'Підключено': 'Collegato',
+    'Не підключено': 'Non connesso',
+    'Зберегти у Drive': 'Salva in Drive',
+    'Відновити з Drive': 'Ripristina da Drive',
+    'Відключити Drive': 'Scollegare Drive',
+    'Увімкнути резервну копію': 'Backup Enable',
+    'Режим оглядача': 'Modalità osservatore',
+    'Відкрити публічний екран': 'Visualizzazione pubblica aperta',
+    'Про застосунок': 'Informazioni sull\'app',
+    'Мій профіль Enjoy': 'Il mio profilo Enjoy',
+    'Зробити фото': 'Scatta una foto',
+    'Обрати з галереї': 'Scegli dalla galleria',
+    'Фото Google': 'Foto Google',
+    'Ім’я для відображення *': 'Nome da visualizzare *',
+    'Нікнейм': 'Soprannome',
+    'Клуб або організація': 'Club o organizzazione',
+    'Про себе': 'Su di me',
+    'Показувати мене в каталозі Enjoy': 'Mostrami nella directory Enjoy',
+    'Google-акаунт': 'Conto Google',
+    'Підтверджено': 'Verificato',
+    'Скасувати': 'Cancellare',
+    'Зберегти профіль': 'Salva profilo',
+    'Видалити профіль': 'Elimina profilo',
+    'Закрити': 'Vicino',
+    'Закрити це вікно': 'Chiudi questa finestra',
+    'Досвід ведення, улюблена кава…': 'Esperienza di hosting, caffè preferito...',
+    'Оберіть мову інтерфейсу. Налаштування зберігається на цьому пристрої.': 'Scegli la lingua dell\'interfaccia. Questa impostazione è memorizzata su questo dispositivo.',
+    'Небезпечна дія': 'Zona pericolosa',
+    'Видалення профілю потребує окремого підтвердження.': 'L\'eliminazione del tuo profilo richiede una conferma separata.'
   },
   en: {
     'Огляд': 'Overview',
@@ -133,7 +133,7 @@ const COPY = {
     'Видалити': 'Delete',
     'Домівка нашого мафія-клубу': 'Home of our Mafia club',
     'Профіль Enjoy': 'Enjoy profile',
-    'Редагувати профіль': 'Edit profile',
+    'Редагувати': 'Edit',
     'Вийти': 'Sign out',
     'На цьому пристрої': 'On this device',
     'Мова застосунку': 'App language',
@@ -217,7 +217,7 @@ const COPY = {
     'Видалити': 'Supprimer',
     'Домівка нашого мафія-клубу': 'Le foyer de notre club Mafia',
     'Профіль Enjoy': 'Profil Enjoy',
-    'Редагувати профіль': 'Modifier le profil',
+    'Редагувати': 'Modifier',
     'Вийти': 'Se déconnecter',
     'На цьому пристрої': 'Sur cet appareil',
     'Мова застосунку': 'Langue de l’application',
@@ -260,35 +260,35 @@ const COPY = {
   }
 };
 
-Object.assign(COPY.ru, {
-  'Як дістатися': 'Как добраться', 'Місто': 'Город', 'Каталог недоступний': 'Каталог недоступен',
-  'Синхронізовано': 'Синхронизировано', 'Офлайн-кеш': 'Офлайн-кеш', 'Синхронізація…': 'Синхронизация…', 'Помилка': 'Ошибка',
-  'НАСТУПНА ГРА': 'СЛЕДУЮЩАЯ ИГРА', 'без опису': 'без описания', 'Очікує Google': 'Ожидает Google',
-  'ПРОМОВА, СЕК': 'РЕЧЬ, СЕК', 'АВТОКАТАСТРОФА, СЕК': 'АВТОКАТАСТРОФА, СЕК', 'ОСТАННЄ СЛОВО, СЕК': 'ПОСЛЕДНЕЕ СЛОВО, СЕК',
-  'НІЧНА ДІЯ, СЕК': 'НОЧНОЕ ДЕЙСТВИЕ, СЕК', 'СИСТЕМА ФОЛІВ': 'СИСТЕМА ФОЛОВ', 'Турнірна': 'Турнирная', 'Клубна': 'Клубная',
-  'Інші випадкові 10': 'Другие случайные 10', 'Тимчасовий гравець': 'Временный игрок',
-  'Шериф': 'Шериф', 'Дон': 'Дон', 'Мафія': 'Мафия', 'Мирний житель': 'Мирный житель',
-  'Червона команда': 'Красная команда', 'Чорна команда': 'Чёрная команда',
-  'Передайте телефон особисто': 'Передайте телефон лично', 'Сховати й передати далі': 'Скрыть и передать дальше', 'Показати мою роль': 'Показать мою роль',
-  'Створити гру': 'Создать игру', 'Немає гри': 'Нет игры',
-  'Роздача ролей': 'Раздача ролей', 'Нульова ніч': 'Нулевая ночь', 'Голосування': 'Голосование',
-  'Автокатастрофа · промови': 'Автокатастрофа · речи', 'Автокатастрофа · голосування': 'Автокатастрофа · голосование',
-  'Вихід усіх кандидатів': 'Выход всех кандидатов', 'Останнє слово': 'Последнее слово', 'Гру завершено': 'Игра завершена',
-  'Місто засинає': 'Город засыпает', 'Мафія стріляє': 'Мафия стреляет', 'Дон шукає Шерифа': 'Дон ищет Шерифа',
-  'Шериф перевіряє місто': 'Шериф проверяет город', 'Місто прокидається': 'Город просыпается', 'Чорна команда знайомиться': 'Чёрная команда знакомится',
-  'Публічний екран': 'Публичный экран', 'Мафія прокидається': 'Мафия просыпается', 'Почати день 1': 'Начать день 1',
-  'Пауза': 'Пауза', 'Старт': 'Старт', 'Скинути': 'Сбросить', 'Коло завершено': 'Круг завершён', 'Кандидатур немає': 'Кандидатур нет',
-  'Назад': 'Назад', 'До голосування': 'К голосованию', 'Перейти до ночі': 'Перейти к ночи', 'Поточна промова': 'Текущая речь',
-  'Завершити коло': 'Завершить круг', 'Наступний →': 'Следующий →', 'Повторне голосування': 'Повторное голосование',
-  'Залишок останньому': 'Остаток последнему', 'Підсумувати': 'Подвести итог', 'Голосувати': 'Голосовать', 'ПРОТИ': 'ПРОТИВ',
-  'Наступне слово →': 'Следующее слово →', 'Наступний день →': 'Следующий день →', 'Ранок': 'Утро', 'Далі: стрільба мафії': 'Далее: стрельба мафии',
-  'Промах': 'Промах', 'Зафіксувати': 'Зафиксировать', 'Продовжити': 'Продолжить', 'Показати результат': 'Показать результат',
-  'Далі': 'Далее', 'Змінити ціль': 'Изменить цель', 'Сховати й далі': 'Скрыть и продолжить', 'Панель ведучого': 'Панель ведущего',
-  'Сховати': 'Скрыть', 'Ролі': 'Роли', 'Таймери': 'Таймеры', 'Копіювати протокол': 'Копировать протокол', 'Оглядач': 'Наблюдатель',
-  'Подій ще немає': 'Событий пока нет', 'Публічна інформація': 'Публичная информация',
-  'Немає кандидатів': 'Нет кандидатов', 'Перемога мирного міста': 'Победа мирного города',
-  'Перемога чорної команди': 'Победа чёрной команды', 'Реванш': 'Реванш', 'На головну': 'На главную',
-  'Профіль гравця': 'Профиль игрока', 'Новий гравець': 'Новый игрок', 'Зберегти': 'Сохранить'
+Object.assign(COPY.it, {
+  'Як дістатися': 'Indicazioni', 'Місто': 'Città', 'Каталог недоступний': 'Directory non disponibileble',
+  'Синхронізовано': 'Sincronizzato', 'Офлайн-кеш': 'Cache offline', 'Синхронізація…': 'Sincronizzazione…', 'Помилка': 'Errore',
+  'НАСТУПНА ГРА': 'PROSSIMA partita', 'без опису': 'nessuna descrizione', 'Очікує Google': 'In attesa di Google',
+  'ПРОМОВА, СЕК': 'DISCORSO, SEC', 'АВТОКАТАСТРОФА, СЕК': 'DISCORSO DI TIE, SEZ', 'ОСТАННЄ СЛОВО, СЕК': 'ULTIMA PAROLA, SEC',
+  'НІЧНА ДІЯ, СЕК': 'AZIONE NOTTURNA, SEC', 'СИСТЕМА ФОЛІВ': 'SISTEMA FALLOSO', 'Турнірна': 'Torneo', 'Клубна': 'Club',
+  'Інші випадкові 10': 'Un altro 10 a caso', 'Тимчасовий гравець': 'Giocatore temporaneo',
+  'Шериф': 'Sceriffo', 'Дон': 'Assistente', 'Мафія': 'Mafia', 'Мирний житель': 'Cittadino',
+  'Червона команда': 'Squadra rossa', 'Чорна команда': 'Squadra nera',
+  'Передайте телефон особисто': 'Consegnami il telefono di persona', 'Сховати й передати далі': 'Nascondi e trasmetti', 'Показати мою роль': 'Mostra il mio ruolo',
+  'Створити гру': 'Crea corrispondenza', 'Немає гри': 'Nessuna corrispondenza',
+  'Роздача ролей': 'Rivelazione del ruolo', 'Нульова ніч': 'Notte zero', 'Голосування': 'Voto',
+  'Автокатастрофа · промови': 'Cravatta · discorsi', 'Автокатастрофа · голосування': 'Pareggio · voto',
+  'Вихід усіх кандидатів': 'Elimina tutti i candidati', 'Останнє слово': 'L\'ultima parola', 'Гру завершено': 'partita finita',
+  'Місто засинає': 'La città si addormenta', 'Мафія стріляє': 'Mafia spara', 'Дон шукає Шерифа': 'Don cerca lo sceriffo',
+  'Шериф перевіряє місто': 'Lo sceriffo controlla la città', 'Місто прокидається': 'La città si sveglia', 'Чорна команда знайомиться': 'La squadra nera si incontra',
+  'Публічний екран': 'Esposizione pubblica', 'Мафія прокидається': 'Mafia si sveglia', 'Почати день 1': 'Inizio giorno 1',
+  'Пауза': 'Pausa', 'Старт': 'Inizio', 'Скинути': 'Reset', 'Коло завершено': 'Giro completato', 'Кандидатур немає': 'Nessun candidato',
+  'Назад': 'Indietro', 'До голосування': 'Procedi alla votazione', 'Перейти до ночі': 'Procedi fino alla notte', 'Поточна промова': 'Discorso attuale',
+  'Завершити коло': 'Finisci il giro', 'Наступний →': 'Avanti →', 'Повторне голосування': 'Rivotare',
+  'Залишок останньому': 'Assegna il resto all\'ultimo', 'Підсумувати': 'Finalizzare', 'Голосувати': 'Votare', 'ПРОТИ': 'CONTRO',
+  'Наступне слово →': 'Prossimo intervento →', 'Наступний день →': 'Il giorno dopo →', 'Ранок': 'Mattina', 'Далі: стрільба мафії': 'Successivo: tiro Mafia',
+  'Промах': 'Mancare', 'Зафіксувати': 'Confermare', 'Продовжити': 'Continuare', 'Показати результат': 'Mostra risultato',
+  'Далі': 'Prossimo', 'Змінити ціль': 'Cambia obiettivo', 'Сховати й далі': 'Nascondi e continua', 'Панель ведучого': 'Pannello ospite',
+  'Сховати': 'Nascondere', 'Ролі': 'Ruoli', 'Таймери': 'Temporizzatori', 'Копіювати протокол': 'Copia il registro delle partite', 'Оглядач': 'Osservatore',
+  'Подій ще немає': 'Nessun evento ancora', 'Публічна інформація': 'Informazioni pubbliche',
+  'Немає кандидатів': 'Nessun candidato', 'Перемога мирного міста': 'La città vince',
+  'Перемога чорної команди': 'Vince la squadra nera', 'Реванш': 'Rivincita', 'На головну': 'Casa',
+  'Профіль гравця': 'Profilo del giocatore', 'Новий гравець': 'Nuovo giocatore', 'Зберегти': 'Salva'
 });
 
 Object.assign(COPY.en, {
@@ -353,20 +353,20 @@ Object.assign(COPY.fr, {
   'Профіль гравця': 'Profil du joueur', 'Новий гравець': 'Nouveau joueur', 'Зберегти': 'Enregistrer'
 });
 
-Object.assign(COPY.ru, {
-  'Навігація активної гри': 'Навигация активной игры', 'Активна гра': 'Активная игра',
-  'Активні ігри': 'Активные игры', 'Триває зараз': 'Идёт сейчас', 'Спостерігати': 'Наблюдать',
-  'Створити гру': 'Создать игру', 'Незавершена гра': 'Незавершённая игра', 'Останні ігри': 'Последние игры',
-  'завершених ігор': 'завершённых игр', 'Гра': 'Игра', 'ігор': 'игр', 'Спільний архів ігор': 'Общий архив игр',
-  'Ігор ще немає': 'Игр пока нет', 'Нікого не знайдено': 'Никого не найдено', 'Рейтинг ще порожній': 'Рейтинг пока пуст',
-  'Архів ігор порожній': 'Архив игр пуст', 'Активну гру не знайдено': 'Активная игра не найдена', 'Номінацій ще немає': 'Номинаций пока нет',
-  'Завершити гру': 'Завершить игру', 'Фінал гри': 'Финал игры', 'Протокол гри': 'Протокол игры', 'Налаштування гри': 'Настройки игры',
-  'Bluetooth і музика': 'Bluetooth и музыка', 'Відтворити музику': 'Воспроизвести музыку', 'Призупинити музику': 'Приостановить музыку',
-  'Керування звуком для гри': 'Управление звуком для игры', 'Як працює Bluetooth': 'Как работает Bluetooth', 'Як працює керування музикою': 'Как работает управление музыкой',
-  'Bluetooth недоступний': 'Bluetooth недоступен', 'Можна вибрати BLE-пристрій': 'Можно выбрать BLE-устройство', 'Web Bluetooth не підтримується': 'Web Bluetooth не поддерживается',
-  'Вибрати BLE-пристрій': 'Выбрать BLE-устройство', 'Відкриваємо список…': 'Открываем список…', 'Музика в Mafia': 'Музыка в Mafia',
-  'Аудіофайл не обрано': 'Аудиофайл не выбран', 'Готово до відтворення.': 'Готово к воспроизведению.', 'Оберіть інший файл.': 'Выберите другой файл.',
-  'Обрати аудіофайл': 'Выбрать аудиофайл', 'Прибрати': 'Убрать', 'Цей гравець уже має місце за столом': 'Этот игрок уже сидит за столом', 'Файл відтворюється локально, не завантажується в мережу й діє до закриття вкладки. Звук піде на колонку, якщо вона вже підключена до телефона.': 'Файл воспроизводится локально, не загружается в сеть и действует до закрытия вкладки. Звук пойдёт на колонку, если она уже подключена к телефону.'
+Object.assign(COPY.it, {
+  'Навігація активної гри': 'Navigazione partita attiva', 'Активна гра': 'Partita attiva',
+  'Активні ігри': 'Partite dal vivo', 'Триває зараз': 'Vivi adesso', 'Спостерігати': 'Orologio',
+  'Створити гру': 'Crea corrispondenza', 'Незавершена гра': 'Partita incompiuta', 'Останні ігри': 'Partite recenti',
+  'завершених ігор': 'partite completate', 'Гра': 'incontro', 'ігор': 'partite', 'Спільний архів ігор': 'Archivio condiviso delle partite',
+  'Ігор ще немає': 'Nessuna corrispondenza ancora', 'Нікого не знайдено': 'Nessun giocatore trovato', 'Рейтинг ще порожній': 'La classifica è vuota',
+  'Архів ігор порожній': 'L\'archivio delle partite è vuoto', 'Активну гру не знайдено': 'Nessuna corrispondenza attiva trovata', 'Номінацій ще немає': 'Nessuna nomination ancora',
+  'Завершити гру': 'Fine della partita', 'Фінал гри': 'risultato della partita', 'Протокол гри': 'registro delle partite', 'Налаштування гри': 'impostazioni della partita',
+  'Bluetooth і музика': 'Bluetooth e musica', 'Відтворити музику': 'Riproduci musica', 'Призупинити музику': 'Metti in pausa la musica',
+  'Керування звуком для гри': 'abbinare i controlli audio', 'Як працює Bluetooth': 'Come funziona Bluetooth', 'Як працює керування музикою': 'Come funzionano i controlli della musica',
+  'Bluetooth недоступний': 'Bluetooth non disponibileble', 'Можна вибрати BLE-пристрій': 'È possibile selezionare un dispositivo BLE', 'Web Bluetooth не підтримується': 'Web Bluetooth non è supportato',
+  'Вибрати BLE-пристрій': 'Scegli il dispositivo BLE', 'Відкриваємо список…': 'Apertura dell\'elenco dei dispositivi…', 'Музика в Mafia': 'Musica in Mafia',
+  'Аудіофайл не обрано': 'Nessun file audio selezionato', 'Готово до відтворення.': 'Pronto per giocare.', 'Оберіть інший файл.': 'Scegli un altro file.',
+  'Обрати аудіофайл': 'Scegli il file audio', 'Прибрати': 'Rimuovere', 'Цей гравець уже має місце за столом': 'Questo giocatore ha già un posto', 'Файл відтворюється локально, не завантажується в мережу й діє до закриття вкладки. Звук піде на колонку, якщо вона вже підключена до телефона.': 'Il file viene riprodotto localmente, non viene mai caricato e rimane disponibileble finché questa scheda non viene chiusa. L\'audio utilizzerà un altoparlante già collegato al telefono.'
 });
 
 Object.assign(COPY.en, {
@@ -401,10 +401,10 @@ Object.assign(COPY.fr, {
   'Обрати аудіофайл': 'Choisir un fichier audio', 'Прибрати': 'Retirer', 'Цей гравець уже має місце за столом': 'Ce joueur a déjà une place', 'Файл відтворюється локально, не завантажується в мережу й діє до закриття вкладки. Звук піде на колонку, якщо вона вже підключена до телефона.': 'Le fichier est lu localement, n’est jamais téléversé et reste disponible jusqu’à la fermeture de l’onglet. Le son utilisera une enceinte déjà connectée au téléphone.'
 });
 
-Object.assign(COPY.ru, {
-  'Місце': 'Место', 'Після перегляду роль автоматично сховається перед передачею телефона наступному гравцеві.': 'После просмотра роль автоматически скроется перед передачей телефона следующему игроку.',
-  'Потрібне підтвердження': 'Нужно подтверждение', 'Завершення гри': 'Завершение игры', 'Оберіть команду-переможця. Результат одразу потрапить до протоколу та статистики.': 'Выберите команду-победителя. Результат сразу попадёт в протокол и статистику.',
-  'Мирне місто': 'Мирный город', 'Історія подій': 'История событий'
+Object.assign(COPY.it, {
+  'Місце': 'Posto a sedere', 'Після перегляду роль автоматично сховається перед передачею телефона наступному гравцеві.': 'Dopo la visualizzazione, il ruolo viene nascosto automaticamente prima che il telefono venga passato al giocatore successivo.',
+  'Потрібне підтвердження': 'È necessaria la conferma', 'Завершення гри': 'Termina la partita', 'Оберіть команду-переможця. Результат одразу потрапить до протоколу та статистики.': 'Scegli la squadra vincente. Il risultato viene aggiunto immediatamente al registro della partita e alle statistiche.',
+  'Мирне місто': 'Città', 'Історія подій': 'Storia degli eventi'
 });
 Object.assign(COPY.en, {
   'Місце': 'Seat', 'Після перегляду роль автоматично сховається перед передачею телефона наступному гравцеві.': 'After viewing, the role is hidden automatically before the phone is passed to the next player.',
@@ -417,15 +417,15 @@ Object.assign(COPY.fr, {
   'Мирне місто': 'Ville', 'Історія подій': 'Historique des événements'
 });
 
-Object.assign(COPY.ru, {
-  'Кращий хід': 'Лучший ход', 'Кращий хід, сек': 'Лучший ход, сек',
-  'Знайомство мафії': 'Знакомство мафии', 'Знайомство мафії, сек': 'Знакомство мафии, сек',
-  'Позначення Шерифа': 'Обозначение Шерифа', 'Позначення Шерифа, сек': 'Обозначение Шерифа, сек',
-  'Вільна посадка': 'Свободная посадка', 'Вільна посадка, сек': 'Свободная посадка, сек',
-  'Мафія засинає': 'Мафия засыпает', 'Показати сигнал ведучого': 'Показать сигнал ведущего',
-  'Записати КХ': 'Записать ЛХ', 'Без КХ': 'Без ЛХ', 'Завершити паузу': 'Завершить паузу',
-  'Результат гри': 'Результат игры', 'Нічия': 'Ничья', 'Без переможця': 'Без победителя',
-  'Скасувати результат': 'Отменить результат', 'Гру завершено нічиєю': 'Игра завершена вничью'
+Object.assign(COPY.it, {
+  'Кращий хід': 'La mossa migliore', 'Кращий хід, сек': 'La mossa migliore, sez',
+  'Знайомство мафії': 'Introduzione Mafia', 'Знайомство мафії, сек': 'Mafia introduzione, sez',
+  'Позначення Шерифа': 'Identificazione dello sceriffo', 'Позначення Шерифа, сек': 'Identificazione dello sceriffo, sez',
+  'Вільна посадка': 'Posti a sedere gratuiti', 'Вільна посадка, сек': 'Posti a sedere liberi, sez',
+  'Мафія засинає': 'Mafia si addormenta', 'Показати сигнал ведучого': 'Mostra il segnale dell\'host',
+  'Записати КХ': 'Salva la mossa migliore', 'Без КХ': 'Nessuna mossa migliore', 'Завершити паузу': 'Fine della pausa',
+  'Результат гри': 'risultato della partita', 'Нічия': 'Disegno', 'Без переможця': 'Nessun vincitore',
+  'Скасувати результат': 'Annulla risultato', 'Гру завершено нічиєю': 'la partita finì in pareggio'
 });
 Object.assign(COPY.en, {
   'Кращий хід': 'Best move', 'Кращий хід, сек': 'Best move, sec',
@@ -448,11 +448,11 @@ Object.assign(COPY.fr, {
   'Скасувати результат': 'Annuler le résultat', 'Гру завершено нічиєю': 'La partie se termine par un nul'
 });
 
-Object.assign(COPY.ru, {
-  'Аватар гравця': 'Аватар игрока', 'Змінити аватар': 'Изменить аватар',
-  'Оберіть один із базових аватарів. Зміна збережеться у ручному профілі та буде видима іншим ведучим.': 'Выберите один из базовых аватаров. Изменение сохранится в ручном профиле и будет видно другим ведущим.',
-  'Єнот': 'Енот', 'Кішка': 'Кошка', 'Капібара': 'Капибара', 'Мопс': 'Мопс', 'Лисиця': 'Лиса',
-  'Сова': 'Сова', 'Хом’як': 'Хомяк', 'Лев': 'Лев', 'Жабка': 'Лягушка', 'Кабанчик': 'Кабан'
+Object.assign(COPY.it, {
+  'Аватар гравця': 'Avatar del giocatore', 'Змінити аватар': 'Cambia avatar',
+  'Оберіть один із базових аватарів. Зміна збережеться у ручному профілі та буде видима іншим ведучим.': 'Scegli uno degli avatar integrati. La modifica viene salvata nel profilo manuale e visible su altri host.',
+  'Єнот': 'Procione', 'Кішка': 'Gatto', 'Капібара': 'Capibara', 'Мопс': 'Carlino', 'Лисиця': 'Volpe',
+  'Сова': 'Gufo', 'Хом’як': 'Criceto', 'Лев': 'Leone', 'Жабка': 'Rana', 'Кабанчик': 'Cinghiale'
 });
 Object.assign(COPY.en, {
   'Аватар гравця': 'Player avatar', 'Змінити аватар': 'Change avatar',
@@ -467,17 +467,17 @@ Object.assign(COPY.fr, {
   'Сова': 'Chouette', 'Хом’як': 'Hamster', 'Лев': 'Lion', 'Жабка': 'Grenouille', 'Кабанчик': 'Sanglier'
 });
 
-Object.assign(COPY.ru, {
-  'Замовити напій': 'Заказать напиток', 'Замовлення напою': 'Заказ напитка',
-  'Кав’ярня Enjoy': 'Кофейня Enjoy',
-  'Оберіть напій — повідомлення відразу піде в Telegram.': 'Выберите напиток — сообщение сразу уйдёт в Telegram.',
-  'Кава': 'Кофе', 'Чай': 'Чай', 'Капучино': 'Капучино', 'Лате': 'Латте',
-  'Тестовий одержувач: @Chemelev': 'Тестовый получатель: @Chemelev',
-  'Замовлення не надіслано': 'Заказ не отправлен', 'Замовлення надіслано': 'Заказ отправлен',
-  '«Кава» — замовлення надіслано': '«Кофе» — заказ отправлен', '«Чай» — замовлення надіслано': '«Чай» — заказ отправлен',
-  '«Капучино» — замовлення надіслано': '«Капучино» — заказ отправлен', '«Лате» — замовлення надіслано': '«Латте» — заказ отправлен',
-  'Повідомлення передано тестовому одержувачу в Telegram.': 'Сообщение передано тестовому получателю в Telegram.',
-  'Не вдалося надіслати замовлення': 'Не удалось отправить заказ'
+Object.assign(COPY.it, {
+  'Замовити напій': 'Ordina un drink', 'Замовлення напою': 'Ordine delle bevande',
+  'Кав’ярня Enjoy': 'Caffetteria Enjoy',
+  'Оберіть напій — повідомлення відразу піде в Telegram.': 'Scegli una bevanda: il messaggio verrà inviato immediatamente a Telegram.',
+  'Кава': 'Caffè', 'Чай': 'Tè', 'Капучино': 'Cappuccino', 'Лате': 'Latte macchiato',
+  'Тестовий одержувач: @Chemelev': 'Destinatario del test: @Chemelev',
+  'Замовлення не надіслано': 'Ordine non inviato', 'Замовлення надіслано': 'Ordine inviato',
+  '«Кава» — замовлення надіслано': 'Caffè: ordine inviato', '«Чай» — замовлення надіслано': 'Tè: ordine inviato',
+  '«Капучино» — замовлення надіслано': 'Cappuccino: ordine inviato', '«Лате» — замовлення надіслано': 'Latte: ordine inviato',
+  'Повідомлення передано тестовому одержувачу в Telegram.': 'Il messaggio è stato inviato al destinatario di prova in Telegram.',
+  'Не вдалося надіслати замовлення': 'Impossibile inviare l\'ordine'
 });
 Object.assign(COPY.en, {
   'Замовити напій': 'Order a drink', 'Замовлення напою': 'Drink order',
@@ -504,11 +504,11 @@ Object.assign(COPY.fr, {
   'Не вдалося надіслати замовлення': 'Impossible d’envoyer la commande'
 });
 
-Object.assign(COPY.ru, {
-  'Фото синхронізовано': 'Фото синхронизировано',
-  'Синхронізація фото…': 'Синхронизация фото…',
-  'Фото ще не синхронізовано': 'Фото ещё не синхронизировано',
-  'Фото очікує синхронізації': 'Фото ожидает синхронизации'
+Object.assign(COPY.it, {
+  'Фото синхронізовано': 'Foto sincronizzata',
+  'Синхронізація фото…': 'Sincronizzazione foto...',
+  'Фото ще не синхронізовано': 'Foto non ancora sincronizzata',
+  'Фото очікує синхронізації': 'Foto in attesa di sincronizzazione'
 });
 Object.assign(COPY.en, {
   'Фото синхронізовано': 'Photo synced',
@@ -523,10 +523,10 @@ Object.assign(COPY.fr, {
   'Фото очікує синхронізації': 'Photo en attente de synchronisation'
 });
 
-Object.assign(COPY.ru, {
-  'Онлайн': 'Онлайн', 'Офлайн': 'Офлайн',
-  'Активність протягом останніх двох хвилин': 'Активность в течение последних двух минут',
-  'Активності не було понад дві хвилини': 'Не было активности более двух минут'
+Object.assign(COPY.it, {
+  'Онлайн': 'In linea', 'Офлайн': 'Non in linea',
+  'Активність протягом останніх двох хвилин': 'Attivo negli ultimi due minuti',
+  'Активності не було понад дві хвилини': 'Nessuna attività per più di due minuti'
 });
 Object.assign(COPY.en, {
   'Онлайн': 'Online', 'Офлайн': 'Offline',
@@ -539,13 +539,90 @@ Object.assign(COPY.fr, {
   'Активності не було понад дві хвилини': 'Aucune activité depuis plus de deux minutes'
 });
 
+Object.assign(COPY.it, {
+  'Скасувати гру': 'Annulla la partita', 'Скасувати гру?': 'Annullare la partita?',
+  'Активну гру буде видалено без переможця. Вона не потрапить до статистики й протоколів. Якщо склад збережений на цьому пристрої, його гравці повернуться до наступної гри.': 'La partita attiva verrà eliminata senza un vincitore. Non verrà aggiunto alle statistiche o ai registri delle partite. Se la formazione è memorizzata su questo dispositivo, i suoi giocatori torneranno alla partita successiva.'
+});
+Object.assign(COPY.en, {
+  'Скасувати гру': 'Cancel game', 'Скасувати гру?': 'Cancel the game?',
+  'Активну гру буде видалено без переможця. Вона не потрапить до статистики й протоколів. Якщо склад збережений на цьому пристрої, його гравці повернуться до наступної гри.': 'The active game will be deleted without a winner. It will not be added to statistics or game logs. If the lineup is stored on this device, its players will return to the next game.'
+});
+Object.assign(COPY.fr, {
+  'Скасувати гру': 'Annuler la partie', 'Скасувати гру?': 'Annuler la partie ?',
+  'Активну гру буде видалено без переможця. Вона не потрапить до статистики й протоколів. Якщо склад збережений на цьому пристрої, його гравці повернуться до наступної гри.': 'La partie active sera supprimée sans vainqueur. Elle ne figurera ni dans les statistiques ni dans les comptes rendus. Si la composition est enregistrée sur cet appareil, ses joueurs reviendront pour la prochaine partie.'
+});
+
+Object.assign(COPY.it, {
+  'Оберіть дію': 'Scegli un\'azione', 'Підключити Bluetooth-пристрій': 'Collega un dispositivo Bluetooth',
+  'Відкрити музику з пристрою': 'Apri la musica da questo dispositivo', 'Відкрити системний список пристроїв': 'Apri l\'elenco dei dispositivi di sistema',
+  'Показати інструкцію для iPhone': 'Mostra le istruzioni dell\'iPhone', 'Вибрати доступний BLE-пристрій': 'Scegli un dispositivo ble BLE disponibile',
+  'Показати системну інструкцію': 'Mostra le istruzioni del sistema', 'Підключення Bluetooth': 'Collegamento Bluetooth',
+  'Відкрити Bluetooth': 'Apri Bluetooth', 'MP3, M4A, WAV та інші аудіофайли': 'MP3, M4A, WAV e altri file audio',
+  'Музика відтворюється локально, не завантажується в мережу й діє до закриття вкладки. Звук піде на колонку, якщо вона вже підключена до телефона.': 'La musica viene riprodotta localmente, non viene mai caricata e rimane disponibileble finché questa scheda non viene chiusa. L\'audio utilizzerà un altoparlante già collegato al telefono.'
+});
+Object.assign(COPY.en, {
+  'Оберіть дію': 'Choose an action', 'Підключити Bluetooth-пристрій': 'Connect a Bluetooth device',
+  'Відкрити музику з пристрою': 'Open music from this device', 'Відкрити системний список пристроїв': 'Open the system device list',
+  'Показати інструкцію для iPhone': 'Show iPhone instructions', 'Вибрати доступний BLE-пристрій': 'Choose an available BLE device',
+  'Показати системну інструкцію': 'Show system instructions', 'Підключення Bluetooth': 'Bluetooth connection',
+  'Відкрити Bluetooth': 'Open Bluetooth', 'MP3, M4A, WAV та інші аудіофайли': 'MP3, M4A, WAV, and other audio files',
+  'Музика відтворюється локально, не завантажується в мережу й діє до закриття вкладки. Звук піде на колонку, якщо вона вже підключена до телефона.': 'Music plays locally, is never uploaded, and remains available until this tab is closed. Audio will use a speaker already connected to the phone.'
+});
+Object.assign(COPY.fr, {
+  'Оберіть дію': 'Choisissez une action', 'Підключити Bluetooth-пристрій': 'Connecter un appareil Bluetooth',
+  'Відкрити музику з пристрою': 'Ouvrir la musique depuis l’appareil', 'Відкрити системний список пристроїв': 'Ouvrir la liste système des appareils',
+  'Показати інструкцію для iPhone': 'Afficher les instructions pour iPhone', 'Вибрати доступний BLE-пристрій': 'Choisir un appareil BLE disponible',
+  'Показати системну інструкцію': 'Afficher les instructions système', 'Підключення Bluetooth': 'Connexion Bluetooth',
+  'Відкрити Bluetooth': 'Ouvrir Bluetooth', 'MP3, M4A, WAV та інші аудіофайли': 'MP3, M4A, WAV et autres fichiers audio',
+  'Музика відтворюється локально, не завантажується в мережу й діє до закриття вкладки. Звук піде на колонку, якщо вона вже підключена до телефона.': 'La musique est lue localement, n’est jamais téléversée et reste disponible jusqu’à la fermeture de l’onglet. Le son utilisera une enceinte déjà connectée au téléphone.'
+});
+
+// Curated Mafia terminology and primary interface actions.
+Object.assign(COPY.it, {
+  'Ще': 'Altro', 'Mafia — головна': 'Mafia — pagina principale', 'Профіль ведучого': 'Profilo del conduttore',
+  'Продовжити': 'Continua', 'Усі': 'Tutti', 'за ігровим столом': 'al tavolo da gioco',
+  'До розсадки': 'Vai alla disposizione', 'Очистити': 'Svuota', 'Додано ведучим': 'Aggiunto dal conduttore',
+  'Розсадка': 'Disposizione', 'Перемішати місця': 'Mescola i posti', 'Роздати ролі': 'Distribuisci i ruoli',
+  'Правила iMafia українською': 'Regole iMafia in ucraino', 'Міжнародний регламент ФІІМ': 'Regolamento internazionale FIIM',
+  'Протокол': 'Registro della partita', 'Видалити': 'Elimina', 'Редагувати': 'Modifica', 'Вийти': 'Esci',
+  'Резервна копія Google Drive': 'Copia di sicurezza Google Drive',
+  'Темна': 'Scuro', 'Світла': 'Chiaro', 'Звукові сигнали таймера': 'Suoni del timer',
+  'Увімкнути резервну копію': 'Attiva la copia di sicurezza', 'Відкрити публічний екран': 'Apri lo schermo pubblico',
+  'Google-акаунт': 'Account Google', 'Скасувати': 'Annulla', 'Закрити': 'Chiudi',
+  'Каталог недоступний': 'Directory non disponibile', 'НАСТУПНА ГРА': 'PROSSIMA PARTITA',
+  'АВТОКАТАСТРОФА, СЕК': 'PAREGGIO, SEC', 'СИСТЕМА ФОЛІВ': 'SISTEMA DEI FALLI',
+  'Дон': 'Don', 'Передайте телефон особисто': 'Passa il telefono di persona',
+  'Сховати й передати далі': 'Nascondi e passa oltre', 'Створити гру': 'Crea partita', 'Немає гри': 'Nessuna partita',
+  'Роздача ролей': 'Distribuzione dei ruoli', 'Автокатастрофа · промови': 'Pareggio · interventi',
+  'Автокатастрофа · голосування': 'Pareggio · votazione', 'Гру завершено': 'Partita terminata',
+  'Старт': 'Avvia', 'Коло завершено': 'Turno completato', 'Перейти до ночі': 'Passa alla notte',
+  'Поточна промова': 'Intervento attuale', 'Завершити коло': 'Termina il turno',
+  'Повторне голосування': 'Nuova votazione', 'Підсумувати': 'Conferma il risultato', 'Голосувати': 'Vota',
+  'Наступне слово →': 'Intervento successivo →', 'Наступний день →': 'Giorno successivo →',
+  'Промах': 'Mancato', 'Зафіксувати': 'Conferma', 'Далі': 'Avanti', 'Сховати й далі': 'Nascondi e continua',
+  'Панель ведучого': 'Pannello del conduttore', 'Показати сигнал ведучого': 'Mostra il segnale del conduttore',
+  'Сховати': 'Nascondi', 'Таймери': 'Timer', 'Копіювати протокол': 'Copia il registro della partita',
+  'На головну': 'Pagina principale',
+  'Навігація активної гри': 'Navigazione della partita attiva', 'Активні ігри': 'Partite attive',
+  'Триває зараз': 'In corso', 'Спостерігати': 'Osserva', 'Незавершена гра': 'Partita incompleta',
+  'Гра': 'Partita', 'Ігор ще немає': 'Nessuna partita', 'Активну гру не знайдено': 'Nessuna partita attiva trovata',
+  'Завершити гру': 'Termina la partita', 'Фінал гри': 'Risultato della partita',
+  'Протокол гри': 'Registro della partita', 'Налаштування гри': 'Impostazioni della partita',
+  'Керування звуком для гри': 'Controlli audio della partita', 'Bluetooth недоступний': 'Bluetooth non disponibile',
+  'Готово до відтворення.': 'Pronto per la riproduzione.',
+  'Оберіть один із базових аватарів. Зміна збережеться у ручному профілі та буде видима іншим ведучим.': 'Scegli uno degli avatar disponibili. La modifica verrà salvata nel profilo manuale e sarà visibile agli altri conduttori.',
+  'Вибрати доступний BLE-пристрій': 'Scegli un dispositivo BLE disponibile',
+  'Музика відтворюється локально, не завантажується в мережу й діє до закриття вкладки. Звук піде на колонку, якщо вона вже підключена до телефона.': 'La musica viene riprodotta localmente, non viene caricata online e resta disponibile fino alla chiusura della scheda. L’audio verrà riprodotto dall’altoparlante già collegato al telefono.'
+});
+
 const PATTERNS = {
-  ru: [[/(\d+) хв/g, '$1 мин'], [/(\d+) год/g, '$1 ч'], [/(\d+) ігор/g, '$1 игр'], [/(\d+)% перемог/g, '$1% побед'], [/тимчасових (\d+)/g, 'временных $1'], [/черга (\d+)/g, 'очередь $1'], [/ · ведучий /g, ' · ведущий '], [/(\d+) гравців за столом/g, '$1 игроков за столом'], [/(\d+)\/10 живих/g, '$1/10 живых'], [/Екран бачить лише гравець №(\d+)/g, 'Экран видит только игрок №$1'], [/Змінити аватар/g, 'Изменить аватар']],
+  it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+)% перемог/g, '$1% vittorie'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
   en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+)% перемог/g, '$1% wins'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],
   fr: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 parties'], [/(\d+)% перемог/g, '$1 % de victoires'], [/тимчасових (\d+)/g, '$1 temporaires'], [/черга (\d+)/g, 'file $1'], [/ · ведучий /g, ' · animateur '], [/(\d+) гравців за столом/g, '$1 joueurs à table'], [/(\d+)\/10 живих/g, '$1/10 en vie'], [/Екран бачить лише гравець №(\d+)/g, 'Seul le joueur n°$1 voit l’écran'], [/Змінити аватар/g, 'Changer l’avatar']]
 };
 
 export function normalizeLanguage(value) {
+  if (value === 'ru') return 'it';
   return LANGUAGES.some(language => language.code === value) ? value : 'uk';
 }
 

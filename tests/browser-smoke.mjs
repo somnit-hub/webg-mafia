@@ -188,7 +188,7 @@ const mobileLayout = await evaluate(`(() => {
 })()`);
 const headerMediaControls = await evaluate(`({
   bluetooth: Boolean(document.querySelector('[data-action="open-media-panel"] svg')),
-  androidSettingsLink: document.querySelector('.android-bluetooth-link')?.getAttribute('href'),
+  bluetoothMenuTrigger: document.querySelector('[data-action="open-media-panel"]')?.getAttribute('aria-haspopup') === 'dialog',
   play: Boolean(document.querySelector('[data-action="media-play"] svg')),
   pause: Boolean(document.querySelector('[data-action="media-pause"] svg')),
   playInitiallyDisabled: document.querySelector('[data-action="media-play"]')?.disabled,
@@ -215,14 +215,26 @@ const headerOrderControl = await evaluate(`(() => {
 await click('[data-action="open-media-panel"]');
 const mediaModalFrame = await inspectModalFrame();
 const mediaPanel = await evaluate(`({
+  platform: document.documentElement.dataset.platform,
   title: document.querySelector('#media-panel-title')?.textContent,
+  prompt: document.querySelector('#media-panel-title + p')?.textContent,
   audioInput: document.querySelector('#music-file')?.accept,
-  externalControlWarning: [...document.querySelectorAll('.media-panel-section .help')].some(button => button.dataset.tooltip?.includes('Spotify') && button.dataset.tooltip.includes('керувати не може')),
-  systemBluetoothGuidance: document.querySelector('.media-modal')?.textContent.includes('системних налаштуваннях телефона'),
-  iosControlCenterGuidance: document.querySelector('.ios-bluetooth-guide')?.textContent.includes('Центр керування') && document.querySelector('.ios-bluetooth-guide')?.textContent.includes('Параметри → Bluetooth'),
-  bluetoothState: Boolean(document.querySelector('.media-panel-section .ui-state .state-icon svg')),
-  chooserPresentWhenSupported: !('bluetooth' in navigator) || Boolean(document.querySelector('[data-action="bluetooth-request"]'))
+  choices: [...document.querySelectorAll('.media-choice b')].map(item => item.textContent.trim()),
+  choiceCount: document.querySelectorAll('.media-choice').length,
+  choiceIcons: document.querySelectorAll('.media-choice > svg').length,
+  musicPickerLabel: document.querySelector('.music-choice')?.getAttribute('for'),
+  androidSystemLink: document.querySelector('.android-bluetooth-menu-link')?.getAttribute('href'),
+  detailsInitiallyCollapsed: !document.querySelector('.bluetooth-detail-panel'),
+  smallestChoice: Math.round(Math.min(...[...document.querySelectorAll('.media-choice')].map(item => item.getBoundingClientRect().height)))
 })`);
+if (mediaPanel.platform === 'ios') {
+  await click('[data-action="show-bluetooth-guide"]');
+  mediaPanel.iosGuide = await evaluate(`({
+    expanded: Boolean(document.querySelector('.bluetooth-detail-panel')),
+    controlCenter: document.querySelector('.ios-bluetooth-guide')?.textContent.includes('Центр керування'),
+    settings: document.querySelector('.ios-bluetooth-guide')?.textContent.includes('Параметри → Bluetooth')
+  })`);
+}
 await evaluate(`(() => {
   const sampleRate = 8000;
   const samples = sampleRate * 2;
@@ -240,10 +252,12 @@ await evaluate(`(() => {
 })()`);
 await wait(150);
 const preparedMedia = await evaluate(`({
-  track: document.querySelector('.media-panel-section:nth-child(2) .state-copy b')?.textContent,
+  track: document.querySelector('.prepared-media-panel .state-copy b')?.textContent,
   localOnly: document.querySelector('.media-note')?.textContent.includes('не завантажується'),
   playEnabled: !document.querySelector('.media-modal [data-action="media-play"]')?.disabled,
-  clearButton: Boolean(document.querySelector('[data-action="media-clear"]'))
+  clearButton: Boolean(document.querySelector('[data-action="media-clear"]')),
+  externalControlWarning: [...document.querySelectorAll('.prepared-media-panel .help')].some(button => button.dataset.tooltip?.includes('Spotify') && button.dataset.tooltip.includes('керувати не може')),
+  menuStillVisible: document.querySelectorAll('.media-choice').length === 2
 })`);
 await captureScreenshot(process.env.SMOKE_MEDIA_SCREENSHOT);
 await click('.media-modal [data-action="close-modal"]');
@@ -319,7 +333,7 @@ const hostProfileControls = await evaluate(`({
   languageLabels: [...document.querySelectorAll('.host-profile-modal [data-language]')].map(button => button.getAttribute('aria-label')),
   languageFlags: document.querySelectorAll('.host-profile-modal .language-flag svg').length,
   languageNamesHidden: [...document.querySelectorAll('.host-profile-modal [data-language]')].every(button => !button.textContent.trim()),
-  neutralBlackFlag: document.querySelector('.host-profile-modal [data-language="ru"] .neutral-flag-field')?.getAttribute('fill'),
+  italianFlagStripes: document.querySelectorAll('.host-profile-modal [data-language="it"] svg rect').length,
   discoverable: document.querySelector('[name="discoverable"]')?.checked,
   inputFontSize: parseFloat(getComputedStyle(document.querySelector('#host-display-name')).fontSize),
   inputAutofocus: document.querySelector('#host-display-name').hasAttribute('autofocus'),
@@ -393,7 +407,7 @@ const languageOptions = await evaluate(`({
   labels: [...document.querySelectorAll('main [data-language]')].map(button => button.getAttribute('aria-label')),
   flags: document.querySelectorAll('main .language-flag svg').length,
   namesHidden: [...document.querySelectorAll('main [data-language]')].every(button => !button.textContent.trim()),
-  neutralBlackFlag: document.querySelector('main [data-language="ru"] .neutral-flag-field')?.getAttribute('fill'),
+  italianFlagStripes: document.querySelectorAll('main [data-language="it"] svg rect').length,
   selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language
 })`);
 await click('main [data-language="en"]');
@@ -407,8 +421,8 @@ const englishLanguage = await evaluate(`({
 })`);
 await click('main [data-language="fr"]');
 const frenchLanguage = await evaluate(`({ lang: document.documentElement.lang, title: document.querySelector('.page-head h1')?.textContent, more: document.querySelector('.bottom-nav [aria-current="page"]')?.textContent.trim(), selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language })`);
-await click('main [data-language="ru"]');
-const russianLanguage = await evaluate(`({ lang: document.documentElement.lang, title: document.querySelector('.page-head h1')?.textContent, more: document.querySelector('.bottom-nav [aria-current="page"]')?.textContent.trim(), selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language })`);
+await click('main [data-language="it"]');
+const italianLanguage = await evaluate(`({ lang: document.documentElement.lang, title: document.querySelector('.page-head h1')?.textContent, more: document.querySelector('.bottom-nav [aria-current="page"]')?.textContent.trim(), selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language })`);
 await click('main [data-language="uk"]');
 const restoredUkrainianLanguage = await evaluate(`({ lang: document.documentElement.lang, stored: localStorage.getItem('mafia-desk-language'), title: document.querySelector('.page-head h1')?.textContent, selected: document.querySelector('main [data-language][aria-checked="true"]')?.dataset.language })`);
 const settingsHeaderBrandAbsent = await evaluate(`!document.querySelector('.brand-copy') && !document.querySelector('.shell-header')?.textContent.includes('ENJOY /')`);
@@ -1055,6 +1069,7 @@ await wait(180);
 const activeGameHome = await evaluate(`({
   rows: document.querySelectorAll('.active-games-panel .active-game-row').length,
   resume: document.querySelectorAll('.active-games-panel [data-action="resume-game"]').length,
+  cancel: document.querySelectorAll('.active-games-panel [data-action="cancel-active-game"]').length,
   watch: document.querySelectorAll('.active-games-panel [data-action="watch-game"]').length,
   title: document.querySelector('.active-games-panel h2')?.textContent,
   phase: document.querySelector('.active-game-row .continue-meta')?.textContent
@@ -1064,6 +1079,7 @@ await wait(180);
 const activeGameStats = await evaluate(`({
   rows: document.querySelectorAll('.active-games-panel .active-game-row').length,
   resume: document.querySelectorAll('.active-games-panel [data-action="resume-game"]').length,
+  cancel: document.querySelectorAll('.active-games-panel [data-action="cancel-active-game"]').length,
   status: document.querySelector('.directory-status')?.textContent
 })`);
 await evaluate(`location.hash = '#game'`);
@@ -1099,7 +1115,7 @@ const nomination = await evaluate(`({
   latestLog: document.querySelector('.quick-log')?.innerText.split('\\n').slice(0, 2)
 })`);
 const offlineShell = await evaluate(`navigator.serviceWorker.ready.then(async () => {
-  const cache = await caches.open('mafia-desk-v111');
+  const cache = await caches.open('mafia-desk-v113');
   const keys = (await cache.keys()).map(request => request.url);
   return {
     authModule: keys.some(url => url.endsWith('/src/auth.js')),
@@ -1268,6 +1284,40 @@ const queueAfterGame = await evaluate(`({
   positions: [...document.querySelectorAll('.queue-player-btn.selected small')].map(item => Number(item.textContent)).sort((a, b) => a - b)
 })`);
 
+await evaluate(`location.hash = '#setup'`);
+await wait(180);
+await click('[data-action="start-game"]');
+const cancellationFromReveal = await evaluate(`({
+  hash: location.hash,
+  cancelVisible: Boolean(document.querySelector('.reveal-actions [data-action="cancel-active-game"]')),
+  roleHidden: !document.querySelector('.role-reveal')
+})`);
+await click('.reveal-actions [data-action="cancel-active-game"]');
+const cancellationModal = await evaluate(`({
+  title: document.querySelector('.danger-modal h2')?.textContent,
+  explainsNoStats: document.querySelector('.danger-modal .game-dialog-copy')?.textContent.includes('не потрапить до статистики'),
+  confirm: document.querySelector('.danger-modal [data-action="confirm-action"]')?.textContent.trim()
+})`);
+await click('.danger-modal [data-action="confirm-action"]');
+await wait(180);
+const cancelledGame = await evaluate(`new Promise((resolve, reject) => {
+    const request = indexedDB.open('mafia-desk-local-smoke-test');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction('settings', 'readonly');
+      const lookup = transaction.objectStore('settings').get('nextGameQueue');
+      lookup.onsuccess = () => resolve({
+        hash: location.hash,
+        activeGames: document.querySelectorAll('.active-games-panel .active-game-row').length,
+        finishedGames: document.querySelectorAll('.list .list-row').length,
+        toast: document.querySelector('#toast')?.textContent,
+        queuedPlayers: Array.isArray(lookup.result?.value) ? lookup.result.value.length : 0
+      });
+      lookup.onerror = () => reject(lookup.error);
+    };
+  })`);
+
 await evaluate(`(async () => {
   const timestamp = new Date().toISOString();
   const publicGame = {
@@ -1290,6 +1340,7 @@ const foreignLiveHome = await evaluate(`({
   row: [...document.querySelectorAll('.active-game-row')].some(row => row.textContent.includes('Гра іншого ведучого')),
   resume: Boolean(document.querySelector('.active-game-row [data-action="resume-game"][data-id="foreign-live-smoke"]')),
   watch: Boolean(document.querySelector('.active-game-row [data-action="watch-game"][data-id="foreign-live-smoke"]')),
+  cancel: Boolean(document.querySelector('.active-game-row [data-action="cancel-active-game"][data-id="foreign-live-smoke"]')),
   eye: Boolean(document.querySelector('.active-game-row [data-id="foreign-live-smoke"] .button-eye-icon')),
   label: document.querySelector('.active-game-row [data-id="foreign-live-smoke"]')?.textContent.trim()
 })`);
@@ -1306,9 +1357,9 @@ const foreignObserver = await evaluate(`({
 const nightSignals = { donMissSignal, donHitSignal, sheriffBlackSignal, sheriffRedSignal, nightResultAnnouncement };
 const chromeByTab = { home: homeChrome, players: playersChrome, setup: setupChrome, stats: statsChrome, settings: settingsChrome };
 const unifiedModalFrames = { mediaModalFrame, orderModalFrame, hostProfileModalFrame, accountDeleteModalFrame, playerModalFrame, setupMoveModalFrame, setupAvatarModalFrame, gameSettingsModalFrame, seatModalFrame, confirmModalFrame, winnerModalFrame, protocolModalFrame };
-const languageSupport = { languageOptions, englishLanguage, frenchLanguage, russianLanguage, restoredUkrainianLanguage };
+const languageSupport = { languageOptions, englishLanguage, frenchLanguage, italianLanguage, restoredUkrainianLanguage };
 const gameCardSystem = { roleReadyLayout, roleOpenLayout, gameSettingsAppearance, confirmModalAppearance, winnerModalAppearance, zeroNightSheriff, zeroNightFreeSeating, bestMoveLayout, bestMoveFarewell, afterBestMove };
-const result = { authenticatedHost, enjoyBrand, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, mediaPanel, preparedMedia, orderPanel, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersCollapsed, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameStats, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
+const result = { authenticatedHost, enjoyBrand, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, mediaPanel, preparedMedia, orderPanel, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersCollapsed, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
 console.log(JSON.stringify(result, null, 2));
 
 if (process.env.SMOKE_SCREENSHOT) {
@@ -1325,8 +1376,9 @@ verify(firstDay.hash === '#game' && firstDay.seats === 10 && firstDay.phase === 
 verify(runningTimerAdjustment.afterMinusFive === Math.max(0, runningTimerAdjustment.beforeMinusFive - 5) && runningTimerAdjustment.afterMinusTick <= runningTimerAdjustment.afterMinusFive && runningTimerAdjustment.afterMinusTick >= runningTimerAdjustment.afterMinusFive - 2 && runningTimerAdjustment.afterPlusFive === runningTimerAdjustment.afterMinusTick + 5, 'running timer +/- 5 seconds');
 verify(timerNavigation.away === '#players' && timerNavigation.returned === '#game' && timerNavigation.stopped && timerNavigation.navRestored, 'timer pauses and persists when leaving active game');
 verify(activeProfileLocks.locked === 10 && activeProfileLocks.editable >= 3 && activeProfileLocks.lockedButtonsDisabled, 'profiles seated in active game are locked');
-verify(activeGameHome.rows === 1 && activeGameHome.resume === 1 && activeGameHome.watch === 0 && activeGameHome.title === 'Активні ігри' && activeGameHome.phase.includes('День 1') && activeGameStats.rows === 1 && activeGameStats.resume === 1 && activeGameStats.status.toLocaleLowerCase('uk').includes('активн'), 'active game is visible on overview and statistics with host resume action');
-verify(foreignLiveHome.row && !foreignLiveHome.resume && foreignLiveHome.watch && foreignLiveHome.eye && foreignLiveHome.label === 'Спостерігати' && foreignObserver.hash === '#observer/foreign-live-smoke' && foreignObserver.seats === 10 && foreignObserver.seatControls === 0 && !foreignObserver.moderatorPanel && foreignObserver.publicPanel && foreignObserver.bottomNavAbsent, 'foreign live game uses safe eye-icon observer action');
+verify(activeGameHome.rows === 1 && activeGameHome.resume === 1 && activeGameHome.cancel === 1 && activeGameHome.watch === 0 && activeGameHome.title === 'Активні ігри' && activeGameHome.phase.includes('День 1') && activeGameStats.rows === 1 && activeGameStats.resume === 1 && activeGameStats.cancel === 1 && activeGameStats.status.toLocaleLowerCase('uk').includes('активн'), 'active game is visible on overview and statistics with host resume and cancel actions');
+verify(cancellationFromReveal.hash === '#reveal' && cancellationFromReveal.cancelVisible && cancellationFromReveal.roleHidden && cancellationModal.title === 'Скасувати гру?' && cancellationModal.explainsNoStats && cancellationModal.confirm === 'Скасувати гру' && cancelledGame.hash === '#home' && cancelledGame.activeGames === 0 && cancelledGame.finishedGames === 1 && cancelledGame.toast === 'Гру скасовано' && cancelledGame.queuedPlayers === queueAfterGame.selected, 'host cancels an active game without archive result and restores selected players');
+verify(foreignLiveHome.row && !foreignLiveHome.resume && foreignLiveHome.watch && !foreignLiveHome.cancel && foreignLiveHome.eye && foreignLiveHome.label === 'Спостерігати' && foreignObserver.hash === '#observer/foreign-live-smoke' && foreignObserver.seats === 10 && foreignObserver.seatControls === 0 && !foreignObserver.moderatorPanel && foreignObserver.publicPanel && foreignObserver.bottomNavAbsent, 'foreign live game uses safe eye-icon observer action without host controls');
 verify(authenticatedHost.name === 'Тестовий ведучий' && authenticatedHost.avatar, 'authenticated host');
 verify(enjoyBrand.headerBrandAbsent && enjoyBrand.documentTitle === 'Enjoy Mafia — помічник ведучого' && enjoyBrand.heroWordmarkAbsent && enjoyBrand.heroTitle === 'Мафія enjoy' && enjoyBrand.coffeeIcon && enjoyBrand.sheriffBadge && enjoyBrand.favicon.endsWith('/assets/favicon-32.png') && enjoyBrand.brandMarkSize >= 44 && enjoyBrand.brandArtworkSize === 'contain' && enjoyBrand.heroIndexAbsent && enjoyBrand.addressAbsent && enjoyBrand.instagramAbsent && enjoyBrand.mapsAbsent && enjoyBrand.socialIcons === 0 && enjoyBrand.sharedArchive.includes('Активні й завершені') && enjoyBrand.externalArrowsAbsent && !enjoyBrand.redundantDescription && !enjoyBrand.redundantAudienceLabel, 'Enjoy brand');
 verify(Object.entries(chromeByTab).every(([route, frame]) => isUnifiedAppChrome(frame, homeChrome) && (route === 'home' ? ['', '#home'].includes(frame.route) : frame.route === `#${route}`) && frame.activeLabel === ({ home: 'Огляд', players: 'Гравці', setup: 'Нова гра', stats: 'Статистика', settings: 'Ще' })[route]), 'unified chrome across tabs');
@@ -1334,15 +1386,15 @@ verify(mobileLayout.heroActionsHidden && mobileLayout.homeQuickActionCount === 2
 verify(settingsHeaderBrandAbsent, 'header brand copy absent on secondary tabs');
 verify(settingsActionLayout.drive.count === 1 && settingsActionLayout.drive.fillsWidth && settingsActionLayout.drive.singleButtonFills && settingsActionLayout.observer.count === 1 && settingsActionLayout.observer.fillsWidth && settingsActionLayout.observer.singleButtonFills, 'full-width standalone settings actions');
 verify(mobileLayout.scrollWidth <= mobileLayout.viewport && mobileLayout.pagePadding <= 8 && mobileLayout.stackGap <= 8 && mobileLayout.numericFont.includes('Arial') && mobileLayout.homeStatsCentered && mobileLayout.homeStatsBackground.includes('0.86') && mobileLayout.navHeight === 72 && mobileLayout.smallestNavIcon >= 26 && mobileLayout.headerAvatarVisible && mobileLayout.headerAvatarFills && mobileLayout.shortestPrimaryAction >= 44 && mobileLayout.smallestHomeActionFont >= 15 && mobileLayout.smallestTextButtonFont >= 15 && mobileLayout.installIconOnly && mobileLayout.installLabel === 'Встановити застосунок' && mobileLayout.installSize >= 40 && compactLayout.scrollWidth <= compactLayout.viewport && compactLayout.headerWidth <= compactLayout.viewport, 'mobile layout');
-verify(headerMediaControls.bluetooth && headerMediaControls.androidSettingsLink === 'intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end' && headerMediaControls.play && headerMediaControls.pause && headerMediaControls.playInitiallyDisabled && headerMediaControls.pauseInitiallyDisabled && headerMediaControls.controls === 2 && headerMediaControls.smallest >= 40 && headerMediaControls.centerOffset <= 1 && headerMediaControls.bluetoothBesideProfile && headerMediaControls.profileGroupRightGap <= 10 && compactLayout.actionsRight <= compactLayout.viewport - 10, 'centered media controls and Bluetooth beside profile');
-verify(mediaPanel.title === 'Bluetooth і музика' && mediaPanel.audioInput === 'audio/*' && mediaPanel.externalControlWarning && mediaPanel.systemBluetoothGuidance && mediaPanel.iosControlCenterGuidance && mediaPanel.bluetoothState && mediaPanel.chooserPresentWhenSupported && preparedMedia.track === 'Enjoy smoke.wav' && preparedMedia.localOnly && preparedMedia.playEnabled && preparedMedia.clearButton, 'Bluetooth, iPhone guidance and local music panel');
+verify(headerMediaControls.bluetooth && headerMediaControls.bluetoothMenuTrigger && headerMediaControls.play && headerMediaControls.pause && headerMediaControls.playInitiallyDisabled && headerMediaControls.pauseInitiallyDisabled && headerMediaControls.controls === 2 && headerMediaControls.smallest >= 40 && headerMediaControls.centerOffset <= 1 && headerMediaControls.bluetoothBesideProfile && headerMediaControls.profileGroupRightGap <= 10 && compactLayout.actionsRight <= compactLayout.viewport - 10, 'centered media controls and Bluetooth menu beside profile');
+verify(mediaPanel.title === 'Bluetooth і музика' && mediaPanel.prompt === 'Оберіть дію' && mediaPanel.audioInput === 'audio/*' && mediaPanel.choiceCount === 2 && JSON.stringify(mediaPanel.choices) === JSON.stringify(['Підключити Bluetooth-пристрій', 'Відкрити музику з пристрою']) && mediaPanel.choiceIcons === 2 && mediaPanel.musicPickerLabel === 'music-file' && mediaPanel.detailsInitiallyCollapsed && mediaPanel.smallestChoice >= 120 && (mediaPanel.platform !== 'android' || mediaPanel.androidSystemLink === 'intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end') && (mediaPanel.platform !== 'ios' || (mediaPanel.iosGuide?.expanded && mediaPanel.iosGuide.controlCenter && mediaPanel.iosGuide.settings)) && preparedMedia.track === 'Enjoy smoke.wav' && preparedMedia.localOnly && preparedMedia.playEnabled && preparedMedia.clearButton && preparedMedia.externalControlWarning && preparedMedia.menuStillVisible, 'two-choice Bluetooth and local music menu on desktop, Android, and iPhone');
 verify(headerOrderControl.icon && headerOrderControl.label === 'Замовити напій' && headerOrderControl.size >= 40 && headerOrderControl.besideInstall && headerOrderControl.insideViewport, 'compact order control beside install');
 verify(orderPanel.title === 'Замовлення напою' && orderPanel.count === 4 && JSON.stringify(orderPanel.choices) === JSON.stringify(['Кава', 'Чай', 'Капучино', 'Лате']) && orderPanel.smallestChoice >= 88 && orderPanel.recipient.includes('@Chemelev') && orderPanel.immediate && orderResult.success && orderResult.text.includes('Telegram') && orderResult.modalOpen, 'Telegram drink order panel and local delivery result');
 verify(tabletLayout.scrollWidth <= tabletLayout.viewport && tabletLayout.headerHeight === 62 && tabletLayout.navHeight === 72 && tabletLayout.navItems === 5 && tabletLayout.smallestNavIcon >= 26, 'tablet app chrome');
 verify(desktopLayout.scrollWidth <= desktopLayout.viewport && desktopLayout.headerTop === 0 && desktopLayout.navTop === desktopLayout.headerBottom && desktopLayout.itemWidthSpread <= 1 && desktopLayout.navRightGap <= 1, 'desktop layout');
-verify(ownerDatabases.includes('mafia-desk-local-smoke-test') && hostProfileControls.email === 'test.host@example.com' && hostProfileControls.camera === 'environment' && hostProfileControls.cameraIcon && hostProfileControls.cameraEmojiAbsent && hostProfileControls.gallery && hostProfileControls.deleteButton && hostProfileControls.deleteIconOnly && hostProfileControls.deleteInIdentity && hostProfileControls.deleteAbsentFromHeader && hostProfileControls.languageCount === 4 && JSON.stringify(hostProfileControls.languageOrder) === JSON.stringify(['uk', 'ru', 'en', 'fr']) && JSON.stringify(hostProfileControls.languageLabels) === JSON.stringify(['Українська', 'Російська', 'English', 'Français']) && hostProfileControls.languageFlags === 4 && hostProfileControls.languageNamesHidden && hostProfileControls.neutralBlackFlag === '#111111' && hostProfileControls.discoverable && hostProfileControls.inputFontSize >= 16 && !hostProfileControls.inputAutofocus && hostProfileControls.descriptionPlaceholder === 'Досвід ведення, улюблена кава…' && hostProfileControls.dialogFocused && hostProfileControls.dialogScrollTop === 0 && hostProfileControls.sheetTop >= 6 && hostProfileControls.sheetTop <= 8 && hostProfileControls.sheetLeft === 6 && hostProfileControls.sheetRightGap === 6 && hostProfileControls.sheetBottom <= hostProfileControls.viewportBottom - 6 && hostAvatarDraft.namePreserved === 'Ведучий Smoke' && hostAvatarDraft.nicknamePreserved === 'Smoke Нік' && hostAvatarDraft.customPreview && savedHostAvatar.header && savedHostAvatar.stored && editedHostName === 'Ведучий Smoke', 'host profile, flag-only language picker and custom avatar persistence');
+verify(ownerDatabases.includes('mafia-desk-local-smoke-test') && hostProfileControls.email === 'test.host@example.com' && hostProfileControls.camera === 'environment' && hostProfileControls.cameraIcon && hostProfileControls.cameraEmojiAbsent && hostProfileControls.gallery && hostProfileControls.deleteButton && hostProfileControls.deleteIconOnly && hostProfileControls.deleteInIdentity && hostProfileControls.deleteAbsentFromHeader && hostProfileControls.languageCount === 4 && JSON.stringify(hostProfileControls.languageOrder) === JSON.stringify(['uk', 'it', 'en', 'fr']) && JSON.stringify(hostProfileControls.languageLabels) === JSON.stringify(['Українська', 'Italiano', 'English', 'Français']) && hostProfileControls.languageFlags === 4 && hostProfileControls.languageNamesHidden && hostProfileControls.italianFlagStripes === 3 && hostProfileControls.discoverable && hostProfileControls.inputFontSize >= 16 && !hostProfileControls.inputAutofocus && hostProfileControls.descriptionPlaceholder === 'Досвід ведення, улюблена кава…' && hostProfileControls.dialogFocused && hostProfileControls.dialogScrollTop === 0 && hostProfileControls.sheetTop >= 6 && hostProfileControls.sheetTop <= 8 && hostProfileControls.sheetLeft === 6 && hostProfileControls.sheetRightGap === 6 && hostProfileControls.sheetBottom <= hostProfileControls.viewportBottom - 6 && hostAvatarDraft.namePreserved === 'Ведучий Smoke' && hostAvatarDraft.nicknamePreserved === 'Smoke Нік' && hostAvatarDraft.customPreview && savedHostAvatar.header && savedHostAvatar.stored && editedHostName === 'Ведучий Smoke', 'host profile, flag-only language picker and custom avatar persistence');
 verify(profilePhotoSyncStatus.label === 'Фото синхронізовано' && profilePhotoSyncStatus.status === 'synced' && profilePhotoSyncStatus.visible, 'explicit synced profile photo status');
-verify(languageOptions.count === 4 && JSON.stringify(languageOptions.order) === JSON.stringify(['uk', 'ru', 'en', 'fr']) && JSON.stringify(languageOptions.labels) === JSON.stringify(['Українська', 'Російська', 'English', 'Français']) && languageOptions.flags === 4 && languageOptions.namesHidden && languageOptions.neutralBlackFlag === '#111111' && languageOptions.selected === 'uk' && englishLanguage.lang === 'en' && englishLanguage.stored === 'en' && englishLanguage.title === 'Settings' && JSON.stringify(englishLanguage.nav) === JSON.stringify(['Overview', 'Players', 'New game', 'Statistics', 'More']) && englishLanguage.field === 'App language?' && englishLanguage.selected === 'en' && frenchLanguage.lang === 'fr' && frenchLanguage.title === 'Paramètres' && frenchLanguage.more === 'Plus' && frenchLanguage.selected === 'fr' && russianLanguage.lang === 'ru' && russianLanguage.title === 'Настройки' && russianLanguage.more === 'Ещё' && russianLanguage.selected === 'ru' && restoredUkrainianLanguage.lang === 'uk' && restoredUkrainianLanguage.stored === 'uk' && restoredUkrainianLanguage.title === 'Налаштування' && restoredUkrainianLanguage.selected === 'uk', 'flag-only language switching');
+verify(languageOptions.count === 4 && JSON.stringify(languageOptions.order) === JSON.stringify(['uk', 'it', 'en', 'fr']) && JSON.stringify(languageOptions.labels) === JSON.stringify(['Українська', 'Italiano', 'English', 'Français']) && languageOptions.flags === 4 && languageOptions.namesHidden && languageOptions.italianFlagStripes === 3 && languageOptions.selected === 'uk' && englishLanguage.lang === 'en' && englishLanguage.stored === 'en' && englishLanguage.title === 'Settings' && JSON.stringify(englishLanguage.nav) === JSON.stringify(['Overview', 'Players', 'New game', 'Statistics', 'More']) && englishLanguage.field === 'App language?' && englishLanguage.selected === 'en' && frenchLanguage.lang === 'fr' && frenchLanguage.title === 'Paramètres' && frenchLanguage.more === 'Plus' && frenchLanguage.selected === 'fr' && italianLanguage.lang === 'it' && italianLanguage.title === 'Impostazioni' && italianLanguage.more === 'Altro' && italianLanguage.selected === 'it' && restoredUkrainianLanguage.lang === 'uk' && restoredUkrainianLanguage.stored === 'uk' && restoredUkrainianLanguage.title === 'Налаштування' && restoredUkrainianLanguage.selected === 'uk', 'flag-only language switching');
 verify(themeOptions === 3 && darkPalette.active === 'dark' && lightPalette.active === 'light' && cafeTheme.active === 'cafe' && new Set([darkPalette.bg, lightPalette.bg, cafeTheme.bg]).size === 3 && new Set([darkPalette.text, lightPalette.text, cafeTheme.text]).size === 3 && new Set([darkPalette.art, lightPalette.art, cafeTheme.art]).size === 3 && darkPalette.card.includes('/ 86%') && lightPalette.card.includes('/ 87%') && cafeTheme.card.includes('/ 86%') && darkPalette.art.includes('theme-dark-mafioso.jpg') && lightPalette.art.includes('theme-light-sheriff.jpg') && cafeTheme.art.includes('theme-cafe-bar.jpg') && cafeTheme.cached === 'cafe' && cafeTheme.pressed === 'true' && cafeTheme.themeColor === '#1a100b', 'themes');
 verify(enjoyInfo.descriptionAbsent && enjoyInfo.instagramIcon && enjoyInfo.mapsIcon && enjoyInfo.iconOnly && enjoyInfo.wordmarkAbsent && enjoyInfo.smallestLink >= 44 && enjoyInfo.cardHeight <= 210, 'compact café card without Enjoy wordmark');
 verify(manualJsonTransferAbsent, 'manual JSON import and export controls removed');

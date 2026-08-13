@@ -164,6 +164,7 @@ let app = {
   media: { trackName: '', playing: false, error: '' },
   order: { busy: false, status: 'idle', error: '', lastItem: '' },
   profilePhotoSync: { status: 'idle' },
+  pendingActiveGameDeletes: [],
   bluetooth: {
     supported: 'bluetooth' in navigator,
     available: null,
@@ -464,7 +465,9 @@ function mergePlayerSources() {
     .sort((left, right) => left.name.localeCompare(right.name, 'uk'));
 }
 function mergeGameSources() {
-  const cloudById = new Map(app.cloudGames.map(game => [game.id, game]));
+  const pendingDeletes = new Set(app.pendingActiveGameDeletes);
+  const visibleCloudGames = app.cloudGames.filter(game => !(game.status === 'active' && pendingDeletes.has(game.id)));
+  const cloudById = new Map(visibleCloudGames.map(game => [game.id, game]));
   const localIds = new Set(app.localGames.map(game => game.id));
   const local = app.localGames.map(game => {
     const remote = cloudById.get(game.id);
@@ -476,10 +479,11 @@ function mergeGameSources() {
       cloudHostName: remote.cloudHostName
     } : game;
   });
-  app.games = [...local, ...app.cloudGames.filter(game => !localIds.has(game.id))];
+  app.games = [...local, ...visibleCloudGames.filter(game => !localIds.has(game.id))];
 }
 function canManageGame(game) {
-  return Boolean(game) && (!game.cloudOwnerUid || game.cloudOwnerUid === app.authUser?.uid);
+  const ownerUid = game?.cloudOwnerUid || game?.ownerUid || '';
+  return Boolean(game) && (!ownerUid || ownerUid === app.authUser?.uid);
 }
 function seatByNo(number) { return app.game?.seats.find(seat => seat.number === Number(number)); }
 function aliveSeats() { return app.game?.seats.filter(seat => seat.status === 'alive') || []; }
@@ -748,10 +752,15 @@ function headerControlIcon(name) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]}</svg>`;
 }
 
+function mediaChoiceIcon(name) {
+  if (name === 'bluetooth') return headerControlIcon('bluetooth');
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path d="M4 5h5M6.5 2.5v5"/></svg>';
+}
+
 function headerHtml() {
   const profileLabel = app.hostProfile?.displayName || app.authUser?.googleName || app.authUser?.email || 'Google';
   const hasTrack = Boolean(app.media.trackName);
-  const bluetoothLabel = CLIENT_PLATFORM === 'ios' ? 'Підключити колонку на iPhone' : 'Bluetooth і музика';
+  const bluetoothLabel = 'Bluetooth і музика';
   return `<header class="shell-header ${app.installPrompt && !['game', 'reveal'].includes(app.route) ? 'has-install' : ''}">
     <a class="brand" href="#home" aria-label="Mafia — головна">
       <img class="brand-mark" src="./assets/logo-mafia.webp" alt="" width="44" height="44" aria-hidden="true">
@@ -765,7 +774,6 @@ function headerHtml() {
       </div>
       <div class="header-profile-actions">
         <button class="icon-btn header-media-btn bluetooth-btn browser-bluetooth-btn ${app.bluetooth.deviceName ? 'connected' : ''}" data-action="open-media-panel" aria-label="${bluetoothLabel}" title="${bluetoothLabel}" aria-haspopup="dialog">${headerControlIcon('bluetooth')}</button>
-        <a class="icon-btn header-media-btn bluetooth-btn android-bluetooth-link" href="${ANDROID_BLUETOOTH_SETTINGS_URL}" aria-label="Відкрити системні налаштування Bluetooth" title="Системні налаштування Bluetooth" rel="external">${headerControlIcon('bluetooth')}</a>
         <button class="btn small secondary profile-btn" data-action="edit-host-profile" aria-label="Профіль ведучого">${hostAvatar('tiny')}<span>${esc(profileLabel)}</span></button>
       </div>
     </div>
@@ -808,7 +816,7 @@ function pageHeader(title, explanation, action = '') {
 function languagePickerHtml() {
   const flags = {
     uk: '<svg viewBox="0 0 36 24"><rect width="36" height="12" fill="#0057b7"/><rect y="12" width="36" height="12" fill="#ffd700"/></svg>',
-    ru: '<svg class="language-flag-neutral" viewBox="0 0 36 24"><path d="M7 3v19" stroke="#aaa096" stroke-width="2"/><path class="neutral-flag-field" d="M8 4c8-3 13 3 21 0v11c-8 3-13-3-21 0Z" fill="#111111" stroke="#736b63"/><circle cx="7" cy="3" r="1.5" fill="#aaa096"/></svg>',
+    it: '<svg viewBox="0 0 36 24"><rect width="12" height="24" fill="#009246"/><rect x="12" width="12" height="24" fill="#fff"/><rect x="24" width="12" height="24" fill="#ce2b37"/></svg>',
     en: '<svg viewBox="0 0 36 24"><rect width="36" height="24" fill="#012169"/><path d="M0 0 36 24M36 0 0 24" stroke="#fff" stroke-width="5"/><path d="M0 0 36 24M36 0 0 24" stroke="#c8102e" stroke-width="2"/><path d="M18 0v24M0 12h36" stroke="#fff" stroke-width="8"/><path d="M18 0v24M0 12h36" stroke="#c8102e" stroke-width="4"/></svg>',
     fr: '<svg viewBox="0 0 36 24"><rect width="12" height="24" fill="#0055a4"/><rect x="12" width="12" height="24" fill="#fff"/><rect x="24" width="12" height="24" fill="#ef4135"/></svg>'
   };
@@ -907,13 +915,15 @@ function gameRow(game) {
 
 function activeGameRow(game) {
   const resumable = canManageGame(game) && !game.publicOnly;
+  const cancelable = canManageGame(game);
   const host = preferredGameHostName(game);
   const alive = game.seats.filter(seat => seat.status === 'alive').length;
   const gameId = esc(game.id);
-  const action = resumable
+  const primaryAction = resumable
     ? `<button class="btn danger active-game-action" data-action="resume-game" data-id="${gameId}">Продовжити</button>`
     : `<button class="btn secondary active-game-action watch-game-action" data-action="watch-game" data-id="${gameId}">${eyeIcon()}<span>Спостерігати</span></button>`;
-  return `<article class="active-game-row"><div class="active-game-copy"><div class="eyebrow">Триває зараз</div><h3>${esc(game.title)}</h3><div class="continue-meta">${phaseLabel(game)} · ${alive}/10 за столом${host ? ` · ведучий ${esc(host)}` : ''} · оновлено ${formatDate(game.updatedAt, true)}</div></div>${action}</article>`;
+  const actions = `<div class="active-game-actions">${primaryAction}${cancelable ? `<button class="btn small danger-outline active-game-cancel" data-action="cancel-active-game" data-id="${gameId}">Скасувати</button>` : ''}</div>`;
+  return `<article class="active-game-row"><div class="active-game-copy"><div class="eyebrow">Триває зараз</div><h3>${esc(game.title)}</h3><div class="continue-meta">${phaseLabel(game)} · ${alive}/10 за столом${host ? ` · ведучий ${esc(host)}` : ''} · оновлено ${formatDate(game.updatedAt, true)}</div></div>${actions}</article>`;
 }
 
 function playersView() {
@@ -1124,7 +1134,7 @@ function settingsView() {
       <section class="card card-pad">
         <div class="section-title section-heading">${titleHelp('h2', 'Профіль Enjoy', 'Google-акаунт і спільний каталог гравців. Email приватний. Email ручного профілю використовується лише для запрошення на об’єднання і доступний цьому ведучому та відповідному підтвердженому Google-акаунту. Ім’я, нікнейм, клуб, опис і вибраний аватар синхронізуються у каталозі.')}<span class="badge ${app.cloudDirectory.status === 'online' ? 'green' : ''}">${esc(directoryStatus)}</span></div>
         <div class="host-profile-summary">${hostAvatar('large')}<div><h3>${esc(app.hostProfile?.displayName || app.authUser?.googleName || 'Ведучий')}</h3><p>${esc(app.authUser?.email || '')}</p><div class="host-profile-badges">${app.hostProfile?.club ? `<span class="badge gold">${esc(app.hostProfile.club)}</span>` : ''}${profilePhotoSyncHtml()}</div></div></div>
-        <div class="actions profile-actions"><button class="btn secondary" data-action="edit-host-profile">Редагувати профіль</button><button class="btn secondary" data-action="auth-signout">Вийти</button><button class="icon-btn account-delete-btn" type="button" data-action="delete-account" aria-label="Видалити профіль Mafia" title="Видалити профіль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/></svg></button></div>
+        <div class="actions profile-actions"><button class="btn secondary" data-action="edit-host-profile">Редагувати</button><button class="btn secondary" data-action="auth-signout">Вийти</button><button class="icon-btn account-delete-btn" type="button" data-action="delete-account" aria-label="Видалити профіль Mafia" title="Видалити профіль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/></svg></button></div>
       </section>
       <section class="card card-pad">
         <div class="section-title section-heading">${titleHelp('h2', 'На цьому пристрої', 'Активна гра та приватні дані працюють офлайн.')}</div>
@@ -1176,7 +1186,7 @@ function revealView() {
       ? `<div class="role-reveal ${role.team === 'black' ? 'black' : 'red-team'}">${roleSignal(role.key, 'reveal-signal', `Ваша роль: ${role.label}`)}<div class="role-name">${role.label}</div><div class="badge ${role.team === 'red' ? 'green' : ''}">${role.team === 'red' ? 'Червона команда' : 'Чорна команда'}</div><p>${role.description}</p></div>`
       : `<div class="reveal-privacy"><div class="reveal-privacy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg></div><h2>Екран бачить лише гравець №${seat.number}</h2><p>Після перегляду роль автоматично сховається перед передачею телефона наступному гравцеві.</p></div>`}
     </div>
-    <div class="reveal-actions"><button class="btn primary wide game-lead-action" data-action="${game.revealOpen ? 'reveal-next' : 'reveal-role'}">${game.revealOpen ? 'Сховати й передати далі' : 'Показати мою роль'}</button></div>
+    <div class="reveal-actions"><button class="btn primary wide game-lead-action" data-action="${game.revealOpen ? 'reveal-next' : 'reveal-role'}">${game.revealOpen ? 'Сховати й передати далі' : 'Показати мою роль'}</button>${game.revealOpen ? '' : '<button class="btn danger-outline wide reveal-cancel-action" data-action="cancel-active-game">Скасувати гру</button>'}</div>
   </section></main>`;
 }
 
@@ -1434,7 +1444,7 @@ function moderatorSideHtml() {
   const black = game.seats.filter(seat => teamOf(seat) === 'black');
   return `<section class="card card-pad"><div class="section-title section-heading">${titleHelp('h3', 'Панель ведучого', 'Ця панель містить приватну інформацію. Ролі початково приховані від випадкового погляду.')}<button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати' : 'Ролі'}</button></div>${game.showSecrets ? `<div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}<div class="divider"></div><div class="actions"><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button><button class="btn small secondary" data-action="copy-protocol">Копіювати протокол</button><button class="btn small secondary" data-action="open-observer">Оглядач</button></div></section>
     <section class="card card-pad"><div class="section-title section-heading"><div><h3>Протокол</h3><p>${game.history.length} подій</p></div></div><div class="quick-log">${game.history.slice(0, 25).map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('') || statePanel('empty', 'Подій ще немає', '', '', true)}</div></section>
-    <button class="btn danger wide" data-action="end-game-manual">Завершити гру</button>`;
+    <div class="game-end-actions"><button class="btn danger" data-action="end-game-manual">Завершити гру</button><button class="btn danger-outline" data-action="cancel-active-game">Скасувати гру</button></div>`;
 }
 
 function observerSideHtml() {
@@ -1591,6 +1601,7 @@ function deleteAccountModalHtml() {
 }
 
 function mediaModalHtml() {
+  const bluetoothExpanded = app.modal?.view === 'bluetooth';
   const bluetoothKind = CLIENT_PLATFORM === 'ios'
     ? 'idle'
     : app.bluetooth.error
@@ -1622,27 +1633,37 @@ function mediaModalHtml() {
     : app.media.playing
       ? 'Відтворюється через поточний аудіовихід телефона.'
       : app.media.trackName
-        ? 'Готово до відтворення.'
-        : 'MP3, M4A, WAV або інший формат, який підтримує браузер.';
+      ? 'Готово до відтворення.'
+      : 'MP3, M4A, WAV або інший формат, який підтримує браузер.';
+  const bluetoothChoiceDetail = CLIENT_PLATFORM === 'android'
+    ? 'Відкрити системний список пристроїв'
+    : CLIENT_PLATFORM === 'ios'
+      ? 'Показати інструкцію для iPhone'
+      : app.bluetooth.supported
+        ? 'Вибрати доступний BLE-пристрій'
+        : 'Показати системну інструкцію';
+  const bluetoothChoice = CLIENT_PLATFORM === 'android'
+    ? `<a class="media-choice bluetooth-choice android-bluetooth-menu-link" href="${ANDROID_BLUETOOTH_SETTINGS_URL}" rel="external">${mediaChoiceIcon('bluetooth')}<span><b>Підключити Bluetooth-пристрій</b><small>${bluetoothChoiceDetail}</small></span></a>`
+    : `<button class="media-choice bluetooth-choice" type="button" data-action="${CLIENT_PLATFORM === 'ios' || !app.bluetooth.supported ? 'show-bluetooth-guide' : 'bluetooth-request'}" ${app.bluetooth.busy ? 'disabled' : ''}>${mediaChoiceIcon('bluetooth')}<span><b>Підключити Bluetooth-пристрій</b><small>${app.bluetooth.busy ? 'Відкриваємо список…' : bluetoothChoiceDetail}</small></span></button>`;
+  const bluetoothPanel = bluetoothExpanded ? `<section class="media-panel-section bluetooth-detail-panel">
+    <div class="compact-help-row"><b>Підключення Bluetooth</b>${helpIcon('На Android відкривається системний список Bluetooth. На iPhone вебсторінка не може відкрити цю системну панель, тому використовуйте Центр керування або Параметри. На ПК Web Bluetooth працює з BLE-пристроями, але не перемикає системний аудіовихід.', 'Як працює Bluetooth')}</div>
+    ${statePanel(bluetoothKind, bluetoothTitle, bluetoothDetail, '', true)}
+    <div class="ios-bluetooth-guide" role="note"><b>Швидко на iPhone</b><ol><li>Змахніть униз від правого верхнього кута, щоб відкрити Центр керування.</li><li>Для вже спареної колонки торкніть кнопку вибору аудіовиходу у блоці відтворення.</li><li>Для нової колонки відкрийте Параметри → Bluetooth і виберіть її назву.</li></ol></div>
+    ${CLIENT_PLATFORM === 'android' ? `<a class="btn primary wide android-bluetooth-menu-link" href="${ANDROID_BLUETOOTH_SETTINGS_URL}" rel="external">Відкрити Bluetooth</a>` : app.bluetooth.supported ? `<button class="btn secondary wide" type="button" data-action="bluetooth-request" ${app.bluetooth.busy || app.bluetooth.available === false ? 'disabled' : ''}>${app.bluetooth.busy ? 'Відкриваємо список…' : 'Вибрати BLE-пристрій'}</button>` : ''}
+  </section>` : '';
+  const preparedTrack = app.media.trackName ? `<section class="media-panel-section prepared-media-panel">
+    <div class="compact-help-row"><b>Музика в Mafia</b>${helpIcon('Play і Pause керують лише аудіофайлом, відкритим у Mafia. Іншими застосунками — Spotify, YouTube Music тощо — вебсторінка керувати не може.', 'Як працює керування музикою')}</div>
+    ${statePanel(mediaKind, mediaTitle, mediaDetail, '', true)}
+    <div class="media-transport-actions"><button class="btn primary" type="button" data-action="media-play" ${app.media.playing ? 'disabled' : ''}>${headerControlIcon('play')}<span>Play</span></button><button class="btn secondary" type="button" data-action="media-pause" ${!app.media.playing ? 'disabled' : ''}>${headerControlIcon('pause')}<span>Pause</span></button><button class="btn secondary" type="button" data-action="media-clear">Прибрати</button></div>
+  </section>` : '';
   return `<div class="modal-backdrop media-backdrop" data-action="close-modal"><div id="media-panel" class="card modal media-modal" role="dialog" aria-modal="true" aria-labelledby="media-panel-title" tabindex="-1">
-    <div class="section-title section-heading"><div><h2 id="media-panel-title">Bluetooth і музика</h2><p>Керування звуком для гри</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div>
+    <div class="section-title section-heading"><div><h2 id="media-panel-title">Bluetooth і музика</h2><p>Оберіть дію</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div>
     <div class="media-panel-stack">
-      <section class="media-panel-section">
-        <div class="compact-help-row"><b>Bluetooth</b>${helpIcon('На Android кнопка Bluetooth у мобільній шапці відкриває системні налаштування, якщо браузер і виробник телефона дозволяють системний перехід. На iPhone вебсторінка не має доступу до системної Bluetooth-панелі. Web Bluetooth працює лише з BLE-пристроями, а не з аудіопрофілем колонки.', 'Як працює Bluetooth')}</div>
-        ${statePanel(bluetoothKind, bluetoothTitle, bluetoothDetail, '', true)}
-        <div class="ios-bluetooth-guide" role="note">
-          <b>Швидко на iPhone</b>
-          <ol><li>Змахніть униз від правого верхнього кута, щоб відкрити Центр керування.</li><li>Для вже спареної колонки торкніть кнопку вибору аудіовиходу у блоці відтворення та виберіть колонку.</li><li>Для нової колонки відкрийте Параметри → Bluetooth і торкніть її назву.</li></ol>
-        </div>
-        ${app.bluetooth.supported ? `<button class="btn secondary wide" type="button" data-action="bluetooth-request" ${app.bluetooth.busy || app.bluetooth.available === false ? 'disabled' : ''}>${app.bluetooth.busy ? 'Відкриваємо список…' : 'Вибрати BLE-пристрій'}</button>` : ''}
-      </section>
-      <section class="media-panel-section">
-        <div class="compact-help-row"><b>Музика в Mafia</b>${helpIcon('Play і Pause керують лише аудіо, відкритим у Mafia. Іншими мобільними застосунками — Spotify, YouTube Music тощо — вебсторінка керувати не може.', 'Як працює керування музикою')}</div>
-        ${statePanel(mediaKind, mediaTitle, mediaDetail, '', true)}
-        <div class="media-file-actions"><label class="btn primary" for="music-file">Обрати аудіофайл</label><input id="music-file" class="visually-hidden" type="file" accept="audio/*" data-input="music-file">${app.media.trackName ? '<button class="btn secondary" type="button" data-action="media-clear">Прибрати</button>' : ''}</div>
-        <div class="media-transport-actions"><button class="btn primary" type="button" data-action="media-play" ${!app.media.trackName || app.media.playing ? 'disabled' : ''}>${headerControlIcon('play')}<span>Play</span></button><button class="btn secondary" type="button" data-action="media-pause" ${!app.media.playing ? 'disabled' : ''}>${headerControlIcon('pause')}<span>Pause</span></button></div>
-        <p class="privacy-note media-note">Файл відтворюється локально, не завантажується в мережу й діє до закриття вкладки. Звук піде на колонку, якщо вона вже підключена до телефона.</p>
-      </section>
+      <div class="media-choice-grid">${bluetoothChoice}<label class="media-choice music-choice" for="music-file">${mediaChoiceIcon('music')}<span><b>Відкрити музику з пристрою</b><small>MP3, M4A, WAV та інші аудіофайли</small></span></label></div>
+      <input id="music-file" class="visually-hidden" type="file" accept="audio/*" data-input="music-file">
+      ${bluetoothPanel}
+      ${preparedTrack}
+      <p class="privacy-note media-note">Музика відтворюється локально, не завантажується в мережу й діє до закриття вкладки. Звук піде на колонку, якщо вона вже підключена до телефона.</p>
     </div>
     <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Закрити</button></div>
   </div></div>`;
@@ -1826,6 +1847,7 @@ function publicGame(game) {
 function queueActiveGamePublish(game) {
   if (!app.authUser || LOCAL_AUTH_TEST || game?.status !== 'active' || game.publicOnly) return;
   if (game.ownerUid && game.ownerUid !== app.authUser.uid) return;
+  if (app.pendingActiveGameDeletes.includes(game.id)) return;
   pendingActiveGames.set(game.id, clone(game));
   if (activeGamePublishPromise) return;
   activeGamePublishPromise = (async () => {
@@ -2647,7 +2669,9 @@ async function publishFinishedGame(game) {
 function syncLocalActiveGames() {
   if (!app.authUser || LOCAL_AUTH_TEST) return;
   app.localGames
-    .filter(game => game.status === 'active' && (!game.ownerUid || game.ownerUid === app.authUser.uid))
+    .filter(game => game.status === 'active'
+      && !app.pendingActiveGameDeletes.includes(game.id)
+      && (!game.ownerUid || game.ownerUid === app.authUser.uid))
     .forEach(queueActiveGamePublish);
 }
 
@@ -2720,6 +2744,75 @@ async function deleteGameEverywhere(game) {
   app.cloudGames = app.cloudGames.filter(item => item.id !== game.id);
   if (app.game?.id === game.id) app.game = null;
   await refreshData();
+}
+
+function retryableCloudDeleteError(error) {
+  return !navigator.onLine || ['aborted', 'deadline-exceeded', 'internal', 'network-request-failed', 'unavailable'].includes(error?.code);
+}
+
+async function savePendingActiveGameDeletes() {
+  app.pendingActiveGameDeletes = [...new Set(app.pendingActiveGameDeletes.filter(Boolean))];
+  await setSetting('pendingActiveGameDeletes', app.pendingActiveGameDeletes);
+}
+
+async function rememberActiveGameDelete(gameId) {
+  app.pendingActiveGameDeletes.push(gameId);
+  await savePendingActiveGameDeletes();
+}
+
+async function forgetActiveGameDelete(gameId) {
+  app.pendingActiveGameDeletes = app.pendingActiveGameDeletes.filter(id => id !== gameId);
+  await savePendingActiveGameDeletes();
+}
+
+async function flushPendingActiveGameDeletes() {
+  if (!app.authUser || LOCAL_AUTH_TEST || !navigator.onLine || !app.pendingActiveGameDeletes.length) return;
+  const remaining = [];
+  for (const gameId of app.pendingActiveGameDeletes) {
+    try {
+      await deleteActiveCommunityGame(app.authUser, gameId);
+      app.cloudGames = app.cloudGames.filter(game => !(game.id === gameId && game.status === 'active'));
+    } catch {
+      remaining.push(gameId);
+    }
+  }
+  app.pendingActiveGameDeletes = remaining;
+  await savePendingActiveGameDeletes();
+  mergeGameSources();
+  render();
+}
+
+async function cancelActiveGame(game) {
+  if (!game || game.status !== 'active') throw new Error('Ця гра вже завершена або недоступна');
+  if (!canManageGame(game)) throw new Error('Скасувати гру може лише її ведучий');
+  if (app.game?.id === game.id) stopTimer();
+  pendingActiveGames.delete(game.id);
+  await flushActiveGamePublish(game.id);
+
+  if (!LOCAL_AUTH_TEST) {
+    if (!navigator.onLine) await rememberActiveGameDelete(game.id);
+    else {
+      try {
+        await deleteActiveCommunityGame(app.authUser, game.id);
+        await forgetActiveGameDelete(game.id);
+      } catch (error) {
+        if (!retryableCloudDeleteError(error)) throw error;
+        await rememberActiveGameDelete(game.id);
+      }
+    }
+  }
+
+  const restoredPlayers = (game.seats || []).map(seat => seat.profileId).filter(Boolean);
+  if (restoredPlayers.length) {
+    app.nextGameQueue = normalizeLineup([...restoredPlayers, ...app.nextGameQueue]);
+    await saveNextGameQueue();
+  }
+  if (app.localGames.some(item => item.id === game.id)) await deleteOne('games', game.id);
+  app.localGames = app.localGames.filter(item => item.id !== game.id);
+  app.cloudGames = app.cloudGames.filter(item => item.id !== game.id);
+  if (app.game?.id === game.id) app.game = null;
+  app.undo = [];
+  mergeGameSources();
 }
 
 async function rememberFinishedGameDelete(gameId) {
@@ -2919,7 +3012,10 @@ async function handleAction(action, element, sourceEvent) {
       render();
     }
   } else if (action === 'open-media-panel') {
-    app.modal = { type: 'media' }; render();
+    app.modal = { type: 'media', view: '' }; render();
+  } else if (action === 'show-bluetooth-guide') {
+    if (app.modal?.type === 'media') app.modal.view = 'bluetooth';
+    render();
   } else if (action === 'media-play') {
     await playMusic();
   } else if (action === 'media-pause') {
@@ -2929,6 +3025,7 @@ async function handleAction(action, element, sourceEvent) {
     render();
     toast('Аудіофайл прибрано');
   } else if (action === 'bluetooth-request') {
+    if (app.modal?.type === 'media') app.modal.view = 'bluetooth';
     await requestBluetoothDevice();
   } else if (action === 'cloud-refresh') {
     stopCommunityProfiles();
@@ -3015,6 +3112,18 @@ async function handleAction(action, element, sourceEvent) {
     const game = gameById(element.dataset.id);
     if (!canManageGame(game)) return toast('Цю гру може видалити лише її ведучий');
     app.modal = { type: 'confirm', title: 'Видалити гру?', text: `Протокол «${game.title}» і пов’язана статистика будуть видалені безповоротно.`, confirmLabel: 'Видалити', confirm: { kind: 'game', id: game.id } }; render();
+  } else if (action === 'cancel-active-game') {
+    const game = gameById(element.dataset.id) || app.game;
+    if (!game || game.status !== 'active') return toast('Ця гра вже завершена або недоступна');
+    if (!canManageGame(game)) return toast('Скасувати гру може лише її ведучий');
+    app.modal = {
+      type: 'confirm',
+      title: 'Скасувати гру?',
+      text: 'Активну гру буде видалено без переможця. Вона не потрапить до статистики й протоколів. Якщо склад збережений на цьому пристрої, його гравці повернуться до наступної гри.',
+      confirmLabel: 'Скасувати гру',
+      confirm: { kind: 'cancel-active-game', id: game.id }
+    };
+    render();
   } else if (action === 'confirm-action') {
     const confirm = app.modal.confirm;
     if (confirm.kind === 'player') {
@@ -3034,6 +3143,15 @@ async function handleAction(action, element, sourceEvent) {
     if (confirm.kind === 'game') {
       try { await deleteGameEverywhere(gameById(confirm.id)); }
       catch (error) { app.modal = null; render(); return toast(error.message || 'Не вдалося видалити гру'); }
+    }
+    if (confirm.kind === 'cancel-active-game') {
+      try { await cancelActiveGame(gameById(confirm.id) || (app.game?.id === confirm.id ? app.game : null)); }
+      catch (error) { app.modal = null; render(); return toast(error.message || 'Не вдалося скасувати гру'); }
+      app.modal = null;
+      app.route = 'home';
+      if (location.hash !== '#home') navigate('home'); else render();
+      toast('Гру скасовано');
+      return;
     }
     if (confirm.kind === 'finish') { app.modal = { type: 'winner' }; render(); return; }
     app.modal = null; await refreshData(); render(); toast('Видалено');
@@ -3366,6 +3484,7 @@ async function activateAuthenticatedUser(user) {
       connectCloudArchive(),
       connectPlayerLinks()
     ]);
+    await flushPendingActiveGameDeletes();
     await flushPendingFinishedGameDeletes();
   })();
   try { await activationPromise; }
@@ -3404,6 +3523,7 @@ function clearAuthenticatedState() {
   app.playerLinkOffers = [];
   app.playerLinkBusy = false;
   app.accountDeleteBusy = false;
+  app.pendingActiveGameDeletes = [];
   app.games = [];
   app.nextGameQueue = [];
   app.game = null;
@@ -3427,6 +3547,8 @@ async function loadAppData() {
   app.settings.theme = applyTheme(app.settings.theme);
   app.settings.language = applyLanguage(app.settings.language);
   app.nextGameQueue = normalizeLineup(await getSetting('nextGameQueue', []));
+  const pendingActiveDeletes = await getSetting('pendingActiveGameDeletes', []);
+  app.pendingActiveGameDeletes = Array.isArray(pendingActiveDeletes) ? [...new Set(pendingActiveDeletes.filter(Boolean))] : [];
   app.cloudSync = await getSetting('lastCloudSync', '');
   await loadHostProfile();
   await refreshData();
@@ -3518,6 +3640,7 @@ window.addEventListener('online', () => {
   if (app.authUser && ['error', 'offline'].includes(app.cloudArchive.status)) connectCloudArchive();
   if (app.authUser) syncSharedManualPlayers().catch(() => {});
   if (app.authUser) connectPlayerLinks().catch(() => {});
+  if (app.authUser) flushPendingActiveGameDeletes().catch(() => {});
   if (app.authUser) flushPendingFinishedGameDeletes().catch(() => {});
   if (app.authUser) publishProfilePresence();
 });

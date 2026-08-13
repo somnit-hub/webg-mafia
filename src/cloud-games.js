@@ -235,11 +235,17 @@ export async function subscribeCommunityGames(onGames, onError) {
   stopArchive?.();
   let finished = [];
   let active = [];
+  let finishedReady = false;
+  let activeReady = false;
+  let finishedError = null;
+  let activeError = null;
   let finishedMetadata = { fromCache: true, hasPendingWrites: false };
   let activeMetadata = { fromCache: true, hasPendingWrites: false };
   const emit = () => onGames(
     [...active, ...finished].sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt))),
     {
+      ready: finishedReady && activeReady,
+      error: activeError || finishedError,
       fromCache: finishedMetadata.fromCache && activeMetadata.fromCache,
       hasPendingWrites: finishedMetadata.hasPendingWrites || activeMetadata.hasPendingWrites
     }
@@ -249,20 +255,34 @@ export async function subscribeCommunityGames(onGames, onError) {
     { includeMetadataChanges: true },
     snapshot => {
       finished = snapshot.docs.map(finishedGameFromSnapshot);
+      finishedReady = true;
+      finishedError = null;
       finishedMetadata = snapshot.metadata;
       emit();
     },
-    error => onError?.(error)
+    error => {
+      finishedReady = true;
+      finishedError = error;
+      onError?.(error);
+      emit();
+    }
   );
   const stopActive = sdk.onSnapshot(
     sdk.collection(database, 'communities', COMMUNITY_ID, 'liveGames'),
     { includeMetadataChanges: true },
     snapshot => {
       active = snapshot.docs.map(activeGameFromSnapshot);
+      activeReady = true;
+      activeError = null;
       activeMetadata = snapshot.metadata;
       emit();
     },
-    error => onError?.(error)
+    error => {
+      activeReady = true;
+      activeError = error;
+      onError?.(error);
+      emit();
+    }
   );
   stopArchive = () => {
     stopFinished();

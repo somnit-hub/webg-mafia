@@ -186,6 +186,7 @@ let cloudDirectoryPromise = null;
 let cloudArchivePromise = null;
 let cloudArchiveMigrationStarted = false;
 let activeGamePublishPromise = null;
+let activeGamePublishRetryHandle = null;
 let profilePresenceHandle = null;
 const pendingActiveGames = new Map();
 const presetAvatarDataUrls = new Map();
@@ -916,7 +917,7 @@ function homeView() {
       <div class="hero-title-row"><h1>Мафія <span>enjoy</span><svg class="hero-cup" viewBox="0 0 48 48" aria-hidden="true"><path d="M9 17h25v10a10 10 0 0 1-10 10h-5A10 10 0 0 1 9 27V17Z"/><path d="M34 20h3a5 5 0 0 1 0 10h-4"/><path d="M7 41h32M16 13c-3-3 3-5 0-8m9 8c-3-3 3-5 0-8"/></svg></h1></div>
       <div class="actions"><button class="btn primary" data-nav="setup">Створити гру</button><button class="btn secondary" data-nav="players">Додати гравців</button></div>
     </section>
-    ${active.length ? `<section class="card card-pad active-games-panel"><div class="section-title section-heading">${titleHelp('h2', 'Активні ігри', 'Ведучий продовжує власну гру на цьому пристрої. Інші авторизовані користувачі можуть безпечно спостерігати без доступу до ролей і нічних перевірок.')}</div><div class="active-game-list">${active.map(activeGameRow).join('')}</div></section>` : ''}
+    ${activeGamesPanel(active, true)}
     <section class="stat-grid home-stat-grid">
       <article class="card stat-card"><b>${stats.games}</b><span>завершених ігор</span></article>
       <article class="card stat-card"><b>${app.players.length}</b><span>гравців у базі</span></article>
@@ -935,6 +936,20 @@ function gameRow(game) {
   const winner = game.winner === 'red' ? 'Місто' : game.winner === 'black' ? 'Мафія' : game.winner === 'draw' ? 'Нічия' : 'Не визначено';
   const host = preferredGameHostName(game);
   return `<div class="list-row"><div class="list-main"><b>${esc(game.title)}</b><span>${formatDate(game.endedAt || game.updatedAt, true)} · ${formatDuration(game.durationSeconds)}${host ? ` · ведучий ${esc(host)}` : ''}</span></div><span class="badge ${game.winner === 'red' ? 'red' : ''}">${winner}</span></div>`;
+}
+
+function activeGamesPanel(active, refreshAction = false) {
+  const explanation = 'Ведучий продовжує власну гру на цьому пристрої. Інші авторизовані користувачі можуть безпечно спостерігати без доступу до ролей і нічних перевірок.';
+  const refresh = refreshAction ? '<button class="btn small secondary" data-action="cloud-games-refresh">Оновити</button>' : '';
+  let content = `<div class="active-game-list">${active.map(activeGameRow).join('')}</div>`;
+  if (!active.length) {
+    const status = app.cloudArchive.status;
+    const kind = status === 'error' ? 'error' : status === 'loading' || status === 'idle' ? 'loading' : status === 'offline' ? 'offline' : 'empty';
+    const title = status === 'error' ? 'Активні ігри недоступні' : status === 'loading' || status === 'idle' ? 'Шукаємо активні ігри…' : status === 'offline' ? 'Немає з’єднання' : 'Активних ігор зараз немає';
+    const detail = status === 'error' ? app.cloudArchive.error : status === 'offline' ? 'Підключіться до інтернету та оновіть список.' : 'Коли ведучий почне гру, тут з’явиться кнопка «Спостерігати».';
+    content = statePanel(kind, title, detail, '', true);
+  }
+  return `<section class="card card-pad active-games-panel"><div class="section-title section-heading">${titleHelp('h2', 'Активні ігри', explanation)}${refresh}</div>${content}</section>`;
 }
 
 function activeGameRow(game) {
@@ -1125,7 +1140,7 @@ function statsView() {
   return `<main class="page tab-page">
     ${pageHeader('Статистика', 'Активні ігри та спільні результати завершених ігор усіх ведучих.', '<button class="btn small secondary" data-action="cloud-games-refresh">Оновити</button>')}
     ${statusStrip(app.cloudArchive.status, archiveStatusText(), app.cloudArchive.error, `${active.length} активних і ${games.length} завершених ігор доступно всім авторизованим учасникам.`)}
-    ${active.length ? `<section class="card card-pad active-games-panel"><div class="section-title section-heading">${titleHelp('h2', 'Активні ігри', 'Приєднайтеся до безпечного публічного перегляду. Ролі, нічні цілі та приватний протокол не передаються глядачам.')}</div><div class="active-game-list">${active.map(activeGameRow).join('')}</div></section>` : ''}
+    ${activeGamesPanel(active)}
     <section class="stat-grid stats-summary-grid">
       <article class="card stat-card"><b>${aggregate.games}</b><span>ігор</span></article>
       <article class="card stat-card"><b>${aggregate.redWinRate}%</b><span>перемог міста</span></article>
@@ -1990,6 +2005,10 @@ function queueActiveGamePublish(game) {
   if (app.pendingActiveGameDeletes.includes(game.id)) return;
   pendingActiveGames.set(game.id, clone(game));
   if (activeGamePublishPromise) return;
+  if (activeGamePublishRetryHandle) {
+    clearTimeout(activeGamePublishRetryHandle);
+    activeGamePublishRetryHandle = null;
+  }
   activeGamePublishPromise = (async () => {
     while (pendingActiveGames.size) {
       const [gameId, pending] = pendingActiveGames.entries().next().value;
@@ -1997,12 +2016,20 @@ function queueActiveGamePublish(game) {
       try {
         await saveActiveCommunityGame(app.authUser, app.hostProfile, pending);
       } catch (error) {
+        pendingActiveGames.set(gameId, pending);
         app.cloudArchive = { status: 'error', error: cloudArchiveError(error), fromCache: false };
+        activeGamePublishRetryHandle = setTimeout(() => {
+          activeGamePublishRetryHandle = null;
+          const next = pendingActiveGames.values().next().value;
+          if (next && navigator.onLine) queueActiveGamePublish(next);
+        }, 5000);
+        render();
+        break;
       }
     }
   })().finally(() => {
     activeGamePublishPromise = null;
-    if (pendingActiveGames.size) queueActiveGamePublish(pendingActiveGames.values().next().value);
+    if (pendingActiveGames.size && !activeGamePublishRetryHandle) queueActiveGamePublish(pendingActiveGames.values().next().value);
   });
 }
 
@@ -2010,6 +2037,10 @@ async function flushActiveGamePublish(gameId) {
   pendingActiveGames.delete(gameId);
   while (activeGamePublishPromise) await activeGamePublishPromise;
   pendingActiveGames.delete(gameId);
+  if (!pendingActiveGames.size && activeGamePublishRetryHandle) {
+    clearTimeout(activeGamePublishRetryHandle);
+    activeGamePublishRetryHandle = null;
+  }
 }
 
 async function saveGame({ broadcast = true } = {}) {
@@ -2859,8 +2890,8 @@ async function connectCloudArchive() {
       if (routedGame) app.game = routedGame;
     }
     app.cloudArchive = {
-      status: metadata.fromCache && !navigator.onLine ? 'offline' : 'online',
-      error: '',
+      status: metadata.error ? 'error' : !metadata.ready ? 'loading' : metadata.fromCache && !navigator.onLine ? 'offline' : 'online',
+      error: metadata.error ? cloudArchiveError(metadata.error) : '',
       fromCache: metadata.fromCache
     };
     render();
@@ -3277,6 +3308,7 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'cloud-games-refresh') {
     stopCommunityGames();
     await connectCloudArchive();
+    syncLocalActiveGames();
   } else if (action === 'host-use-google-photo') {
     captureHostProfileDraft();
     app.modal.profileDraft = { ...(app.modal.profileDraft || {}), avatar: '' };
@@ -3777,6 +3809,8 @@ function clearAuthenticatedState() {
   cloudArchivePromise = null;
   cloudArchiveMigrationStarted = false;
   pendingActiveGames.clear();
+  if (activeGamePublishRetryHandle) clearTimeout(activeGamePublishRetryHandle);
+  activeGamePublishRetryHandle = null;
   activationPromise = null;
   activationUid = null;
   app.authUser = null;
@@ -3907,6 +3941,7 @@ window.addEventListener('online', () => {
   toast('Інтернет-з’єднання відновлено');
   if (app.authUser && app.cloudDirectory.status === 'error') connectCloudDirectory({ hasLocalProfile: true });
   if (app.authUser && ['error', 'offline'].includes(app.cloudArchive.status)) connectCloudArchive();
+  if (app.authUser) syncLocalActiveGames();
   if (app.authUser) syncSharedManualPlayers().catch(() => {});
   if (app.authUser) connectPlayerLinks().catch(() => {});
   if (app.authUser) flushPendingActiveGameDeletes().catch(() => {});
@@ -3926,6 +3961,7 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
     requestGameWakeLock();
     publishProfilePresence();
+    syncLocalActiveGames();
     if (app.route === 'players') render();
   }
 });

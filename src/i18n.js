@@ -640,17 +640,29 @@ Object.assign(COPY.fr, {
 Object.assign(COPY.it, {
   'Спосіб роздачі ролей': 'Modalità di distribuzione dei ruoli',
   'За обраною цифрою': 'Per numero scelto',
-  'Автоматично': 'Automaticamente'
+  'Автоматично': 'Automaticamente',
+  'Активні ігри недоступні': 'Partite attive non disponibili',
+  'Шукаємо активні ігри…': 'Ricerca delle partite attive…',
+  'Активних ігор зараз немає': 'Nessuna partita attiva al momento',
+  'Коли ведучий почне гру, тут з’явиться кнопка «Спостерігати».': 'Quando il conduttore avvia una partita, qui apparirà il pulsante «Osserva».'
 });
 Object.assign(COPY.en, {
   'Спосіб роздачі ролей': 'Role dealing method',
   'За обраною цифрою': 'By chosen number',
-  'Автоматично': 'Automatically'
+  'Автоматично': 'Automatically',
+  'Активні ігри недоступні': 'Live games are unavailable',
+  'Шукаємо активні ігри…': 'Looking for live games…',
+  'Активних ігор зараз немає': 'There are no live games right now',
+  'Коли ведучий почне гру, тут з’явиться кнопка «Спостерігати».': 'When the host starts a game, the «Watch» button will appear here.'
 });
 Object.assign(COPY.fr, {
   'Спосіб роздачі ролей': 'Mode de distribution des rôles',
   'За обраною цифрою': 'Par numéro choisi',
-  'Автоматично': 'Automatiquement'
+  'Автоматично': 'Automatiquement',
+  'Активні ігри недоступні': 'Parties en cours indisponibles',
+  'Шукаємо активні ігри…': 'Recherche des parties en cours…',
+  'Активних ігор зараз немає': 'Aucune partie en cours actuellement',
+  'Коли ведучий почне гру, тут з’явиться кнопка «Спостерігати».': 'Lorsque l’animateur démarre une partie, le bouton «Regarder» apparaît ici.'
 });
 
 const PATTERNS = {

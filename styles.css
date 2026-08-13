@@ -1115,6 +1115,45 @@ img { display: block; max-width: 100%; }
 }
 
 @media (min-width: 620px) {
+  .home-page, .players-page, .setup-page { padding-bottom: calc(var(--nav-h) + 102px + env(safe-area-inset-bottom)); }
+  .home-page > .hero > .actions { display: none; }
+  .players-page > .page-head > .actions, .players-page > .search-row > .btn { display: none; }
+  .players-page > .search-row { grid-template-columns: minmax(0, 1fr); }
+  .players-page .lineup-actions [data-action="prepare-next-game"] { display: none; }
+  .setup-page .panel-footer-actions { display: none; }
+  .mobile-fab {
+    width: 68px;
+    height: 68px;
+    flex: 0 0 68px;
+    padding: 0;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-family: var(--font-ui);
+    font-size: 38px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .mobile-fab svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .mobile-fab .add-player-fab-icon, .mobile-fab .deal-roles-fab-icon, .mobile-fab .seating-fab-icon { width: 42px; height: 42px; }
+  .mobile-fab .fab-plus { stroke-width: 3.4; }
+  .mobile-fab .role-card-mark { fill: currentColor; stroke: none; }
+  .primary-fab { border: 1px solid #e2ba6b; color: #1d1408; background: #d8aa58; box-shadow: 0 5px 0 #74501f, 0 12px 30px rgb(0 0 0 / 38%); }
+  .secondary-fab { border: 1px solid var(--line); color: var(--gold); background: var(--control-bg); box-shadow: 0 5px 0 var(--surface-3), 0 12px 30px rgb(0 0 0 / 34%); }
+  .danger-fab { border: 1px solid var(--primary-line); color: var(--on-primary); background: var(--primary-bg); box-shadow: 0 5px 0 #681f27, 0 12px 30px rgb(0 0 0 / 38%); }
+  .home-fab-group, .players-fab-group, .setup-fab-group {
+    position: fixed;
+    z-index: 44;
+    left: 50%;
+    bottom: calc(var(--nav-h) + 12px + env(safe-area-inset-bottom));
+    display: flex;
+    gap: 14px;
+    transform: translateX(-50%);
+  }
+  .mobile-fab:hover { filter: brightness(1.08); }
+  .mobile-fab:active { transform: translateY(3px); }
+  .mobile-fab:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
   .page { padding-right: 20px; padding-left: 20px; }
   .grid.two, .setup-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1136,6 +1175,7 @@ img { display: block; max-width: 100%; }
   .nav-item { padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; }
   .nav-item svg { width: 18px; height: 18px; margin: 0; }
   .page { padding-top: 24px; padding-bottom: 36px; }
+  .home-page, .players-page, .setup-page { padding-bottom: 102px; }
   .hero { padding: 38px; }
   .player-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .game-workspace { grid-template-columns: minmax(0, 1fr) 330px; align-items: start; }

@@ -496,6 +496,8 @@ function mergeGameSources() {
   app.games = [...local, ...visibleCloudGames.filter(game => !localIds.has(game.id))];
 }
 function canManageGame(game) {
+  const storedForCurrentAccount = Boolean(game && !game.publicOnly && app.localGames.some(item => item.id === game.id));
+  if (storedForCurrentAccount) return true;
   const ownerUid = game?.cloudOwnerUid || game?.ownerUid || '';
   return Boolean(game) && (!ownerUid || ownerUid === app.authUser?.uid);
 }
@@ -3109,8 +3111,8 @@ async function flushPendingActiveGameDeletes() {
     try {
       await deleteActiveCommunityGame(app.authUser, gameId);
       app.cloudGames = app.cloudGames.filter(game => !(game.id === gameId && game.status === 'active'));
-    } catch {
-      remaining.push(gameId);
+    } catch (error) {
+      if (retryableCloudDeleteError(error)) remaining.push(gameId);
     }
   }
   app.pendingActiveGameDeletes = remaining;
@@ -3119,25 +3121,24 @@ async function flushPendingActiveGameDeletes() {
   render();
 }
 
+async function cleanUpCanceledActiveGame(user, gameId) {
+  try {
+    await flushActiveGamePublish(gameId);
+    if (!navigator.onLine) return;
+    await deleteActiveCommunityGame(user, gameId);
+    await forgetActiveGameDelete(gameId);
+  } catch (error) {
+    if (!retryableCloudDeleteError(error)) await forgetActiveGameDelete(gameId);
+  }
+}
+
 async function cancelActiveGame(game) {
   if (!game || game.status !== 'active') throw new Error('Ця гра вже завершена або недоступна');
   if (!canManageGame(game)) throw new Error('Скасувати гру може лише її ведучий');
   if (app.game?.id === game.id) stopTimer();
   pendingActiveGames.delete(game.id);
-  await flushActiveGamePublish(game.id);
-
-  if (!LOCAL_AUTH_TEST) {
-    if (!navigator.onLine) await rememberActiveGameDelete(game.id);
-    else {
-      try {
-        await deleteActiveCommunityGame(app.authUser, game.id);
-        await forgetActiveGameDelete(game.id);
-      } catch (error) {
-        if (!retryableCloudDeleteError(error)) throw error;
-        await rememberActiveGameDelete(game.id);
-      }
-    }
-  }
+  const cleanupUser = app.authUser;
+  if (!LOCAL_AUTH_TEST) await rememberActiveGameDelete(game.id);
 
   const restoredPlayers = (game.seats || []).map(seat => seat.profileId).filter(Boolean);
   if (restoredPlayers.length) {
@@ -3150,6 +3151,7 @@ async function cancelActiveGame(game) {
   if (app.game?.id === game.id) app.game = null;
   app.undo = [];
   mergeGameSources();
+  if (!LOCAL_AUTH_TEST) void cleanUpCanceledActiveGame(cleanupUser, game.id);
 }
 
 async function rememberFinishedGameDelete(gameId) {

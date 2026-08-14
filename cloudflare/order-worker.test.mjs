@@ -115,6 +115,101 @@ test('missing login and repeated order are rejected', async () => {
   assert.match((await limited.json()).error, /Зачекайте/);
 });
 
+function activeGame() {
+  return {
+    id: 'game_test_live',
+    communityId: 'enjoy',
+    ownerUid: 'host-1',
+    hostName: 'Ведучий',
+    title: 'Гра в Мафію',
+    venue: 'Enjoy',
+    startedAt: '2026-08-14T18:00:00.000Z',
+    gameUpdatedAt: '2026-08-14T18:01:00.000Z',
+    status: 'active',
+    phase: 'day',
+    subphase: 'speeches',
+    day: 1,
+    seats: Array.from({ length: 10 }, (_, index) => ({
+      number: index + 1,
+      name: `Гравець ${index + 1}`,
+      status: 'alive',
+      faults: 0,
+      eliminatedReason: '',
+      noVote: false
+    })),
+    nominations: [],
+    tied: [],
+    speakerIndex: 0,
+    speakerOrder: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    lastWordSeat: 0,
+    nightStep: 0,
+    timer: { remaining: 60, running: false, purpose: 'speech', endsAt: 0 },
+    schemaVersion: 1
+  };
+}
+
+test('active game is published through the authenticated Firestore proxy', async () => {
+  let writtenDocument;
+  let writeAuthorization = '';
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes('identitytoolkit.googleapis.com')) {
+      return Response.json({ users: [{ localId: 'host-1', email: 'host@example.com', emailVerified: true }] });
+    }
+    if (options.method === 'PATCH') {
+      writtenDocument = JSON.parse(options.body);
+      writeAuthorization = options.headers.Authorization;
+      return Response.json({ name: 'live-game' });
+    }
+    return Response.json({}, { status: 404 });
+  };
+  const response = await handleRequest(request('/live-games', {
+    body: { action: 'upsert', game: activeGame() }
+  }), environment());
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, changed: true, gameId: 'game_test_live' });
+  assert.equal(writtenDocument.fields.ownerUid.stringValue, 'host-1');
+  assert.equal(writtenDocument.fields.seats.arrayValue.values.length, 10);
+  assert.match(writtenDocument.fields.createdAt.timestampValue, /^2026-/);
+  assert.equal(writeAuthorization, 'Bearer valid-firebase-token');
+});
+
+test('another host cannot overwrite or delete an active game', async () => {
+  globalThis.fetch = async url => {
+    if (String(url).includes('identitytoolkit.googleapis.com')) {
+      return Response.json({ users: [{ localId: 'host-1', email: 'host@example.com', emailVerified: true }] });
+    }
+    return Response.json({ fields: { ownerUid: { stringValue: 'other-host' } } });
+  };
+  const overwrite = await handleRequest(request('/live-games', {
+    body: { action: 'upsert', game: activeGame() }
+  }), environment());
+  assert.equal(overwrite.status, 403);
+  const deletion = await handleRequest(request('/live-games', {
+    body: { action: 'delete', gameId: 'game_test_live' }
+  }), environment());
+  assert.equal(deletion.status, 403);
+});
+
+test('host can remove an active game through the proxy', async () => {
+  let deleteCalled = false;
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes('identitytoolkit.googleapis.com')) {
+      return Response.json({ users: [{ localId: 'host-1', email: 'host@example.com', emailVerified: true }] });
+    }
+    if (options.method === 'DELETE') {
+      deleteCalled = true;
+      return Response.json({});
+    }
+    return Response.json({ fields: { ownerUid: { stringValue: 'host-1' } } });
+  };
+  const response = await handleRequest(request('/live-games', {
+    body: { action: 'delete', gameId: 'game_test_live' }
+  }), environment());
+  assert.equal(response.status, 200);
+  assert.equal(deleteCalled, true);
+  assert.deepEqual(await response.json(), { ok: true, changed: true, gameId: 'game_test_live' });
+});
+
 function firestoreGame(profileId = 'google_host-1') {
   return {
     fields: {

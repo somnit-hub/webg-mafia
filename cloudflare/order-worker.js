@@ -18,6 +18,10 @@ const ALLOWED_ORIGINS = new Set([
 
 const FEEDBACK_EMOTIONS = new Set(['brain', 'oscar', 'fire', 'circus', 'dead']);
 const EMPTY_EMOTIONS = Object.freeze({ brain: 0, oscar: 0, fire: 0, circus: 0, dead: 0 });
+const ACTIVE_GAME_PHASES = new Set([
+  'reveal', 'zeroNight', 'day', 'vote', 'tieSpeech', 'tieVote',
+  'allTie', 'lastWord', 'bestMove', 'night'
+]);
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -28,6 +32,10 @@ class HttpError extends Error {
 
 function clean(value, maximum = 80) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, maximum);
+}
+
+function integer(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, Math.round(Number(value) || 0)));
 }
 
 function escapeHtml(value) {
@@ -250,6 +258,145 @@ function firestoreValue(field) {
   return null;
 }
 
+function firestoreEncodedValue(value) {
+  if (value === null || value === undefined) return { nullValue: null };
+  if (typeof value === 'boolean') return { booleanValue: value };
+  if (typeof value === 'number') return Number.isInteger(value)
+    ? { integerValue: String(value) }
+    : { doubleValue: value };
+  if (typeof value === 'string') return { stringValue: value };
+  if (Array.isArray(value)) return { arrayValue: { values: value.map(firestoreEncodedValue) } };
+  return { mapValue: { fields: firestoreEncodedFields(value) } };
+}
+
+function firestoreEncodedFields(value) {
+  return Object.fromEntries(Object.entries(value || {}).map(([key, item]) => [key, firestoreEncodedValue(item)]));
+}
+
+function liveGameUrl(gameId, env) {
+  const projectId = clean(env.FIREBASE_PROJECT_ID, 120);
+  if (!projectId) throw new Error('Firebase project is not configured');
+  return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/communities/enjoy/liveGames/${encodeURIComponent(gameId)}`;
+}
+
+function liveGamePayload(source, identity) {
+  const game = source && typeof source === 'object' && !Array.isArray(source) ? source : {};
+  const id = clean(game.id, 160);
+  const phase = clean(game.phase, 40);
+  if (!id || id.includes('/') || game.status !== 'active' || !ACTIVE_GAME_PHASES.has(phase)) {
+    throw new HttpError(400, 'Некоректні дані активної гри');
+  }
+  if (!Array.isArray(game.seats) || game.seats.length !== 10) {
+    throw new HttpError(400, 'Активна гра повинна містити 10 місць');
+  }
+  const seats = game.seats.map((sourceSeat, index) => {
+    const seat = sourceSeat && typeof sourceSeat === 'object' ? sourceSeat : {};
+    const name = clean(seat.name, 60);
+    if (!name || Number(seat.number) !== index + 1) throw new HttpError(400, 'Некоректна розсадка активної гри');
+    return {
+      number: index + 1,
+      name,
+      status: seat.status === 'dead' ? 'dead' : 'alive',
+      faults: integer(seat.faults, 0, 4),
+      eliminatedReason: clean(seat.eliminatedReason, 160),
+      noVote: Boolean(seat.noVote)
+    };
+  });
+  const seatNumbers = value => Array.isArray(value)
+    ? value.slice(0, 10).map(number => integer(number, 1, 10))
+    : [];
+  const timer = game.timer && typeof game.timer === 'object' ? game.timer : {};
+  const startedAt = clean(game.startedAt, 40);
+  const gameUpdatedAt = clean(game.gameUpdatedAt, 40);
+  if (!startedAt || !gameUpdatedAt) throw new HttpError(400, 'Активна гра не має часу початку або оновлення');
+  return {
+    id,
+    communityId: 'enjoy',
+    ownerUid: identity.uid,
+    hostName: clean(game.hostName, 60) || 'Ведучий',
+    title: clean(game.title, 80) || 'Гра в Мафію',
+    venue: clean(game.venue, 100),
+    startedAt,
+    gameUpdatedAt,
+    status: 'active',
+    phase,
+    subphase: clean(game.subphase, 40),
+    day: integer(game.day, 1, 100),
+    seats,
+    nominations: seatNumbers(game.nominations),
+    tied: seatNumbers(game.tied),
+    speakerIndex: integer(game.speakerIndex, 0, 9),
+    speakerOrder: seatNumbers(game.speakerOrder),
+    lastWordSeat: integer(game.lastWordSeat, 0, 10),
+    nightStep: integer(game.nightStep, 0, 4),
+    timer: {
+      remaining: integer(timer.remaining, 0, 3600),
+      running: Boolean(timer.running),
+      purpose: clean(timer.purpose, 24),
+      endsAt: timer.running ? integer(timer.endsAt, 0, 9999999999999) : 0
+    },
+    schemaVersion: 1
+  };
+}
+
+async function firestoreLiveGame(gameId, idToken, env) {
+  const response = await fetch(liveGameUrl(gameId, env), { headers: { Authorization: `Bearer ${idToken}` } });
+  if (response.status === 404) return null;
+  const document = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = clean(document?.error?.message, 240) || 'Не вдалося прочитати активну гру';
+    throw new HttpError(response.status === 401 || response.status === 403 ? response.status : 502, message);
+  }
+  return document;
+}
+
+async function saveLiveGame(body, identity, idToken, env) {
+  const game = liveGamePayload(body.game, identity);
+  const existing = await firestoreLiveGame(game.id, idToken, env);
+  const existingOwnerUid = firestoreValue(existing?.fields?.ownerUid);
+  if (existingOwnerUid && existingOwnerUid !== identity.uid) throw new HttpError(403, 'Ця активна гра належить іншому ведучому');
+  if (existingOwnerUid === identity.uid && firestoreValue(existing?.fields?.gameUpdatedAt) === game.gameUpdatedAt) {
+    return { ok: true, changed: false, gameId: game.id };
+  }
+  const now = new Date().toISOString();
+  const fields = firestoreEncodedFields(game);
+  fields.createdAt = existing?.fields?.createdAt?.timestampValue
+    ? { timestampValue: existing.fields.createdAt.timestampValue }
+    : { timestampValue: now };
+  fields.updatedAt = { timestampValue: now };
+  const response = await fetch(liveGameUrl(game.id, env), {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = clean(result?.error?.message, 240) || 'База відхилила активну гру';
+    throw new HttpError(response.status === 401 || response.status === 403 ? response.status : 502, message);
+  }
+  return { ok: true, changed: true, gameId: game.id };
+}
+
+async function deleteLiveGame(body, identity, idToken, env) {
+  const gameId = clean(body.gameId, 160);
+  if (!gameId || gameId.includes('/')) throw new HttpError(400, 'Некоректний ідентифікатор гри');
+  const existing = await firestoreLiveGame(gameId, idToken, env);
+  if (!existing) return { ok: true, changed: false, gameId };
+  if (firestoreValue(existing.fields?.ownerUid) !== identity.uid) {
+    throw new HttpError(403, 'Скасувати гру може лише її ведучий');
+  }
+  const response = await fetch(liveGameUrl(gameId, env), {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${idToken}` }
+  });
+  if (!response.ok && response.status !== 404) {
+    const result = await response.json().catch(() => ({}));
+    const message = clean(result?.error?.message, 240) || 'Не вдалося видалити активну гру';
+    throw new HttpError(response.status === 401 || response.status === 403 ? response.status : 502, message);
+  }
+  return { ok: true, changed: response.status !== 404, gameId };
+}
+
 async function requireFinishedGame(gameId, idToken, env) {
   const cleanGameId = clean(gameId, 160);
   if (!cleanGameId) throw new HttpError(400, 'Гру не знайдено');
@@ -341,17 +488,25 @@ export async function handleRequest(request, env) {
     if (request.method !== 'GET') return json(origin, 405, { error: 'Потрібен GET-запит' });
     return json(origin, 200, await loadMenu(env), 'public,max-age=60,s-maxage=300,stale-while-revalidate=3600');
   }
-  if (!['/orders', '/ratings', '/ratings/batch', '/ratings/summary/batch'].includes(url.pathname)) return json(origin, 404, { error: 'Маршрут не знайдено' });
+  if (!['/orders', '/ratings', '/ratings/batch', '/ratings/summary/batch', '/live-games'].includes(url.pathname)) return json(origin, 404, { error: 'Маршрут не знайдено' });
   if (url.pathname === '/orders' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
+  if (url.pathname === '/live-games' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
   if (url.pathname === '/ratings' && !['GET', 'POST'].includes(request.method)) return json(origin, 405, { error: 'Метод не підтримується' });
   if (url.pathname === '/ratings/batch' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
   if (url.pathname === '/ratings/summary/batch' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
-  if (Number(request.headers.get('Content-Length') || 0) > 4096) return json(origin, 413, { error: 'Запит завеликий' });
+  const bodyLimit = url.pathname === '/live-games' ? 16384 : 4096;
+  if (Number(request.headers.get('Content-Length') || 0) > bodyLimit) return json(origin, 413, { error: 'Запит завеликий' });
 
   try {
     const match = (request.headers.get('Authorization') || '').match(/^Bearer\s+(.+)$/i);
     if (!match) throw new HttpError(401, 'Потрібен Google-вхід');
     const identity = await firebaseIdentity(match[1], env);
+    if (url.pathname === '/live-games') {
+      const body = await request.json().catch(() => { throw new HttpError(400, 'Некоректний запит'); });
+      if (body.action === 'upsert') return json(origin, 200, await saveLiveGame(body, identity, match[1], env));
+      if (body.action === 'delete') return json(origin, 200, await deleteLiveGame(body, identity, match[1], env));
+      throw new HttpError(400, 'Невідома дія з активною грою');
+    }
     if (url.pathname === '/ratings/summary/batch') {
       const body = await request.json().catch(() => { throw new HttpError(400, 'Некоректний запит'); });
       const requestedIds = Array.isArray(body.gameIds) ? [...new Set(body.gameIds.map(value => clean(value, 160)).filter(Boolean))] : [];
@@ -388,8 +543,11 @@ export async function handleRequest(request, env) {
     return json(origin, 200, { ok: true, item: order.item, label: order.label });
   } catch (error) {
     const status = Number(error?.status) || 500;
-    if (status >= 500) console.error('Order delivery failed', { name: error?.name || 'Error', status });
-    return json(origin, status, { error: status < 500 || error instanceof HttpError ? error.message : 'Не вдалося надіслати замовлення' });
+    if (status >= 500) console.error(url.pathname === '/live-games' ? 'Live game sync failed' : 'Order delivery failed', { name: error?.name || 'Error', status });
+    const fallback = url.pathname === '/live-games'
+      ? 'Не вдалося синхронізувати активну гру'
+      : 'Не вдалося надіслати замовлення';
+    return json(origin, status, { error: status < 500 || error instanceof HttpError ? error.message : fallback });
   }
 }
 

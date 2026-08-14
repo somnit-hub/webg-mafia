@@ -1,13 +1,11 @@
 import { getCommunityFirestore } from './cloud-profiles.js';
 import { ACTIVE_GAME_PHASES } from './game-engine.js';
 import { getFirebaseIdToken } from './auth.js';
-import { FIREBASE_CONFIG } from './firebase-config.js';
 
 const COMMUNITY_ID = 'enjoy';
 const ACTIVE_PHASES = new Set(ACTIVE_GAME_PHASES);
 let stopArchive = null;
-
-const FIRESTORE_DOCUMENTS_URL = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(FIREBASE_CONFIG.projectId)}/databases/(default)/documents`;
+const LIVE_GAMES_ENDPOINT = 'https://enjoy-mafia-orders.webg-mafia.workers.dev/live-games';
 
 function clean(value, maximum) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, maximum);
@@ -36,10 +34,6 @@ export function encodeFirestoreFields(value) {
   return Object.fromEntries(Object.entries(value || {}).map(([key, item]) => [key, firestoreValue(item)]));
 }
 
-function liveGameRestUrl(gameId) {
-  return `${FIRESTORE_DOCUMENTS_URL}/communities/${COMMUNITY_ID}/liveGames/${encodeURIComponent(clean(gameId, 160))}`;
-}
-
 function firestoreRequestError(status, details = '') {
   const error = new Error(details || 'Не вдалося синхронізувати активну гру');
   error.code = status === 401 ? 'unauthenticated'
@@ -51,43 +45,33 @@ function firestoreRequestError(status, details = '') {
   return error;
 }
 
-async function firestoreRestRequest(url, { method = 'GET', body = null, allowMissing = false } = {}) {
+async function liveGameApiRequest(body) {
   const idToken = await getFirebaseIdToken();
-  const response = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-      ...(body ? { 'Content-Type': 'application/json' } : {})
-    },
-    ...(body ? { body: JSON.stringify(body) } : {})
-  });
-  if (allowMissing && response.status === 404) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  let response;
+  try {
+    response = await fetch(LIVE_GAMES_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') throw firestoreRequestError(504, 'Синхронізація активної гри не відповіла вчасно');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) {
     let details = '';
-    try { details = (await response.json())?.error?.message || ''; } catch {}
+    try { details = (await response.json())?.error || ''; } catch {}
     throw firestoreRequestError(response.status, details);
   }
-  return response.status === 204 ? null : response.json();
-}
-
-async function saveActiveCommunityGameRest(user, profile, game) {
-  const fields = createActiveGameDocument(user, profile, game);
-  const url = liveGameRestUrl(fields.id);
-  const existing = await firestoreRestRequest(url, { allowMissing: true });
-  if (existing?.fields?.ownerUid?.stringValue === user.uid
-    && existing?.fields?.gameUpdatedAt?.stringValue === fields.gameUpdatedAt) return false;
-  const updatedAt = new Date().toISOString();
-  const encoded = encodeFirestoreFields(fields);
-  encoded.createdAt = existing?.fields?.createdAt?.timestampValue
-    ? { timestampValue: existing.fields.createdAt.timestampValue }
-    : { timestampValue: updatedAt };
-  encoded.updatedAt = { timestampValue: updatedAt };
-  await firestoreRestRequest(url, { method: 'PATCH', body: { fields: encoded } });
-  return true;
-}
-
-async function deleteActiveCommunityGameRest(gameId) {
-  await firestoreRestRequest(liveGameRestUrl(gameId), { method: 'DELETE', allowMissing: true });
+  return response.json();
 }
 
 function sharedSeat(seat) {
@@ -250,12 +234,16 @@ function activeGameFromSnapshot(snapshot) {
 }
 
 export async function saveActiveCommunityGame(user, profile, game) {
-  return saveActiveCommunityGameRest(user, profile, game);
+  const result = await liveGameApiRequest({
+    action: 'upsert',
+    game: createActiveGameDocument(user, profile, game)
+  });
+  return result.changed !== false;
 }
 
 export async function deleteActiveCommunityGame(user, gameId) {
   if (!user?.uid) throw new Error('Спочатку увійдіть через Google');
-  await deleteActiveCommunityGameRest(gameId);
+  await liveGameApiRequest({ action: 'delete', gameId: clean(gameId, 160) });
 }
 
 export async function saveFinishedCommunityGame(user, profile, game) {

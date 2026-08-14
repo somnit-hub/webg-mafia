@@ -27,7 +27,7 @@ import {
   saveActiveCommunityGame, deleteActiveCommunityGame,
   saveFinishedCommunityGame, deleteFinishedCommunityGame,
   subscribeCommunityGames, stopCommunityGames
-} from './cloud-games.js?v=151';
+} from './cloud-games.js?v=152';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
   canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
@@ -186,8 +186,10 @@ let app = {
     setupTimers: false,
     setupRules: false,
     setupSeating: true,
+    statsActiveGames: false,
     statsRoles: false,
-    statsPlayers: false
+    statsPlayers: false,
+    statsArchiveGames: false
   }
 };
 let activationPromise = null;
@@ -984,7 +986,7 @@ function gameRow(game) {
   return `<div class="list-row"><div class="list-main"><b>${esc(game.title)}</b><span>${formatDate(game.endedAt || game.updatedAt, true)} · ${formatDuration(game.durationSeconds)}${host ? ` · ведучий ${esc(host)}` : ''}</span></div><span class="badge ${game.winner === 'red' ? 'red' : ''}">${winner}</span></div>`;
 }
 
-function activeGamesPanel(active, refreshAction = false) {
+function activeGamesPanel(active, refreshAction = false, collapsibleId = '') {
   const explanation = 'Ведучий продовжує власну гру на цьому пристрої. Інші авторизовані користувачі можуть безпечно спостерігати без доступу до ролей і нічних перевірок.';
   const refresh = refreshAction ? '<button class="btn small secondary" data-action="cloud-games-refresh">Оновити</button>' : '';
   let content = `<div class="active-game-list">${active.map(activeGameRow).join('')}</div>`;
@@ -994,6 +996,9 @@ function activeGamesPanel(active, refreshAction = false) {
     const title = status === 'error' ? 'Активні ігри недоступні' : status === 'loading' || status === 'idle' ? 'Шукаємо активні ігри…' : status === 'offline' ? 'Немає з’єднання' : 'Активних ігор зараз немає';
     const detail = status === 'error' ? app.cloudArchive.error : status === 'offline' ? 'Підключіться до інтернету та оновіть список.' : 'Коли ведучий почне гру, тут з’явиться кнопка «Спостерігати».';
     content = statePanel(kind, title, detail, '', true);
+  }
+  if (collapsibleId) {
+    return collapsiblePanel(collapsibleId, 'Активні ігри', explanation, content, 'active-games-panel', refresh);
   }
   return `<section class="card card-pad active-games-panel"><div class="section-title section-heading">${titleHelp('h2', 'Активні ігри', explanation)}${refresh}</div>${content}</section>`;
 }
@@ -1076,10 +1081,24 @@ function playerCard(player) {
       ? '<span class="badge green">Google · Enjoy</span>'
       : '<span class="guest-label">Гість</span>';
   return `<article class="card player-card ${isCloud ? 'cloud' : 'local'} ${isGoogleProfile ? 'google-profile' : ''}">
-    ${avatar(player)}
+    <button class="player-avatar-button" type="button" data-action="open-player-avatar" data-id="${esc(player.id)}" aria-label="Відкрити велике фото ${esc(preferredPlayerName(player))}" title="Відкрити фото">${avatar(player)}</button>
     <div class="player-card-copy"><div class="player-name-line"><h3>${esc(preferredPlayerName(player))}</h3>${club ? `<span class="player-club">${esc(club)}</span>` : ''}</div>${description ? `<p>${esc(description)}</p>` : ''}<div class="player-stats">${profileKind}${presence}${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span></div></div>
     <div class="player-card-actions"><button class="icon-btn player-stats-button" type="button" data-action="open-player-stats" data-id="${esc(player.id)}" aria-label="Статистика ${esc(preferredPlayerName(player))}" title="Персональна статистика">${playerStatsIcon()}</button>${editButton}<button class="queue-player-btn ${queued ? 'selected' : ''}" data-action="toggle-next-player" data-id="${esc(player.id)}" aria-label="${queued ? `Прибрати ${esc(preferredPlayerName(player))} зі складу наступної гри` : `Додати ${esc(preferredPlayerName(player))} до наступної гри`}" aria-pressed="${queued}"><span aria-hidden="true">${queued ? '✓' : '+'}</span>${queued ? `<small>${queueIndex + 1}</small>` : ''}</button></div>
   </article>`;
+}
+
+function playerAvatarModalHtml() {
+  const player = playerById(app.modal.playerId);
+  if (!player) return '';
+  const name = preferredPlayerName(player);
+  const source = player.avatar || player.avatarPreset || '';
+  const preview = source
+    ? `<img class="player-avatar-full" src="${esc(source)}" alt="Фото ${esc(name)}">`
+    : `<div class="player-avatar-full player-avatar-full-fallback" aria-label="Аватар ${esc(name)}">${esc(initials(name))}</div>`;
+  return `<div class="modal-backdrop player-avatar-backdrop" data-action="close-modal"><div class="card modal player-avatar-modal" role="dialog" aria-modal="true" aria-labelledby="player-avatar-title" tabindex="-1">
+    <div class="section-title section-heading"><div><span class="eyebrow">Фото гравця</span><h2 id="player-avatar-title">${esc(name)}</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div>
+    <div class="player-avatar-viewer">${preview}</div>
+  </div></div>`;
 }
 
 function createDraft() {
@@ -1193,7 +1212,7 @@ function statsView() {
   return `<main class="page tab-page">
     ${pageHeader('Статистика', 'Активні ігри та спільні результати завершених ігор усіх ведучих.', '<button class="btn small secondary" data-action="cloud-games-refresh">Оновити</button>')}
     ${statusStrip(app.cloudArchive.status, archiveStatusText(), app.cloudArchive.error, `${active.length} активних і ${games.length} завершених ігор доступно всім авторизованим учасникам.`)}
-    ${activeGamesPanel(active)}
+    ${activeGamesPanel(active, false, 'statsActiveGames')}
     <section class="stat-grid stats-summary-grid">
       <article class="card stat-card"><b>${aggregate.games}</b><span>ігор</span></article>
       <article class="card stat-card"><b>${aggregate.redWinRate}%</b><span>перемог міста</span></article>
@@ -1204,7 +1223,7 @@ function statsView() {
       ${collapsiblePanel('statsRoles', 'Результативність ролей', 'Показано частку перемог команди гравця для кожної ролі.', `<div class="bar-chart">${roles.map(role => `<div class="bar-row"><span>${esc(role.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${role.rate}%"></div></div><span class="bar-value">${role.rate}%</span></div>`).join('')}</div>`)}
       ${collapsiblePanel('statsPlayers', 'Гравці', 'Рейтинг упорядковано за кількістю перемог.', leaderboard.length ? `<div class="list">${leaderboard.map((row, index) => `<div class="list-row"><div style="display:flex;align-items:center;gap:9px"><b class="muted">${index + 1}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог</span></div></div><b>${row.wins}</b></div>`).join('')}</div>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.'))}
     </div>
-    <section class="card card-pad"><div class="section-title section-heading">${titleHelp('h2', 'Спільний архів ігор', 'Протоколи та анонімні оцінки синхронізуються між пристроями. Розподіл відповідей відкривається після трьох оцінок.')}</div>${games.length ? `<div class="list archive-games-list">${games.map(game => `<article class="archive-game-entry">${gameRow(game)}${archiveGameFeedbackHtml(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div></article>`).join('')}</div>` : statePanel('empty', 'Архів ігор порожній', 'Завершені ігри з’являться тут автоматично.')}</section>
+    ${collapsiblePanel('statsArchiveGames', 'Спільний архів ігор', 'Протоколи та анонімні оцінки синхронізуються між пристроями. Розподіл відповідей відкривається після трьох оцінок.', games.length ? `<div class="list archive-games-list">${games.map(game => `<article class="archive-game-entry">${gameRow(game)}${archiveGameFeedbackHtml(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div></article>`).join('')}</div>` : statePanel('empty', 'Архів ігор порожній', 'Завершені ігри з’являться тут автоматично.'))}
   </main>`;
 }
 
@@ -1271,7 +1290,6 @@ function settingsView() {
       <div class="section-title section-heading">${titleHelp('h2', 'Резервна копія Google Drive', `Остання синхронізація: ${lastSync}. Окремий дозвіл drive.appdata надається лише після команди підключення; застосунок не бачить звичайні файли користувача.`)}<span class="badge ${drive.connected ? 'green' : ''}">${drive.connected ? 'Підключено' : 'Не підключено'}</span></div>
       <div class="actions drive-actions">${drive.connected ? '<button class="btn primary" data-action="cloud-push">Зберегти у Drive</button><button class="btn secondary" data-action="cloud-pull">Відновити з Drive</button><button class="btn secondary" data-action="drive-disconnect">Відключити Drive</button>' : '<button class="btn primary" data-action="drive-connect">Увімкнути резервну копію</button>'}</div>
     </section>
-    <section class="card card-pad"><div class="section-title section-heading">${titleHelp('h2', 'Режим оглядача', 'Публічний екран не показує ролі, нічні цілі та приватний протокол. Авторизовані користувачі бачать перебіг гри на своїх пристроях, а друга вкладка ведучого оновлюється так само.')}</div><div class="actions observer-actions"><button class="btn secondary" data-action="open-observer" ${app.game?.status === 'active' ? '' : 'disabled'}>Відкрити публічний екран</button></div></section>
     <section class="card card-pad"><div class="section-title section-heading">${titleHelp('h2', 'Про застосунок', 'Версія 3.1 · Enjoy Editorial. Створено для мафія-спільноти кав’ярні Enjoy. PWA працює на GitHub Pages і кешує оболонку, Google-сесію, профілі та спільний архів для офлайн-запуску після першого входу.')}</div><div class="divider"></div><div class="section-title section-heading rules-title">${titleHelp('h3', 'Правила спортивної «Мафії»', 'Тут доступні регламент, жести ведучого та турнірні процедури. Основне посилання веде на актуальні правила iMafia українською; перед турніром звіряйте редакцію з регламентом організатора.')}</div><div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div></section>
   </main>`;
 }
@@ -1926,7 +1944,7 @@ function orderModalHtml() {
       ? statePanel('error', 'Замовлення не надіслано', order.error, '', true)
       : '';
   return `<div class="modal-backdrop order-backdrop" ${order.busy ? '' : 'data-action="close-modal"'}><div class="card modal order-modal" role="dialog" aria-modal="true" aria-labelledby="order-panel-title" aria-busy="${order.busy}">
-    <div class="section-title section-heading"><div><span class="eyebrow">Кав’ярня Enjoy</span><h2 id="order-panel-title">Замовлення напою</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити" ${order.busy ? 'disabled' : ''}>×</button></div>
+    <div class="section-title section-heading"><div><span class="eyebrow">Кав’ярня Enjoy</span><h2 id="order-panel-title">Замовлення</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити" ${order.busy ? 'disabled' : ''}>×</button></div>
     <p class="order-intro">${selectedCategory ? 'Оберіть позицію — повідомлення відразу піде в Telegram.' : 'Оберіть категорію — потім потрібну позицію.'}</p>
     ${status}
     ${selectedCategory ? `<div class="order-category-heading"><button class="icon-btn order-category-back" type="button" data-action="back-order-categories" aria-label="До категорій" ${order.busy ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button><div>${orderDrinkIcon(selectedCategory.icon)}<h3>${esc(orderCategoryLabel(selectedCategory))}</h3></div></div>
@@ -1963,6 +1981,7 @@ function iosInstallModalHtml() {
 function modalHtml() {
   if (!app.modal) return '';
   if (app.modal.type === 'player') return playerModalHtml();
+  if (app.modal.type === 'player-avatar') return playerAvatarModalHtml();
   if (app.modal.type === 'host-profile') return hostProfileModalHtml();
   if (app.modal.type === 'player-stats') return playerStatsModalHtml();
   if (app.modal.type === 'legacy-migration') return migrationModalHtml();
@@ -3439,6 +3458,11 @@ async function handleAction(action, element, sourceEvent) {
     location.reload();
   } else if (action === 'edit-host-profile') {
     app.modal = { type: 'host-profile' }; render();
+  } else if (action === 'open-player-avatar') {
+    const playerId = element.dataset.id;
+    if (!playerById(playerId)) return toast('Профіль не знайдено');
+    app.modal = { type: 'player-avatar', playerId };
+    render();
   } else if (action === 'open-player-stats') {
     if (app.modal?.type === 'host-profile') captureHostProfileDraft();
     if (app.modal?.type === 'player') captureManualPlayerDraft();
@@ -4240,7 +4264,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=151', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=152', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

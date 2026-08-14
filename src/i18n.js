@@ -9,6 +9,8 @@ const COPY = {
   it: {
     'Огляд': 'Panoramica',
     'Гравці': 'Giocatori',
+    'Фото гравця': 'Foto del giocatore',
+    'Відкрити фото': 'Apri foto',
     'Нова гра': 'Nuova partita',
     'Статистика': 'Statistiche',
     'Ще': 'Di più',
@@ -93,6 +95,8 @@ const COPY = {
   en: {
     'Огляд': 'Overview',
     'Гравці': 'Players',
+    'Фото гравця': 'Player photo',
+    'Відкрити фото': 'Open photo',
     'Нова гра': 'New game',
     'Статистика': 'Statistics',
     'Ще': 'More',
@@ -177,6 +181,8 @@ const COPY = {
   fr: {
     'Огляд': 'Aperçu',
     'Гравці': 'Joueurs',
+    'Фото гравця': 'Photo du joueur',
+    'Відкрити фото': 'Ouvrir la photo',
     'Нова гра': 'Nouvelle partie',
     'Статистика': 'Statistiques',
     'Ще': 'Plus',
@@ -468,7 +474,7 @@ Object.assign(COPY.fr, {
 });
 
 Object.assign(COPY.it, {
-  'Замовити напій': 'Ordina un drink', 'Замовлення напою': 'Ordine delle bevande',
+  'Замовити напій': 'Ordina un drink', 'Замовлення': 'Ordine',
   'Кав’ярня Enjoy': 'Caffetteria Enjoy',
   'Оберіть категорію — потім потрібну позицію.': 'Scegli una categoria e poi l’articolo desiderato.',
   'Оберіть позицію — повідомлення відразу піде в Telegram.': 'Scegli un articolo: il messaggio verrà inviato subito a Telegram.',
@@ -482,7 +488,7 @@ Object.assign(COPY.it, {
   'Не вдалося надіслати замовлення': 'Impossibile inviare l\'ordine'
 });
 Object.assign(COPY.en, {
-  'Замовити напій': 'Order a drink', 'Замовлення напою': 'Drink order',
+  'Замовити напій': 'Order a drink', 'Замовлення': 'Order',
   'Кав’ярня Enjoy': 'Enjoy coffee shop',
   'Оберіть категорію — потім потрібну позицію.': 'Choose a category, then the item you want.',
   'Оберіть позицію — повідомлення відразу піде в Telegram.': 'Choose an item — the message will be sent to Telegram immediately.',
@@ -496,7 +502,7 @@ Object.assign(COPY.en, {
   'Не вдалося надіслати замовлення': 'Could not send the order'
 });
 Object.assign(COPY.fr, {
-  'Замовити напій': 'Commander une boisson', 'Замовлення напою': 'Commande de boisson',
+  'Замовити напій': 'Commander une boisson', 'Замовлення': 'Commande',
   'Кав’ярня Enjoy': 'Café Enjoy',
   'Оберіть категорію — потім потрібну позицію.': 'Choisissez une catégorie, puis l’article souhaité.',
   'Оберіть позицію — повідомлення відразу піде в Telegram.': 'Choisissez un article — le message sera immédiatement envoyé sur Telegram.',

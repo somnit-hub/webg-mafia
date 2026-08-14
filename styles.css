@@ -530,6 +530,10 @@ img { display: block; max-width: 100%; }
 .avatar-fallback { display: grid; place-items: center; color: var(--gold); background: var(--brand-bg); font-weight: 900; }
 .player-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .player-card { padding: 13px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; }
+.player-avatar-button { margin: 0; padding: 0; border: 0; border-radius: 9px; display: block; color: inherit; background: transparent; }
+.player-avatar-button .avatar { pointer-events: none; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+.player-avatar-button:hover .avatar { border-color: var(--gold); box-shadow: 0 0 0 2px rgb(224 177 84 / 18%); transform: scale(1.04); }
+.player-avatar-button:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
 .player-card-copy { min-width: 0; }
 .player-name-line { min-width: 0; display: flex; align-items: baseline; gap: 7px; }
 .player-card h3 { margin: 0; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
@@ -979,6 +983,10 @@ img { display: block; max-width: 100%; }
 .modal > p { margin: 0 0 16px; color: var(--muted); line-height: 1.45; }
 .protocol-log { max-height: 55vh; overflow: auto; overscroll-behavior: contain; }
 .modal-actions { margin-top: 18px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.player-avatar-modal { width: min(760px, 100%); overflow: hidden; }
+.player-avatar-viewer { width: 100%; height: min(70dvh, 680px); min-height: 260px; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--control-bg); }
+.player-avatar-full { display: block; width: 100%; height: 100%; object-fit: contain; }
+.player-avatar-full-fallback { display: grid; place-items: center; color: var(--gold); background: var(--brand-bg); font-family: var(--font-display); font-size: clamp(72px, 24vw, 180px); font-weight: 900; }
 .game-modal { position: relative; border-top-color: var(--gold); }
 .game-modal.danger-modal, .game-modal.decision-modal { border-top-color: var(--red); }
 .game-end-actions { display: grid; gap: 8px; }

@@ -27,7 +27,7 @@ import {
   saveActiveCommunityGame, deleteActiveCommunityGame,
   saveFinishedCommunityGame, deleteFinishedCommunityGame,
   subscribeCommunityGames, stopCommunityGames
-} from './cloud-games.js';
+} from './cloud-games.js?v=148';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
   canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
@@ -4094,7 +4094,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=148', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

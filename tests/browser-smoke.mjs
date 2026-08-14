@@ -1224,7 +1224,7 @@ const offlineShell = await evaluate(`navigator.serviceWorker.ready.then(async ()
   return {
     authModule: keys.some(url => url.endsWith('/src/auth.js')),
     cloudProfilesModule: keys.some(url => url.endsWith('/src/cloud-profiles.js')),
-    cloudGamesModule: keys.some(url => url.endsWith('/src/cloud-games.js')),
+    cloudGamesModule: keys.some(url => new URL(url).pathname.endsWith('/src/cloud-games.js')),
     gameFeedbackModule: keys.some(url => url.endsWith('/src/game-feedback.js')),
     gameEngineModule: keys.some(url => url.endsWith('/src/game-engine.js')),
     orderServiceModule: keys.some(url => url.endsWith('/src/order-service.js')),

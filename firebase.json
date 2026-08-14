@@ -47,11 +47,20 @@
     ],
     "headers": [
       {
-        "source": "**/*.@(js|css|webp|jpg|png|ico)",
+        "source": "**/*.@(webp|jpg|png|ico)",
         "headers": [
           {
             "key": "Cache-Control",
             "value": "public,max-age=3600"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache,no-store,must-revalidate"
           }
         ]
       },

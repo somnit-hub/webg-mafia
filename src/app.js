@@ -41,6 +41,7 @@ import { pickFunnyGuestNames } from './guest-names.js';
 import { LANGUAGES, applyLanguage, languageLocale, localizeDom, normalizeLanguage } from './i18n.js';
 import { DEFAULT_ORDER_MENU, loadOrderMenu, sendTelegramOrder } from './order-service.js';
 import { pwaInstallMode } from './pwa.js';
+import { sortDirectoryPlayers } from './player-directory.js';
 import {
   GAME_EMOTIONS, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
@@ -1018,14 +1019,17 @@ function activeGameRow(game) {
 
 function playersView() {
   const query = app.search.trim().toLocaleLowerCase('uk');
-  const players = app.players.filter(player => !query || `${player.name} ${player.nickname || ''} ${player.email || ''} ${player.contact || ''} ${player.notes || ''}`.toLocaleLowerCase('uk').includes(query));
+  const filteredPlayers = app.players.filter(player => !query || `${player.name} ${player.nickname || ''} ${player.email || ''} ${player.contact || ''} ${player.notes || ''}`.toLocaleLowerCase('uk').includes(query));
+  const gameCounts = new Map(filteredPlayers.map(player => [player.id, statsForPlayer(player.id).games]));
+  const onlinePlayerIds = new Set(filteredPlayers.filter(playerIsOnline).map(player => player.id));
+  const players = sortDirectoryPlayers(filteredPlayers, { onlinePlayerIds, gameCounts });
   const cloudLabel = app.cloudDirectory.status === 'online'
     ? `${app.cloudPlayers.length} у каталозі`
     : app.cloudDirectory.status === 'offline'
       ? `${app.cloudPlayers.length} з офлайн-кешу`
       : app.cloudDirectory.status === 'loading' ? 'Синхронізація…' : 'Каталог недоступний';
   return `<main class="page tab-page players-page">
-    ${pageHeader('Гравці', 'Google-профілі доступні всій спільноті, але змінюються лише власниками. Статус «Онлайн» означає активність у застосунку протягом останніх двох хвилин. Ручні профілі може редагувати й видаляти будь-який авторизований користувач. Профілі учасників активної гри заблоковані до її завершення.', '<div class="actions"><button class="btn primary" data-action="new-player">+ Додати гравця</button></div>')}
+    ${pageHeader('Гравці', 'Спочатку показано авторизованих гравців онлайн за кількістю ігор, потім авторизованих офлайн, після них — гостей. Google-профілі доступні всій спільноті, але змінюються лише власниками. Статус «Онлайн» означає активність у застосунку протягом останніх двох хвилин. Ручні профілі може редагувати й видаляти будь-який авторизований користувач. Профілі учасників активної гри заблоковані до її завершення.', '<div class="actions"><button class="btn primary" data-action="new-player">+ Додати гравця</button></div>')}
     ${statusStrip(app.cloudDirectory.status, cloudLabel, app.cloudDirectory.error, 'Ручні профілі синхронізуються для всіх користувачів. Автоматично згенеровані тимчасові прізвиська до каталогу не додаються.', '<button class="btn small secondary" data-action="cloud-refresh">Оновити</button>')}
     ${nextGameQueueView()}
     <div class="search-row"><input class="input" type="search" data-input="player-search" value="${esc(app.search)}" placeholder="Пошук за ім’ям, ніком, клубом або описом"><button class="btn secondary icon" data-action="new-player" aria-label="Додати гравця">+</button></div>
@@ -1053,6 +1057,13 @@ function statsForPlayer(playerId) {
   return personalPlayerStats(finishedGames(), playerId);
 }
 
+function playerIsOnline(player) {
+  if (!player?.cloudUid) return false;
+  return player.cloudUid === app.authUser?.uid
+    ? navigator.onLine && !document.hidden
+    : profileWasRecentlyActive(player.lastSeenAt);
+}
+
 function playerCard(player) {
   const stats = statsForPlayer(player.id);
   const isGoogleProfile = Boolean(player.cloudUid);
@@ -1062,9 +1073,7 @@ function playerCard(player) {
   const queueIndex = normalizeLineup(app.nextGameQueue).indexOf(player.id);
   const queued = queueIndex >= 0;
   const profileLocked = profileIsInActiveGame(player.id);
-  const online = isGoogleProfile && (ownCloudProfile
-    ? navigator.onLine && !document.hidden
-    : profileWasRecentlyActive(player.lastSeenAt));
+  const online = playerIsOnline(player);
   const presence = isGoogleProfile
     ? `<span class="badge presence-badge ${online ? 'online' : 'offline'}" data-presence="${online ? 'online' : 'offline'}" title="${online ? 'Активність протягом останніх двох хвилин' : 'Активності не було понад дві хвилини'}"><i aria-hidden="true"></i>${online ? 'Онлайн' : 'Офлайн'}</span>`
     : '';

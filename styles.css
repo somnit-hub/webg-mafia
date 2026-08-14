@@ -818,7 +818,8 @@ img { display: block; max-width: 100%; }
 
 .reveal-page { min-height: calc(100dvh - var(--top-h) - var(--game-nav-h) - 16px); }
 .reveal-workspace { width: min(720px, 100%); margin-inline: auto; display: grid; gap: 8px; }
-.reveal-host-panel { min-width: 0; }
+.reveal-workspace > .reveal-card { order: 1; }
+.reveal-host-panel { min-width: 0; order: 2; }
 .reveal-host-panel .moderator-panel { box-shadow: none; }
 .reveal-card { width: 100%; min-height: min(620px, calc(100dvh - var(--top-h) - var(--game-nav-h) - 102px)); padding: 18px; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 14px; text-align: left; overflow: hidden; }
 .reveal-progress { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 11px; border-bottom: 1px solid var(--line); }

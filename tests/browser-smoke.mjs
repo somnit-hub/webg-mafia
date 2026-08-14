@@ -1011,6 +1011,8 @@ const roleReadyLayout = await evaluate(`(() => {
     moderatorVisible: Boolean(moderatorPanel && getComputedStyle(moderatorPanel).display !== 'none' && moderatorPanel.getBoundingClientRect().height > 0),
     moderatorCollapsed: moderatorPanel?.querySelector('[data-action="toggle-panel"]')?.getAttribute('aria-expanded') === 'false' && moderatorPanel?.querySelector('.collapsible-content')?.hidden,
     moderatorAfterRole: moderatorPanel?.getBoundingClientRect().top >= rect.bottom,
+    moderatorOrder: moderatorPanel ? getComputedStyle(moderatorPanel.closest('.reveal-host-panel')).order : '',
+    roleCardOrder: getComputedStyle(card).order,
     progressFirst: progress.top < player.top,
     progressLabelSize: parseFloat(getComputedStyle(card.querySelector('.reveal-progress .eyebrow')).fontSize),
     progressCountSize: parseFloat(getComputedStyle(card.querySelector('.reveal-progress b')).fontSize),
@@ -1635,7 +1637,7 @@ function verify(condition, label) {
 }
 
 verify(firstDay.hash === '#game' && firstDay.seats === 10 && firstDay.phase === 'День 1' && firstDay.timer === '01:00' && firstDay.bottomNav && firstDay.navItems === 5 && firstDay.activeLabel === 'Активна гра' && firstDay.navHeight <= 52 && firstDay.iconOnly && firstDay.scrollWidth <= firstDay.viewport, 'first day timer, layout and compact game navigation');
-verify(roleReadyLayout.moderatorVisible && roleReadyLayout.moderatorCollapsed && roleReadyLayout.moderatorAfterRole, 'host panel is visible below the role-dealing card and safely collapsed as soon as role dealing starts');
+verify(roleReadyLayout.moderatorVisible && roleReadyLayout.moderatorCollapsed && roleReadyLayout.moderatorAfterRole && roleReadyLayout.roleCardOrder === '1' && roleReadyLayout.moderatorOrder === '2', 'host panel is explicitly ordered below the role-dealing card and safely collapsed as soon as role dealing starts');
 verify(firstDay.moderatorPanelVisible && firstDay.moderatorPanelCollapsed && firstDay.moderatorUnusedActionsAbsent && firstDay.finishGameInsideCollapsedPanel && firstDay.mobileProtocolHidden && moderatorPanelExpanded.expanded && moderatorPanelExpanded.contentVisible && moderatorPanelExpanded.finishGameVisible && JSON.stringify(moderatorPanelExpanded.controls) === JSON.stringify(['Ролі', '↶ Скасувати', '⚙ Таймери', 'Передати ведення']), 'mobile host panel is collapsed by default and contains host transfer and the protected finish-game action');
 verify(runningTimerStability.rootReplacements === 0 && /^\d{2}:\d{2}$/.test(runningTimerStability.timer || ''), 'running timer updates without replacing the mobile game screen');
 verify(runningTimerAdjustment.afterMinusFive === Math.max(0, runningTimerAdjustment.beforeMinusFive - 5) && runningTimerAdjustment.afterMinusTick <= runningTimerAdjustment.afterMinusFive && runningTimerAdjustment.afterMinusTick >= runningTimerAdjustment.afterMinusFive - 2 && runningTimerAdjustment.afterPlusFive === runningTimerAdjustment.afterMinusTick + 5, 'running timer +/- 5 seconds');

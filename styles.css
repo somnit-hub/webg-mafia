@@ -840,7 +840,7 @@ img { display: block; max-width: 100%; }
 .reveal-privacy-icon svg { width: 38px; height: 38px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .reveal-privacy h2 { margin: 0 0 13px; font-size: clamp(26px, 5vw, 36px); line-height: 1.12; }
 .reveal-card p { max-width: 560px; margin: 0; color: var(--muted); font-size: 17px; line-height: 1.5; }
-.reveal-spoken-cue { color: var(--text) !important; font-weight: 750; }
+.reveal-card p.reveal-spoken-cue { color: var(--text) !important; font-size: clamp(21px, 4.2vw, 26px); font-weight: 800; line-height: 1.35; }
 .reveal-actions { padding-top: 13px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
 .number-role-deal { width: 100%; display: grid; gap: 12px; text-align: center; }
 .number-role-instruction h2 { margin: 0 0 5px; font-size: 20px; }
@@ -950,9 +950,9 @@ img { display: block; max-width: 100%; }
 .phase-stepper li.done span { border-color: var(--gold); color: var(--surface); background: var(--gold); }
 .phase-stepper li.current { color: var(--text); }
 .phase-stepper li.current span { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 12%, transparent); }
-.moderator-cue { width: min(620px, 100%); margin: 0 0 10px; padding: 9px 11px; border-left: 3px solid var(--gold); display: grid; gap: 2px; color: var(--text); background: color-mix(in srgb, var(--gold) 8%, var(--surface-2)); text-align: left; }
-.moderator-cue span { color: var(--gold); font-size: 11px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
-.moderator-cue b { font-size: 18px; line-height: 1.35; }
+.moderator-cue { width: min(620px, 100%); margin: 0 0 12px; padding: 12px 14px; border-left: 4px solid var(--gold); display: grid; gap: 4px; color: var(--text); background: color-mix(in srgb, var(--gold) 8%, var(--surface-2)); text-align: left; }
+.moderator-cue span { color: var(--gold); font-size: 13px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
+.moderator-cue b { font-size: clamp(23px, 4.8vw, 30px); font-weight: 900; line-height: 1.25; }
 .compact-timer { width: min(620px, 100%); display: grid; gap: 6px; margin: 0 0 8px; }
 .compact-timer .timer { font-size: clamp(42px, 12vw, 64px); }
 .compact-timer-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
@@ -1917,8 +1917,8 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .night-result-panel { min-height: 345px; }
   .phase-stepper { margin-bottom: 8px; }
   .phase-stepper b { font-size: 10px; }
-  .moderator-cue { margin-bottom: 7px; padding: 7px 9px; }
-  .moderator-cue b { font-size: 16px; }
+  .moderator-cue { margin-bottom: 8px; padding: 10px 11px; }
+  .moderator-cue b { font-size: clamp(22px, 6.4vw, 26px); }
   .compact-timer { gap: 5px; }
   .compact-timer-actions { gap: 3px; }
   .compact-timer-actions .btn { padding: 4px 2px; font-size: 11px; }

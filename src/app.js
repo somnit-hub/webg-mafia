@@ -1379,13 +1379,13 @@ function revealView() {
     actions = '<button class="btn primary wide game-lead-action" data-action="reveal-role">Показати мою роль</button>';
   }
   return `<main class="page reveal-page"><div class="reveal-workspace">
-    <aside class="reveal-host-panel">${moderatorSideHtml({ includeProtocol: false })}</aside>
     <section class="card reveal-card ${numberDeal ? 'number-deal' : ''} ${game.revealOpen ? 'role-open' : 'role-ready'}">
     <div class="reveal-progress"><span class="eyebrow">Роздача ролей</span><div><b>${game.revealIndex + 1}</b><span> / ${game.seats.length}</span>${helpIcon('Браузер не може гарантовано заблокувати скриншоти. Показуйте роль так, щоб екран бачив лише відповідний гравець.', 'Безпека показу ролі')}</div></div>
     <div class="reveal-player"><div class="reveal-seat"><span>Місце</span><strong>${seat.number}</strong></div>${avatar(seat, 'reveal-avatar')}<div class="reveal-player-copy"><div class="eyebrow">${numberDeal ? 'Суддя працює з колодою' : 'Передайте телефон особисто'}</div><h1>${esc(seat.name)}</h1></div></div>
     <div class="reveal-content">${content}</div>
     <div class="reveal-actions">${actions}</div>
     </section>
+    <aside class="reveal-host-panel">${moderatorSideHtml({ includeProtocol: false })}</aside>
   </div></main>`;
 }
 

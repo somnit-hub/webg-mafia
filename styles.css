@@ -819,10 +819,14 @@ img { display: block; max-width: 100%; }
 .number-deal-main-actions .btn { min-width: 0; }
 .number-deal-last .role-card-back { width: 74px; height: 92px; border-radius: 9px; }
 .number-deal-last .role-card-back b { font-family: var(--font-numeric); font-size: 34px; font-weight: 950; }
-.role-reveal { width: 100%; padding: 17px; border: 1px solid #5f343a; border-top: 3px solid var(--green); border-radius: 8px; color: #f6f1e9; background: linear-gradient(145deg, #28171b, #101014); text-align: center; }
-.role-reveal.black { border-color: #404049; background: linear-gradient(145deg, #0a0a0c, #1c1c21); }
-.role-reveal p { color: #c5c1c8; }
-.role-name { margin: 7px 0 5px; font-size: 30px; font-weight: 950; }
+.role-reveal { width: 100%; min-height: 100%; padding: 18px; border: 2px solid transparent; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; text-align: center; box-shadow: inset 0 1px 0 rgb(255 255 255 / 16%), 0 12px 34px rgb(0 0 0 / 34%); }
+.role-reveal.red-team { border-color: #ff7a82; background-color: #8f1422; background-image: radial-gradient(circle at 50% 12%, rgb(255 111 120 / 28%), transparent 42%), linear-gradient(145deg, #c82b3c 0%, #941526 54%, #500911 100%); }
+.role-reveal.black { border-color: #8d8d99; background-color: #070709; background-image: radial-gradient(circle at 50% 12%, rgb(255 255 255 / 12%), transparent 42%), linear-gradient(145deg, #27272d 0%, #101014 52%, #030304 100%); }
+.role-reveal p { margin-top: 9px; color: #fff; font-size: 15px; font-weight: 650; text-shadow: 0 1px 2px rgb(0 0 0 / 72%); }
+.role-name { margin: 9px 0 7px; color: #fff; font-size: clamp(31px, 8vw, 40px); font-weight: 950; line-height: 1.04; text-shadow: 0 2px 4px rgb(0 0 0 / 62%); }
+.role-team-badge { min-height: 38px; padding: 7px 13px; border: 2px solid currentColor; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: #fff; background: rgb(0 0 0 / 28%); font-size: 15px; font-weight: 950; letter-spacing: .045em; line-height: 1.05; text-transform: uppercase; box-shadow: 0 3px 10px rgb(0 0 0 / 24%); }
+.role-team-badge.red { border-color: #fff; background: #a71122; }
+.role-team-badge.black { border-color: #f0c76c; color: #ffe7ae; background: #08080a; }
 .role-signal { position: relative; display: inline-grid; place-items: center; flex: 0 0 auto; }
 .role-signal img { width: 100%; height: 100%; display: block; border: 1px solid rgb(216 184 112 / 24%); border-radius: 22%; object-fit: cover; box-shadow: 0 10px 28px rgb(0 0 0 / 28%); }
 .reveal-signal { width: min(164px, 41vw); aspect-ratio: 1; margin: 0 auto 5px; }

@@ -1255,7 +1255,7 @@ function revealView() {
   let content;
   let actions;
   if (game.revealOpen && role) {
-    content = `<div class="role-reveal ${role.team === 'black' ? 'black' : 'red-team'}">${roleSignal(role.key, 'reveal-signal', `Ваша роль: ${role.label}`)}<div class="role-name">${role.label}</div><div class="badge ${role.team === 'red' ? 'green' : ''}">${role.team === 'red' ? 'Червона команда' : 'Чорна команда'}</div><p>${role.description}</p></div>`;
+    content = `<div class="role-reveal ${role.team === 'black' ? 'black' : 'red-team'}">${roleSignal(role.key, 'reveal-signal', `Ваша роль: ${role.label}`)}<div class="role-name">${role.label}</div><div class="role-team-badge ${role.team === 'red' ? 'red' : 'black'}">${role.team === 'red' ? 'Червона команда' : 'Чорна команда'}</div><p>${role.description}</p></div>`;
     actions = '<button class="btn primary wide game-lead-action" data-action="reveal-next">Сховати й перейти до наступного</button>';
   } else if (numberDeal && !role) {
     const isLastCard = remaining === 1;

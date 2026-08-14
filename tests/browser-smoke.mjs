@@ -989,7 +989,7 @@ for (let index = 0; index < 10; index += 1) {
         avatar: avatar?.getAttribute('src'),
         avatarVisible: Boolean(avatar && avatar.getBoundingClientRect().width >= 48),
         signal: Boolean(card.querySelector('.role-reveal .reveal-signal img')),
-        team: card.querySelector('.role-reveal .badge')?.textContent,
+        team: card.querySelector('.role-reveal .role-team-badge')?.textContent,
         action: actionButton?.textContent.trim(),
         actionHeight: Math.round(actionButton?.getBoundingClientRect().height || 0),
         actionFontSize: Math.round(parseFloat(getComputedStyle(actionButton).fontSize)),
@@ -1000,13 +1000,27 @@ for (let index = 0; index < 10; index += 1) {
     })()`);
     await captureScreenshot(process.env.SMOKE_ROLE_OPEN_SCREENSHOT);
   }
-  const assignment = await evaluate(`({
-    source: document.querySelector('.reveal-signal img')?.getAttribute('src'),
-    avatar: document.querySelector('.reveal-avatar')?.getAttribute('src')
-  })`);
+  const assignment = await evaluate(`(() => {
+    const reveal = document.querySelector('.role-reveal');
+    const teamBadge = reveal?.querySelector('.role-team-badge');
+    const style = reveal ? getComputedStyle(reveal) : null;
+    return {
+      source: document.querySelector('.reveal-signal img')?.getAttribute('src'),
+      avatar: document.querySelector('.reveal-avatar')?.getAttribute('src'),
+      redTeam: reveal?.classList.contains('red-team'),
+      blackTeam: reveal?.classList.contains('black'),
+      team: teamBadge?.textContent,
+      teamBadgeHeight: Math.round(teamBadge?.getBoundingClientRect().height || 0),
+      backgroundColor: style?.backgroundColor,
+      textColor: style?.color
+    };
+  })()`);
   roleAssignments.push({ seat: index + 1, ...assignment });
   await click('[data-action="reveal-next"]');
 }
+
+const redTeamRoleCards = roleAssignments.filter(item => /\/(?:citizen|sheriff)\.webp$/.test(item.source));
+const blackTeamRoleCards = roleAssignments.filter(item => /\/(?:mafia|don)\.webp$/.test(item.source));
 
 const zeroNightSignals = await evaluate(`({
   count: document.querySelectorAll('.signal-stack .phase-signal img').length,
@@ -1563,6 +1577,7 @@ verify(seatMove.dialog.title === 'Перемістити з місця 1' && sea
 verify(roleDealButton.label === 'Роздати ролі' && roleDealButton.danger && roleDealButton.legacyButtons === 0 && (roleDealButton.backgroundImage !== 'none' || roleDealButton.backgroundColor !== 'rgba(0, 0, 0, 0)') && roleDealButton.primaryBackground !== roleDealButton.secondaryBackground, 'unified gold, red and neutral button system');
 verify(new Set(roleAssignments.map(item => item.source)).size === 4 && zeroNightSignals.count === 2 && zeroNightSignals.sources.some(source => source.endsWith('/don.webp')) && zeroNightSignals.sources.some(source => source.endsWith('/mafia.webp')) && zeroNightSignals.steps === 3 && zeroNightSignals.current === 'Знайомство мафії' && zeroNightSignals.cue.includes('Дон') && zeroNightSignals.actionHeight >= 60 && zeroNightSignals.actionFontSize >= 18 && zeroNightSignals.insideViewport && zeroNightSheriff.signal.endsWith('/sheriff.webp') && zeroNightSheriff.current === 'Позначення Шерифа' && zeroNightSheriff.cue.includes('Шериф') && zeroNightSheriff.timer === '00:10' && zeroNightSheriff.action === 'Вільна посадка' && zeroNightSheriff.actionHeight >= 60 && zeroNightFreeSeating.current === 'Вільна посадка' && zeroNightFreeSeating.cue.includes('вільної посадки') && zeroNightFreeSeating.timer === '00:20' && zeroNightFreeSeating.action === 'Почати день 1', 'guided zero night with Mafia meeting, Sheriff identification and free seating');
 verify(roleReadyLayout.ready && roleReadyLayout.progressFirst && roleReadyLayout.actionsLast && roleReadyLayout.seat === '1' && roleReadyLayout.avatar === preferredSeatAvatar && roleReadyLayout.avatarVisible && roleReadyLayout.avatarBetweenSeatAndName && roleReadyLayout.avatarFills && roleReadyLayout.numberCards === 10 && roleReadyLayout.numberInstruction.includes('від 1 до 10') && roleReadyLayout.action === 'Спочатку оберіть цифру' && roleReadyLayout.actionDisabled && roleReadyLayout.actionHeight >= 54 && roleReadyLayout.actionFontSize >= 17 && roleReadyLayout.actionFontWeight >= 900 && roleReadyLayout.insideViewport && roleReadyLayout.scrollWidth <= 390 && JSON.stringify(roleDealCardCounts) === JSON.stringify([10,9,8,7,6,5,4,3,2,1]) && roleOpenLayout.open && roleOpenLayout.progressVisible && roleOpenLayout.playerVisible && roleOpenLayout.avatar === roleReadyLayout.avatar && roleOpenLayout.avatarVisible && roleOpenLayout.signal && roleOpenLayout.action === 'Сховати й перейти до наступного' && roleOpenLayout.actionHeight >= 54 && roleOpenLayout.actionFontSize >= 17 && roleOpenLayout.insideViewport && roleOpenLayout.scrollWidth <= 390 && Math.abs(roleOpenLayout.height - roleReadyLayout.height) <= 2 && roleAssignments.every(item => item.avatar) && new Set(roleAssignments.map(item => item.avatar)).size === 10, 'number-selected role deal, stable reveal cards, unique avatars and prominent actions');
+verify(redTeamRoleCards.length === 7 && redTeamRoleCards.every(item => item.redTeam && !item.blackTeam && item.team === 'Червона команда' && item.backgroundColor === 'rgb(143, 20, 34)' && item.textColor === 'rgb(255, 255, 255)' && item.teamBadgeHeight >= 38) && blackTeamRoleCards.length === 3 && blackTeamRoleCards.every(item => item.blackTeam && !item.redTeam && item.team === 'Чорна команда' && item.backgroundColor === 'rgb(7, 7, 9)' && item.textColor === 'rgb(255, 255, 255)' && item.teamBadgeHeight >= 38), 'high-contrast red and black team role presentation');
 verify(gameSettingsAppearance.gameModal && gameSettingsAppearance.context === 'Активна гра' && gameSettingsAppearance.closeLabel === 'Закрити' && seatVisualStates.seatModalAppearance.gameModal && seatVisualStates.seatModalAppearance.closeLabel === 'Закрити' && confirmModalAppearance.gameModal && confirmModalAppearance.context === 'Потрібне підтвердження' && confirmModalAppearance.closeLabel === 'Закрити' && confirmModalAppearance.dangerousAccent !== gameSettingsAppearance.accent && winnerModalAppearance.gameModal && winnerModalAppearance.context === 'Завершення гри' && winnerModalAppearance.choices === 3 && JSON.stringify(winnerModalAppearance.labels) === JSON.stringify(['Мирне місто', 'Мафія', 'Нічия']) && winnerModalAppearance.descriptions.length === 3 && winnerModalAppearance.closeLabel === 'Закрити', 'unified contextual game dialogs');
 verify(firstDay.seats === 10 && firstDay.seatColumns === 2 && firstDay.seatRows === 5 && firstDay.maxSeatHeight <= 60 && firstDay.aliveSeats === 10 && firstDay.deadSeats === 0 && firstDay.allSeatsVisible && firstDay.numberSize >= 21 && firstDay.numberWeight >= 900 && firstDay.aliveGreenAccent && firstDay.timerActionHeight >= 60 && firstDay.timerActionFontSize >= 18 && firstDay.timerActionFontWeight >= 900 && firstDay.timerAdjustments === 2 && JSON.stringify(firstDay.primaryActions) === JSON.stringify(['Старт', 'Скинути', 'Наступний →']) && firstDay.primaryActionsSameRow && firstDay.primaryActionsVisible, 'two-column compact table and one-row mobile game controls');
 verify(seatVisualStates.seatModalAppearance.number === '2' && seatVisualStates.seatModalAppearance.numberSize >= 58 && seatVisualStates.seatModalAppearance.numberWeight >= 900 && seatVisualStates.seatModalAppearance.alive && seatVisualStates.seatModalAppearance.status === 'За столом' && seatVisualStates.deadSeatAppearance.dead && !seatVisualStates.deadSeatAppearance.alive && seatVisualStates.deadSeatAppearance.opacity < 0.8 && seatVisualStates.deadSeatAppearance.grayscale && seatVisualStates.deadSeatAppearance.tag === 'вибув' && seatVisualStates.deadSeatModalAppearance.number === '10' && seatVisualStates.deadSeatModalAppearance.dead && seatVisualStates.deadSeatModalAppearance.status === 'Вибув' && seatVisualStates.restoredSeatAppearance.alive && !seatVisualStates.restoredSeatAppearance.dead, 'alive, eliminated and restored seat visuals');

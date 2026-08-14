@@ -27,7 +27,7 @@ import {
   saveActiveCommunityGame, deleteActiveCommunityGame,
   saveFinishedCommunityGame, deleteFinishedCommunityGame,
   subscribeCommunityGames, stopCommunityGames
-} from './cloud-games.js?v=148';
+} from './cloud-games.js?v=149';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
   canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
@@ -2033,9 +2033,8 @@ function publicGame(game) {
 
 function queueActiveGamePublish(game) {
   if (!app.authUser || LOCAL_AUTH_TEST || game?.status !== 'active' || game.publicOnly) return null;
-  if (game.ownerUid && game.ownerUid !== app.authUser.uid) return null;
   if (app.pendingActiveGameDeletes.includes(game.id)) return null;
-  pendingActiveGames.set(game.id, clone(game));
+  pendingActiveGames.set(game.id, { ...clone(game), ownerUid: app.authUser.uid });
   if (activeGamePublishPromise) return activeGamePublishPromise;
   if (activeGamePublishRetryHandle) {
     clearTimeout(activeGamePublishRetryHandle);
@@ -2914,13 +2913,39 @@ async function publishFinishedGame(game) {
   return saved;
 }
 
+function localActiveGameCandidates({ includePendingDeletes = false } = {}) {
+  const candidates = new Map(
+    app.localGames
+      .filter(game => game?.status === 'active' && !game.publicOnly)
+      .map(game => [game.id, game])
+  );
+  if (app.game?.status === 'active' && !app.game.publicOnly) candidates.set(app.game.id, app.game);
+  return [...candidates.values()].filter(game => includePendingDeletes || !app.pendingActiveGameDeletes.includes(game.id));
+}
+
 function syncLocalActiveGames() {
   if (!app.authUser || LOCAL_AUTH_TEST) return;
-  app.localGames
-    .filter(game => game.status === 'active'
-      && !app.pendingActiveGameDeletes.includes(game.id)
-      && (!game.ownerUid || game.ownerUid === app.authUser.uid))
-    .forEach(queueActiveGamePublish);
+  localActiveGameCandidates().forEach(queueActiveGamePublish);
+}
+
+async function publishLocalActiveGamesNow() {
+  if (!app.authUser || LOCAL_AUTH_TEST) return 0;
+  const candidates = localActiveGameCandidates({ includePendingDeletes: true });
+  if (!candidates.length) return 0;
+  const candidateIds = new Set(candidates.map(game => game.id));
+  const retainedDeletes = app.pendingActiveGameDeletes.filter(gameId => !candidateIds.has(gameId));
+  if (retainedDeletes.length !== app.pendingActiveGameDeletes.length) {
+    app.pendingActiveGameDeletes = retainedDeletes;
+    await setSetting('pendingActiveGameDeletes', retainedDeletes);
+  }
+  for (const game of candidates) {
+    await flushActiveGamePublish(game.id);
+    await saveActiveCommunityGame(app.authUser, app.hostProfile, {
+      ...clone(game),
+      ownerUid: app.authUser.uid
+    });
+  }
+  return candidates.length;
 }
 
 async function syncLocalFinishedGames(remoteGames = app.cloudGames) {
@@ -3409,8 +3434,9 @@ async function handleAction(action, element, sourceEvent) {
     await connectCloudDirectory({ hasLocalProfile: true });
   } else if (action === 'cloud-games-refresh') {
     app.gameFeedbackSummaries = {};
+    const published = await publishLocalActiveGamesNow();
     await reconnectCloudArchive();
-    syncLocalActiveGames();
+    toast(published ? `Активну гру опубліковано · ${published}` : 'Список ігор оновлено');
   } else if (action === 'host-use-google-photo') {
     captureHostProfileDraft();
     app.modal.profileDraft = { ...(app.modal.profileDraft || {}), avatar: '' };
@@ -4094,7 +4120,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=148', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=149', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

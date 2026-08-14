@@ -598,14 +598,27 @@ await evaluate(`(async () => {
 })()`);
 await evaluate(`location.reload()`);
 await wait(700);
-const presenceStatuses = await evaluate(`({
-  googleCards: document.querySelectorAll('.player-card.google-profile').length,
-  online: document.querySelectorAll('.player-card.google-profile [data-presence="online"]').length,
-  offline: document.querySelectorAll('.player-card.google-profile [data-presence="offline"]').length,
-  manualPresenceAbsent: [...document.querySelectorAll('.player-card:not(.google-profile)')].every(card => !card.querySelector('[data-presence]')),
-  labels: [...document.querySelectorAll('.player-card.google-profile [data-presence]')].map(badge => badge.textContent.trim()),
-  dots: document.querySelectorAll('.player-card.google-profile .presence-badge i').length
-})`);
+const presenceStatuses = await evaluate(`(() => {
+  const root = document.documentElement;
+  const originalTheme = root.dataset.theme;
+  root.dataset.theme = 'light';
+  const onlineStyle = getComputedStyle(document.querySelector('[data-presence="online"]'));
+  const offlineStyle = getComputedStyle(document.querySelector('[data-presence="offline"]'));
+  const result = {
+    googleCards: document.querySelectorAll('.player-card.google-profile').length,
+    online: document.querySelectorAll('.player-card.google-profile [data-presence="online"]').length,
+    offline: document.querySelectorAll('.player-card.google-profile [data-presence="offline"]').length,
+    manualPresenceAbsent: [...document.querySelectorAll('.player-card:not(.google-profile)')].every(card => !card.querySelector('[data-presence]')),
+    labels: [...document.querySelectorAll('.player-card.google-profile [data-presence]')].map(badge => badge.textContent.trim()),
+    dots: document.querySelectorAll('.player-card.google-profile .presence-badge i').length,
+    lightOnlineColor: onlineStyle.color,
+    lightOnlineBackground: onlineStyle.backgroundColor,
+    lightOfflineColor: offlineStyle.color,
+    lightOfflineBackground: offlineStyle.backgroundColor
+  };
+  root.dataset.theme = originalTheme;
+  return result;
+})()`);
 await click('.players-fab-group [data-action="new-player"]');
 const playerModalFrame = await inspectModalFrame();
 await captureScreenshot(process.env.SMOKE_PLAYER_MODAL_SCREENSHOT);
@@ -1081,7 +1094,17 @@ const firstDay = await evaluate(`({
   minSeatAvatarSize: Math.round(Math.min(...[...document.querySelectorAll('.game-seat .avatar')].map(avatar => avatar.getBoundingClientRect().width))),
   faultDots: document.querySelectorAll('.game-seat .fault-dot').length,
   minFaultDotSize: Math.round(Math.min(...[...document.querySelectorAll('.game-seat .fault-dot')].map(dot => dot.getBoundingClientRect().width))),
+  faultsRightOfPlayers: [...document.querySelectorAll('.game-seat')].every(seat => seat.querySelector('.fault-mini').getBoundingClientRect().left >= seat.querySelector('.seat-name').getBoundingClientRect().right),
   minSeatNameSize: Math.round(Math.min(...[...document.querySelectorAll('.game-seat .seat-name')].map(name => parseFloat(getComputedStyle(name).fontSize)))),
+  currentSpeakerHighlight: (() => {
+    const currentSeat = document.querySelector('.game-seat.current');
+    const regularSeat = document.querySelector('.game-seat:not(.current)');
+    const number = currentSeat?.querySelector('.num');
+    return Boolean(currentSeat && regularSeat && number
+      && getComputedStyle(currentSeat).backgroundImage !== getComputedStyle(regularSeat).backgroundImage
+      && getComputedStyle(currentSeat).boxShadow !== getComputedStyle(regularSeat).boxShadow
+      && getComputedStyle(number).backgroundColor !== 'rgba(0, 0, 0, 0)');
+  })(),
   aliveGreenAccent: [...document.querySelectorAll('.game-seat.alive')].every(seat => getComputedStyle(seat).boxShadow !== 'none' && getComputedStyle(seat).backgroundImage !== 'none'),
   phase: document.querySelector('.phase-copy h1')?.textContent,
   timer: document.querySelector('.timer')?.textContent,
@@ -1115,6 +1138,7 @@ const firstDay = await evaluate(`({
   moderatorPanelVisible: (() => { const panel = document.querySelector('.moderator-panel'); return Boolean(panel && getComputedStyle(panel).display !== 'none' && panel.getBoundingClientRect().height > 0); })(),
   moderatorPanelCollapsed: document.querySelector('.moderator-panel [data-action="toggle-panel"]')?.getAttribute('aria-expanded') === 'false' && document.querySelector('.moderator-panel .collapsible-content')?.hidden,
   moderatorUnusedActionsAbsent: !document.querySelector('.moderator-panel [data-action="copy-protocol"], .moderator-panel [data-action="open-observer"]'),
+  finishGameInsideCollapsedPanel: Boolean(document.querySelector('.moderator-panel [data-action="end-game-manual"]')) && document.querySelector('.moderator-panel .collapsible-content')?.hidden && !document.querySelector('.game-side > [data-action="end-game-manual"], .game-end-actions'),
   mobileProtocolHidden: getComputedStyle(document.querySelector('.moderator-protocol-panel')).display === 'none',
   viewport: innerWidth,
   scrollWidth: document.documentElement.scrollWidth
@@ -1125,7 +1149,8 @@ await click('.moderator-panel [data-action="toggle-panel"]');
 const moderatorPanelExpanded = await evaluate(`({
   expanded: document.querySelector('.moderator-panel [data-action="toggle-panel"]')?.getAttribute('aria-expanded') === 'true',
   contentVisible: !document.querySelector('.moderator-panel .collapsible-content')?.hidden,
-  controls: [...document.querySelectorAll('.moderator-panel .moderator-actions .btn')].map(button => button.textContent.trim())
+  controls: [...document.querySelectorAll('.moderator-panel .moderator-actions .btn')].map(button => button.textContent.trim()),
+  finishGameVisible: Boolean(document.querySelector('.moderator-panel .moderator-finish-game')) && document.querySelector('.moderator-panel .moderator-finish-game')?.getBoundingClientRect().height >= 44
 })`);
 await click('[data-action="game-settings"]');
 const gameSettingsModalFrame = await inspectModalFrame();
@@ -1245,11 +1270,16 @@ const seatModalAppearance = await evaluate(`(() => {
 })()`);
 await captureScreenshot(process.env.SMOKE_SEAT_SCREENSHOT);
 await click('[data-action="nominate"]');
-const nomination = await evaluate(`({
-  candidates: [...document.querySelectorAll('.nom-chip')].map(element => element.textContent),
-  modalOpen: Boolean(document.querySelector('.modal')),
-  latestLog: document.querySelector('.quick-log')?.innerText.split('\\n').slice(0, 2)
-})`);
+const nomination = await evaluate(`(() => {
+  const candidate = document.querySelector('.game-seat.nominated');
+  const stripe = candidate ? getComputedStyle(candidate, '::after') : null;
+  return {
+    candidates: [...document.querySelectorAll('.nom-chip')].map(element => element.textContent),
+    modalOpen: Boolean(document.querySelector('.modal')),
+    latestLog: document.querySelector('.quick-log')?.innerText.split('\\n').slice(0, 2),
+    candidateStripe: Boolean(stripe && stripe.content !== 'none' && parseFloat(stripe.width) >= 8 && stripe.right === '0px' && stripe.backgroundColor !== 'rgba(0, 0, 0, 0)')
+  };
+})()`);
 const offlineShell = await evaluate(`navigator.serviceWorker.ready.then(async () => {
   const cacheName = (await caches.keys()).find(name => name.startsWith('mafia-desk-v'));
   const cache = await caches.open(cacheName);
@@ -1561,7 +1591,7 @@ function verify(condition, label) {
 }
 
 verify(firstDay.hash === '#game' && firstDay.seats === 10 && firstDay.phase === 'День 1' && firstDay.timer === '01:00' && firstDay.bottomNav && firstDay.navItems === 5 && firstDay.activeLabel === 'Активна гра' && firstDay.navHeight <= 52 && firstDay.iconOnly && firstDay.scrollWidth <= firstDay.viewport, 'first day timer, layout and compact game navigation');
-verify(firstDay.moderatorPanelVisible && firstDay.moderatorPanelCollapsed && firstDay.moderatorUnusedActionsAbsent && firstDay.mobileProtocolHidden && moderatorPanelExpanded.expanded && moderatorPanelExpanded.contentVisible && JSON.stringify(moderatorPanelExpanded.controls) === JSON.stringify(['Ролі', '↶ Скасувати', '⚙ Таймери']), 'mobile host panel is available, collapsed by default and contains only essential controls');
+verify(firstDay.moderatorPanelVisible && firstDay.moderatorPanelCollapsed && firstDay.moderatorUnusedActionsAbsent && firstDay.finishGameInsideCollapsedPanel && firstDay.mobileProtocolHidden && moderatorPanelExpanded.expanded && moderatorPanelExpanded.contentVisible && moderatorPanelExpanded.finishGameVisible && JSON.stringify(moderatorPanelExpanded.controls) === JSON.stringify(['Ролі', '↶ Скасувати', '⚙ Таймери']), 'mobile host panel is collapsed by default and contains the protected finish-game action');
 verify(runningTimerStability.rootReplacements === 0 && /^\d{2}:\d{2}$/.test(runningTimerStability.timer || ''), 'running timer updates without replacing the mobile game screen');
 verify(runningTimerAdjustment.afterMinusFive === Math.max(0, runningTimerAdjustment.beforeMinusFive - 5) && runningTimerAdjustment.afterMinusTick <= runningTimerAdjustment.afterMinusFive && runningTimerAdjustment.afterMinusTick >= runningTimerAdjustment.afterMinusFive - 2 && runningTimerAdjustment.afterPlusFive === runningTimerAdjustment.afterMinusTick + 5, 'running timer +/- 5 seconds');
 verify(timerNavigation.away === '#players' && timerNavigation.returned === '#game' && timerNavigation.stopped && timerNavigation.navRestored, 'timer pauses and persists when leaving active game');
@@ -1599,7 +1629,7 @@ verify(statsPanelDefault.expanded === 'false' && statsPanelDefault.hidden && sta
 verify(statsPlayersDefault.expanded === 'false' && statsPlayersDefault.hidden && statsPlayersDefault.emptyState && statsPlayersExpanded.expanded === 'true' && !statsPlayersExpanded.hidden && statsPlayersExpanded.focused === 'statsPlayers', 'statistics players section is collapsed by default');
 verify(emptySharedStats.title === 'Статистика' && emptySharedStats.description.includes('усіх ведучих') && emptySharedStats.archiveTitle === 'Спільний архів ігор' && emptySharedStats.blackRate === '0%' && emptySharedStats.summaryCentered && emptySharedStats.technicalTermsAbsent && emptySharedStats.unifiedStates && emptySharedStats.emptyStates, 'empty shared statistics and unified states');
 verify(cameraControl.cameraInput && cameraControl.captureMode === 'environment' && cameraControl.vectorIcon && cameraControl.emojiAbsent && cameraControl.galleryInput && cameraControl.emailInputType === 'email' && cameraControl.emailHelp.includes('Google'), 'camera and player email controls');
-verify(presenceStatuses.googleCards === 2 && presenceStatuses.online === 1 && presenceStatuses.offline === 1 && presenceStatuses.manualPresenceAbsent && presenceStatuses.labels.includes('Онлайн') && presenceStatuses.labels.includes('Офлайн') && presenceStatuses.dots === 2, 'Google profile online and offline presence badges');
+verify(presenceStatuses.googleCards === 2 && presenceStatuses.online === 1 && presenceStatuses.offline === 1 && presenceStatuses.manualPresenceAbsent && presenceStatuses.labels.includes('Онлайн') && presenceStatuses.labels.includes('Офлайн') && presenceStatuses.dots === 2 && presenceStatuses.lightOnlineColor === 'rgb(28, 90, 55)' && presenceStatuses.lightOnlineBackground === 'rgb(224, 240, 229)' && presenceStatuses.lightOfflineColor === 'rgb(79, 72, 65)' && presenceStatuses.lightOfflineBackground === 'rgb(238, 233, 227)', 'high-contrast Google presence badges in the light theme');
 verify(telegramImportAbsent.input && telegramImportAbsent.action && telegramImportAbsent.modal, 'Telegram import removed');
 verify(profile.cards === 13 && !profile.modalOpen && profile.pendingGoogleLink && lineupSelection.selected === 12 && lineupSelection.chips === 12 && lineupSelection.waitingChips === 2 && lineupSelection.status.includes('черга 2') && lineupSelection.positions.length === 12 && playersLayout.scrollWidth <= playersLayout.viewport && playersLayout.topActionHidden && playersLayout.searchActionHidden && playersLayout.textSeatingHidden && playersLayout.fabVisible && playersLayout.actionCount === 2 && playersLayout.fabSquare && playersLayout.addPlayerIcon && playersLayout.seatingIcon && playersLayout.addPlayerGold && playersLayout.seatingRed && playersLayout.fabCentered && playersLayout.fabAboveNavigation && JSON.stringify(playersLayout.labels) === JSON.stringify(['Додати гравця', 'До розсадки']) && playersLayout.preferredName === 'Тестовий Нік' && playersLayout.clubInline && playersLayout.guestPlainText && playersLayout.cardActionCount === 3 && playersLayout.cardActionsSameRow && playersLayout.queueActionLast && playersCompactLayout.scrollWidth <= playersCompactLayout.viewport && playersCompactLayout.statusRight <= playersCompactLayout.viewport && playersCompactLayout.refreshWidth > 0 && playersCompactLayout.smallestQueueButton >= 44 && playersCompactLayout.cardsInsideViewport && playersCompactLayout.actionRowsHorizontal && playersCompactLayout.queueActionsLast && playersCompactLayout.fabLeft >= 0 && playersCompactLayout.fabRight <= playersCompactLayout.viewport, 'compact player identity, horizontal card actions with queue last, floating actions, and next-game queue');
 verify(playerStatsShortcut.settingsIcon && playerStatsShortcut.playerIcons >= 1 && personalStats.title === 'Smoke Нік' && personalStats.games === '1' && personalStats.history === 1 && personalStats.sentimentChoices === 2 && personalStats.emotions.length === 5 && personalStats.emotions.includes('Мозок закипів') && personalStats.emotions.includes('Цирк Enjoy') && personalStats.privacy.includes('тільки ви') && personalStats.threshold.includes('3 оцінок') && personalStats.scrollWidth <= 390 && personalFeedback.sentiment === 'true' && personalFeedback.emotion === 'true' && personalFeedback.saved.includes('анонімно') && personalFeedback.selected === 2, 'personal player history and anonymous two-part feedback');
@@ -1619,9 +1649,9 @@ verify(new Set(roleAssignments.map(item => item.source)).size === 4 && zeroNight
 verify(roleReadyLayout.ready && roleReadyLayout.progressFirst && roleReadyLayout.actionsLast && roleReadyLayout.seat === '1' && roleReadyLayout.avatar === preferredSeatAvatar && roleReadyLayout.avatarVisible && roleReadyLayout.avatarBetweenSeatAndName && roleReadyLayout.avatarFills && roleReadyLayout.numberCards === 10 && roleReadyLayout.numberInstruction.includes('від 1 до 10') && roleReadyLayout.action === 'Спочатку оберіть цифру' && roleReadyLayout.actionDisabled && roleReadyLayout.actionHeight >= 54 && roleReadyLayout.actionFontSize >= 17 && roleReadyLayout.actionFontWeight >= 900 && roleReadyLayout.insideViewport && roleReadyLayout.scrollWidth <= 390 && JSON.stringify(roleDealCardCounts) === JSON.stringify([10,9,8,7,6,5,4,3,2,1]) && roleOpenLayout.open && roleOpenLayout.progressVisible && roleOpenLayout.playerVisible && roleOpenLayout.avatar === roleReadyLayout.avatar && roleOpenLayout.avatarVisible && roleOpenLayout.signal && roleOpenLayout.action === 'Сховати й перейти до наступного' && roleOpenLayout.actionHeight >= 54 && roleOpenLayout.actionFontSize >= 17 && roleOpenLayout.insideViewport && roleOpenLayout.scrollWidth <= 390 && Math.abs(roleOpenLayout.height - roleReadyLayout.height) <= 2 && roleAssignments.every(item => item.avatar) && new Set(roleAssignments.map(item => item.avatar)).size === 10, 'number-selected role deal, stable reveal cards, unique avatars and prominent actions');
 verify(redTeamRoleCards.length === 7 && redTeamRoleCards.every(item => item.redTeam && !item.blackTeam && item.team === 'Червона команда' && item.backgroundColor === 'rgb(143, 20, 34)' && item.textColor === 'rgb(255, 255, 255)' && item.teamBadgeHeight >= 38) && blackTeamRoleCards.length === 3 && blackTeamRoleCards.every(item => item.blackTeam && !item.redTeam && item.team === 'Чорна команда' && item.backgroundColor === 'rgb(7, 7, 9)' && item.textColor === 'rgb(255, 255, 255)' && item.teamBadgeHeight >= 38), 'high-contrast red and black team role presentation');
 verify(gameSettingsAppearance.gameModal && gameSettingsAppearance.context === 'Активна гра' && gameSettingsAppearance.closeLabel === 'Закрити' && seatVisualStates.seatModalAppearance.gameModal && seatVisualStates.seatModalAppearance.closeLabel === 'Закрити' && confirmModalAppearance.gameModal && confirmModalAppearance.context === 'Потрібне підтвердження' && confirmModalAppearance.closeLabel === 'Закрити' && confirmModalAppearance.dangerousAccent !== gameSettingsAppearance.accent && winnerModalAppearance.gameModal && winnerModalAppearance.context === 'Завершення гри' && winnerModalAppearance.choices === 3 && JSON.stringify(winnerModalAppearance.labels) === JSON.stringify(['Мирне місто', 'Мафія', 'Нічия']) && winnerModalAppearance.descriptions.length === 3 && winnerModalAppearance.closeLabel === 'Закрити', 'unified contextual game dialogs');
-verify(firstDay.seats === 10 && firstDay.seatColumns === 2 && firstDay.seatRows === 5 && firstDay.maxSeatHeight <= 66 && firstDay.aliveSeats === 10 && firstDay.deadSeats === 0 && firstDay.allSeatsVisible && firstDay.numberSize >= 21 && firstDay.numberWeight >= 900 && firstDay.seatAvatarCount === 10 && firstDay.minSeatAvatarSize >= 40 && firstDay.faultDots === 40 && firstDay.minFaultDotSize >= 6 && firstDay.minSeatNameSize >= 11 && firstDay.aliveGreenAccent && firstDay.timerActionHeight >= 60 && firstDay.timerActionFontSize >= 18 && firstDay.timerActionFontWeight >= 900 && firstDay.timerAdjustments === 2 && firstDay.timerAdjustmentsBesideTime && JSON.stringify(firstDay.primaryActions) === JSON.stringify(['Старт', 'Скинути', 'Наступний →']) && firstDay.primaryActionsSameRow && firstDay.primaryActionsVisible, 'two-column readable player table and one-row mobile game controls');
+verify(firstDay.seats === 10 && firstDay.seatColumns === 2 && firstDay.seatRows === 5 && firstDay.maxSeatHeight <= 66 && firstDay.aliveSeats === 10 && firstDay.deadSeats === 0 && firstDay.allSeatsVisible && firstDay.numberSize >= 27 && firstDay.numberWeight >= 900 && firstDay.seatAvatarCount === 10 && firstDay.minSeatAvatarSize >= 40 && firstDay.faultDots === 40 && firstDay.minFaultDotSize >= 8 && firstDay.faultsRightOfPlayers && firstDay.minSeatNameSize >= 11 && firstDay.currentSpeakerHighlight && firstDay.aliveGreenAccent && firstDay.timerActionHeight >= 60 && firstDay.timerActionFontSize >= 18 && firstDay.timerActionFontWeight >= 900 && firstDay.timerAdjustments === 2 && firstDay.timerAdjustmentsBesideTime && JSON.stringify(firstDay.primaryActions) === JSON.stringify(['Старт', 'Скинути', 'Наступний →']) && firstDay.primaryActionsSameRow && firstDay.primaryActionsVisible, 'two-column table with large numbers, right-aligned fouls, current-speaker highlight and one-row controls');
 verify(seatVisualStates.seatModalAppearance.number === '2' && seatVisualStates.seatModalAppearance.numberSize >= 58 && seatVisualStates.seatModalAppearance.numberWeight >= 900 && seatVisualStates.seatModalAppearance.alive && seatVisualStates.seatModalAppearance.status === 'За столом' && seatVisualStates.deadSeatAppearance.dead && !seatVisualStates.deadSeatAppearance.alive && seatVisualStates.deadSeatAppearance.opacity < 0.8 && seatVisualStates.deadSeatAppearance.grayscale && seatVisualStates.deadSeatAppearance.tag === 'вибув' && seatVisualStates.deadSeatModalAppearance.number === '10' && seatVisualStates.deadSeatModalAppearance.dead && seatVisualStates.deadSeatModalAppearance.status === 'Вибув' && seatVisualStates.restoredSeatAppearance.alive && !seatVisualStates.restoredSeatAppearance.dead, 'alive, eliminated and restored seat visuals');
-verify(nomination.candidates.length === 1 && !nomination.modalOpen && !browserErrors.length, 'nomination and browser errors');
+verify(nomination.candidates.length === 1 && nomination.candidateStripe && !nomination.modalOpen && !browserErrors.length, 'nomination uses a wide right-edge candidate stripe without browser errors');
 verify(offlineShell.authModule && offlineShell.cloudProfilesModule && offlineShell.cloudGamesModule && offlineShell.gameFeedbackModule && offlineShell.gameEngineModule && offlineShell.orderServiceModule && offlineShell.playerLinksModule && offlineShell.timerModule && offlineShell.lineupModule && offlineShell.guestNamesModule && offlineShell.i18nModule && offlineShell.enjoyModule && offlineShell.firebaseApp && offlineShell.firebaseAuth && offlineShell.firebaseFirestore && offlineShell.roleSignals === 6 && offlineShell.themeBackgrounds === 3 && offlineReload.hash === '#game' && offlineReload.phase === 'День 1' && offlineReload.signedIn, 'offline shell');
 verify(donMissSignal.source.endsWith('/don-not-sheriff.webp') && donMissSignal.label === 'НЕ ШЕРИФ' && donMissSignal.instruction.includes('схрестіть руки'), 'Don miss signal');
 verify(donHitSignal.source.endsWith('/don-found-sheriff.webp') && donHitSignal.label === 'ЦЕ ШЕРИФ' && donHitSignal.instruction.includes('однією рукою'), 'Don hit signal');

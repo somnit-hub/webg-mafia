@@ -997,7 +997,6 @@ img { display: block; max-width: 100%; }
 .player-avatar-full-fallback { display: grid; place-items: center; color: var(--gold); background: var(--brand-bg); font-family: var(--font-display); font-size: clamp(72px, 24vw, 180px); font-weight: 900; }
 .game-modal { position: relative; border-top-color: var(--gold); }
 .game-modal.danger-modal, .game-modal.decision-modal { border-top-color: var(--red); }
-.game-end-actions { display: grid; gap: 8px; }
 .game-modal.seat-alive-modal { border-top-color: var(--green); }
 .game-modal.seat-dead-modal { border-top-color: var(--subtle); }
 .game-dialog-head { min-width: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
@@ -1150,6 +1149,10 @@ img { display: block; max-width: 100%; }
 :root[data-theme="light"] .badge.red { border-color: #d5a0a5; color: #8d2933; background: #fae8e9; }
 :root[data-theme="light"] .badge.green { border-color: #94b8a2; color: #23633f; background: #e5f1e9; }
 :root[data-theme="light"] .badge.gold { border-color: #c8ae78; color: #765317; background: #f7edd8; }
+:root[data-theme="light"] .presence-badge.online { border-color: #4f8b67; color: #1c5a37; background: #e0f0e5; }
+:root[data-theme="light"] .presence-badge.online i { background: #197447; box-shadow: 0 0 0 3px rgb(25 116 71 / 14%); }
+:root[data-theme="light"] .presence-badge.offline { border-color: #a59b90; color: #4f4841; background: #eee9e3; }
+:root[data-theme="light"] .presence-badge.offline i { background: #716960; }
 :root[data-theme="light"] .active-games-panel { border-color: #d0aaa8; }
 :root[data-theme="light"] .game-seat .seat-tag.alert { color: #a62835; }
 :root[data-theme="light"] .nom-chip { border-color: #d29a9f; color: #8e2933; background: #f9e8e9; }
@@ -1635,8 +1638,19 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
 .phase-dot { border-radius: 2px; box-shadow: none; transform: rotate(45deg); }
 .table-card { border-radius: 6px; box-shadow: none; }
 .game-seat { border-radius: 5px; background: var(--seat-bg); box-shadow: inset 0 1px rgb(255 255 255 / 2%); }
-.game-seat.current { border-color: var(--gold); box-shadow: inset 0 3px var(--green), inset 0 0 0 2px rgb(216 170 88 / 30%); }
 .game-seat.nominated { border-color: var(--red); box-shadow: inset 0 3px var(--green), inset 0 -3px var(--red); }
+.game-seat.nominated::after { content: ""; position: absolute; z-index: 2; top: 3px; right: 0; bottom: 3px; width: 8px; border-radius: 4px 0 0 4px; background: var(--red); box-shadow: -2px 0 9px color-mix(in srgb, var(--red) 52%, transparent); pointer-events: none; }
+.game-seat.current {
+  z-index: 1;
+  border-color: #f0c96f;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--gold) 38%, transparent), color-mix(in srgb, var(--green) 18%, transparent)), var(--seat-bg);
+  box-shadow: inset 0 4px #edbd59, inset 0 0 0 1px color-mix(in srgb, var(--gold) 72%, transparent), 0 0 0 2px color-mix(in srgb, var(--gold) 42%, transparent), 0 0 18px color-mix(in srgb, var(--gold) 45%, transparent);
+}
+.game-seat.current.nominated { box-shadow: inset 0 4px #edbd59, inset 0 -3px var(--red), inset 0 0 0 1px color-mix(in srgb, var(--gold) 72%, transparent), 0 0 0 2px color-mix(in srgb, var(--gold) 42%, transparent), 0 0 18px color-mix(in srgb, var(--gold) 45%, transparent); }
+.game-seat.current .num { border-color: #ffe2a0; color: #171006; background: #e2b45b; box-shadow: 0 0 10px color-mix(in srgb, var(--gold) 72%, transparent); }
+.game-seat.current .avatar { border-color: #f0c96f; box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 38%, transparent); }
+.game-seat.current .seat-name { color: var(--text); text-shadow: 0 1px 5px rgb(0 0 0 / 55%); }
+:root[data-theme="light"] .game-seat.current .seat-name { text-shadow: none; }
 .game-seat .avatar { border-radius: 50%; }
 .game-seat .num { font-family: var(--font-numeric); font-size: 21px; font-weight: 950; }
 .control-card { border-top: 2px solid var(--brand-line); box-shadow: none; }
@@ -1775,11 +1789,11 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .phase-strip { min-height: 48px; padding: 8px 9px; }
   .table-card { padding: 6px; }
   .seat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
-  .game-seat { min-height: 64px; padding: 4px 5px; display: grid; grid-template-columns: 34px 40px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; align-items: center; column-gap: 5px; text-align: left; }
-  .game-seat .seat-top { width: 34px; grid-column: 1; grid-row: 1 / -1; display: grid; justify-items: center; gap: 3px; }
-  .game-seat .num { min-width: 32px; height: 32px; font-size: 22px; }
-  .game-seat .fault-mini { min-width: 30px; gap: 2px; }
-  .game-seat .fault-dot { width: 6px; height: 6px; flex-basis: 6px; border-width: 1.5px; }
+  .game-seat { min-height: 64px; padding: 4px 11px 4px 5px; display: grid; grid-template-columns: 40px 40px minmax(0, 1fr) 40px; grid-template-rows: minmax(0, 1fr) auto; align-items: center; column-gap: 5px; text-align: left; }
+  .game-seat .seat-top { display: contents; }
+  .game-seat .num { min-width: 38px; height: 38px; grid-column: 1; grid-row: 1 / -1; font-size: 27px; }
+  .game-seat .fault-mini { min-width: 38px; grid-column: 4; grid-row: 1 / -1; justify-self: end; gap: 2px; }
+  .game-seat .fault-dot { width: 8px; height: 8px; flex-basis: 8px; border-width: 1.5px; }
   .game-seat .avatar { width: 40px; height: 40px; flex-basis: 40px; grid-column: 2; grid-row: 1 / -1; margin: 0; }
   .game-seat .seat-name { grid-column: 3; grid-row: 1; font-size: 11.5px; font-weight: 850; text-align: left; }
   .game-seat .seat-tag { grid-column: 3; grid-row: 2; min-height: 11px; margin: 0; font-size: 9px; font-weight: 750; text-align: left; }

@@ -27,7 +27,7 @@ import {
   saveActiveCommunityGame, deleteActiveCommunityGame,
   saveFinishedCommunityGame, deleteFinishedCommunityGame,
   subscribeCommunityGames, stopCommunityGames
-} from './cloud-games.js?v=149';
+} from './cloud-games.js?v=150';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
   canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
@@ -83,6 +83,12 @@ const RULES_LINKS = Object.freeze({
   ukrainian: 'https://www.imafia.org/game-rules',
   international: 'https://fiim.world/fiim-rules'
 });
+
+const ORDER_CATEGORIES = Object.freeze([
+  { id: 'coffee', icon: 'coffee', labels: { uk: 'Кава', it: 'Caffè', en: 'Coffee', fr: 'Café' } },
+  { id: 'tea', icon: 'tea', labels: { uk: 'Чай', it: 'Tè', en: 'Tea', fr: 'Thé' } },
+  { id: 'treats', icon: 'dessert', labels: { uk: 'Смаколики', it: 'Dolci', en: 'Treats', fr: 'Gourmandises' } }
+]);
 
 const DEFAULT_SETTINGS = {
   speech: 60,
@@ -159,7 +165,7 @@ let app = {
   authBusy: false,
   accountDeleteBusy: false,
   media: { trackName: '', playing: false, error: '' },
-  order: { busy: false, status: 'idle', error: '', lastItem: '', selectedItem: '', selectedOptions: [] },
+  order: { busy: false, status: 'idle', error: '', lastItem: '', category: '', selectedItem: '', selectedOptions: [] },
   orderMenu: DEFAULT_ORDER_MENU,
   profilePhotoSync: { status: 'idle' },
   gameFeedback: {},
@@ -1830,6 +1836,24 @@ function orderDrinkIcon(key) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[key] || paths.coffee}</svg>`;
 }
 
+function orderCategoryId(item) {
+  const category = String(item?.category || '').toLowerCase();
+  if (category === 'tea') return 'tea';
+  if (['treats', 'dessert', 'food', 'other'].includes(category)) return 'treats';
+  return 'coffee';
+}
+
+function orderCategoryLabel(category) {
+  return category?.labels?.[app.settings.language] || category?.labels?.uk || category?.id || '';
+}
+
+function orderCategories(menu) {
+  return ORDER_CATEGORIES.map(category => ({
+    ...category,
+    items: menu.filter(item => orderCategoryId(item) === category.id)
+  })).filter(category => category.items.length);
+}
+
 function orderMenuLabel(item) {
   return item?.labels?.[app.settings.language] || item?.labels?.uk || item?.label || item?.id || '';
 }
@@ -1858,6 +1882,9 @@ function orderOptionsHtml(item) {
 function orderModalHtml() {
   const order = app.order;
   const menu = app.orderMenu.items;
+  const categories = orderCategories(menu);
+  const selectedCategory = categories.find(category => category.id === order.category);
+  const visibleItems = selectedCategory?.items || [];
   const selectedItem = menu.find(item => item.id === order.selectedItem);
   const lastLabel = orderMenuLabel(menu.find(item => item.id === order.lastItem));
   const status = order.status === 'success'
@@ -1867,14 +1894,15 @@ function orderModalHtml() {
       : '';
   return `<div class="modal-backdrop order-backdrop" ${order.busy ? '' : 'data-action="close-modal"'}><div class="card modal order-modal" role="dialog" aria-modal="true" aria-labelledby="order-panel-title" aria-busy="${order.busy}">
     <div class="section-title section-heading"><div><span class="eyebrow">Кав’ярня Enjoy</span><h2 id="order-panel-title">Замовлення напою</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити" ${order.busy ? 'disabled' : ''}>×</button></div>
-    <p class="order-intro">Оберіть напій — повідомлення відразу піде в Telegram.</p>
+    <p class="order-intro">${selectedCategory ? 'Оберіть позицію — повідомлення відразу піде в Telegram.' : 'Оберіть категорію — потім потрібну позицію.'}</p>
     ${status}
-    <div class="order-menu-grid">${menu.map(item => {
+    ${selectedCategory ? `<div class="order-category-heading"><button class="icon-btn order-category-back" type="button" data-action="back-order-categories" aria-label="До категорій" ${order.busy ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button><div>${orderDrinkIcon(selectedCategory.icon)}<h3>${esc(orderCategoryLabel(selectedCategory))}</h3></div></div>
+    <div class="order-menu-grid">${visibleItems.map(item => {
       const hasOptions = app.orderMenu.options.some(option => option.itemId === item.id);
       const meta = orderMenuMeta(item);
       return `<button class="order-menu-item ${selectedItem?.id === item.id ? 'selected' : ''}" type="button" data-action="${hasOptions ? 'select-order-item' : 'place-order'}" data-item="${esc(item.id)}" ${order.busy ? 'disabled' : ''}>${orderDrinkIcon(item.icon)}<b>${esc(orderMenuLabel(item))}</b>${meta ? `<small>${esc(meta)}</small>` : ''}</button>`;
     }).join('')}</div>
-    ${orderOptionsHtml(selectedItem)}
+    ${orderOptionsHtml(selectedItem)}` : `<div class="order-category-grid">${categories.map(category => `<button class="order-category-item" type="button" data-action="select-order-category" data-category="${esc(category.id)}" ${order.busy ? 'disabled' : ''}>${orderDrinkIcon(category.icon)}<b>${esc(orderCategoryLabel(category))}</b></button>`).join('')}</div>`}
     <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal" ${order.busy ? 'disabled' : ''}>Закрити</button></div>
   </div></div>`;
 }
@@ -3363,8 +3391,17 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'rate-game-emotion') {
     await updatePersonalGameFeedback(element.dataset.id, 'emotion', element.dataset.value);
   } else if (action === 'open-order-panel') {
-    app.order = { busy: false, status: 'idle', error: '', lastItem: '', selectedItem: '', selectedOptions: [] };
+    app.order = { busy: false, status: 'idle', error: '', lastItem: '', category: '', selectedItem: '', selectedOptions: [] };
     app.modal = { type: 'order' };
+    render();
+  } else if (action === 'select-order-category') {
+    const category = element.dataset.category;
+    if (!orderCategories(app.orderMenu.items).some(option => option.id === category)) return toast('Категорія меню недоступна');
+    app.order = { ...app.order, category, status: 'idle', error: '', selectedItem: '', selectedOptions: [] };
+    render();
+  } else if (action === 'back-order-categories') {
+    if (app.modal?.type !== 'order' || app.order.busy) return;
+    app.order = { ...app.order, category: '', status: 'idle', error: '', selectedItem: '', selectedOptions: [] };
     render();
   } else if (action === 'select-order-item') {
     const item = element.dataset.item;
@@ -4120,7 +4157,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=149', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=150', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

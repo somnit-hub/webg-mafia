@@ -470,6 +470,9 @@ Object.assign(COPY.fr, {
 Object.assign(COPY.it, {
   'Замовити напій': 'Ordina un drink', 'Замовлення напою': 'Ordine delle bevande',
   'Кав’ярня Enjoy': 'Caffetteria Enjoy',
+  'Оберіть категорію — потім потрібну позицію.': 'Scegli una categoria e poi l’articolo desiderato.',
+  'Оберіть позицію — повідомлення відразу піде в Telegram.': 'Scegli un articolo: il messaggio verrà inviato subito a Telegram.',
+  'До категорій': 'Torna alle categorie',
   'Оберіть напій — повідомлення відразу піде в Telegram.': 'Scegli una bevanda: il messaggio verrà inviato immediatamente a Telegram.',
   'Кава': 'Caffè', 'Чай': 'Tè', 'Капучино': 'Cappuccino', 'Лате': 'Latte macchiato',
   'Замовлення не надіслано': 'Ordine non inviato', 'Замовлення надіслано': 'Ordine inviato',
@@ -481,6 +484,9 @@ Object.assign(COPY.it, {
 Object.assign(COPY.en, {
   'Замовити напій': 'Order a drink', 'Замовлення напою': 'Drink order',
   'Кав’ярня Enjoy': 'Enjoy coffee shop',
+  'Оберіть категорію — потім потрібну позицію.': 'Choose a category, then the item you want.',
+  'Оберіть позицію — повідомлення відразу піде в Telegram.': 'Choose an item — the message will be sent to Telegram immediately.',
+  'До категорій': 'Back to categories',
   'Оберіть напій — повідомлення відразу піде в Telegram.': 'Choose a drink — the message will be sent to Telegram immediately.',
   'Кава': 'Coffee', 'Чай': 'Tea', 'Капучино': 'Cappuccino', 'Лате': 'Latte',
   'Замовлення не надіслано': 'Order not sent', 'Замовлення надіслано': 'Order sent',
@@ -492,6 +498,9 @@ Object.assign(COPY.en, {
 Object.assign(COPY.fr, {
   'Замовити напій': 'Commander une boisson', 'Замовлення напою': 'Commande de boisson',
   'Кав’ярня Enjoy': 'Café Enjoy',
+  'Оберіть категорію — потім потрібну позицію.': 'Choisissez une catégorie, puis l’article souhaité.',
+  'Оберіть позицію — повідомлення відразу піде в Telegram.': 'Choisissez un article — le message sera immédiatement envoyé sur Telegram.',
+  'До категорій': 'Retour aux catégories',
   'Оберіть напій — повідомлення відразу піде в Telegram.': 'Choisissez une boisson — le message sera immédiatement envoyé sur Telegram.',
   'Кава': 'Café', 'Чай': 'Thé', 'Капучино': 'Cappuccino', 'Лате': 'Latte',
   'Замовлення не надіслано': 'Commande non envoyée', 'Замовлення надіслано': 'Commande envoyée',

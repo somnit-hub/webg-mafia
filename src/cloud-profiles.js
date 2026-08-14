@@ -179,16 +179,26 @@ async function loadDatabase() {
     let database;
     try {
       database = firestoreSdk.initializeFirestore(firebaseApp, {
-        localCache: firestoreSdk.persistentLocalCache({
-          tabManager: firestoreSdk.persistentMultipleTabManager()
-        })
+        // The application keeps its own offline copy in IndexedDB. A second,
+        // multi-tab Firestore cache can leave a mobile tab waiting for another
+        // tab to own the network connection, so shared games never reach the
+        // server. Keep Firestore's cache in memory and let it auto-select the
+        // transport that works on Safari, Android WebView and restrictive Wi-Fi.
+        localCache: firestoreSdk.memoryLocalCache(),
+        experimentalAutoDetectLongPolling: true
       });
     } catch {
       database = firestoreSdk.getFirestore(firebaseApp);
     }
+    await firestoreSdk.enableNetwork(database);
     return { database, sdk: firestoreSdk };
   })();
-  return databasePromise;
+  try {
+    return await databasePromise;
+  } catch (error) {
+    databasePromise = null;
+    throw error;
+  }
 }
 
 export async function getCommunityFirestore() {

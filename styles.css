@@ -365,6 +365,7 @@ img { display: block; max-width: 100%; }
 }
 .icon-btn[data-action="close-modal"]::before { transform: translate(-50%, -50%) rotate(45deg); }
 .icon-btn[data-action="close-modal"]::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.back-chevron-icon { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
 .install-btn { flex: 0 0 40px; }
 .install-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: square; stroke-linejoin: miter; }
 .order-btn { flex: 0 0 40px; color: var(--gold); }
@@ -527,19 +528,23 @@ img { display: block; max-width: 100%; }
 .avatar-fallback { display: grid; place-items: center; color: var(--gold); background: var(--brand-bg); font-weight: 900; }
 .player-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .player-card { padding: 13px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; }
+.player-card-copy { min-width: 0; }
+.player-name-line { min-width: 0; display: flex; align-items: baseline; gap: 7px; }
 .player-card h3 { margin: 0; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.player-club { min-width: 0; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .player-card p { margin: 4px 0 0; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .player-stats { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 7px; color: var(--subtle); font-size: 10px; }
+.guest-label { color: var(--subtle); font-size: 10px; }
 .presence-badge { gap: 5px; }
 .presence-badge i { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--subtle); }
 .presence-badge.online { border-color: #32664a; color: #caffe0; }
 .presence-badge.online i { background: var(--green); box-shadow: 0 0 0 3px rgb(88 183 124 / 12%); }
 .presence-badge.offline { color: var(--subtle); }
-.player-card-actions { width: 48px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); justify-items: center; gap: 5px; }
+.player-card-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
 .queue-player-btn {
   position: relative;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   display: grid;
   place-items: center;
@@ -550,7 +555,6 @@ img { display: block; max-width: 100%; }
   font-weight: 800;
   line-height: 1;
   touch-action: manipulation;
-  grid-column: 1 / -1;
 }
 .queue-player-btn > span { font-size: 28px; transform: translateY(-1px); }
 .queue-player-btn.selected { border-color: var(--green); color: var(--on-primary); background: var(--green); }
@@ -571,9 +575,9 @@ img { display: block; max-width: 100%; }
   font-size: 9px;
   font-variant-numeric: tabular-nums;
 }
-.player-edit, .player-stats-button { width: 22px; height: 28px; min-height: 28px; padding: 2px; font-size: 11px; }
+.player-edit, .player-stats-button { width: 44px; height: 44px; min-height: 44px; padding: 2px; font-size: 13px; }
 .player-stats-button, .profile-stats-shortcut { color: var(--gold); }
-.player-stats-icon { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.player-stats-icon { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .next-game-lineup { margin-bottom: 10px; padding: 12px; overflow: hidden; border-left: 3px solid var(--gold); }
 .lineup-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .lineup-head > div { min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
@@ -668,9 +672,8 @@ img { display: block; max-width: 100%; }
 .feedback-choice b { font-size: 14px; }
 .feedback-choice.selected, .emotion-choice.selected { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 17%, var(--control-bg)); box-shadow: inset 0 -2px var(--gold); }
 .emotion-picker { margin-top: 6px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
-.emotion-choice { min-width: 0; min-height: 67px; padding: 5px 2px; border-radius: 5px; display: grid; place-items: center; align-content: center; gap: 3px; }
+.emotion-choice { min-width: 0; min-height: 56px; padding: 5px 2px; border-radius: 5px; display: grid; place-items: center; align-content: center; }
 .emotion-choice span { font-size: 25px; line-height: 1; }
-.emotion-choice small { overflow: hidden; font-size: 8px; line-height: 1.1; text-align: center; }
 .feedback-choice:disabled, .emotion-choice:disabled { opacity: .58; cursor: wait; }
 .feedback-status, .feedback-threshold { margin: 7px 0 0 !important; color: var(--muted); font-size: 10px; line-height: 1.35; }
 .feedback-summary { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
@@ -1484,6 +1487,7 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
 .nav-item.active { color: var(--gold); background: transparent; }
 .nav-item.active::before { width: 32px; }
 .nav-item svg { stroke-width: 1.65; }
+.nav-item .nav-icon-stats { stroke-width: 2.7; stroke-linecap: round; stroke-linejoin: round; }
 
 .card { border-color: var(--line); border-radius: var(--radius); background: var(--card-bg); box-shadow: var(--shadow); }
 .card-pad { padding: 17px; }
@@ -1666,17 +1670,14 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .seat-setup-row { grid-template-columns: 32px 40px 40px minmax(0, 1fr) 40px; padding: 0; gap: 6px; }
   .seat-player-picker { width: 40px; height: 44px; }
   .seat-move-btn { width: 40px; height: 44px; }
-  .player-card { grid-template-columns: auto minmax(0, 1fr) 44px; padding: 9px 8px; gap: 8px; }
-  .player-card-actions, .queue-player-btn { width: 44px; }
-  .queue-player-btn { height: 44px; }
+  .player-card { grid-template-columns: auto minmax(0, 1fr) auto; padding: 9px 8px; gap: 8px; }
   .personal-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .player-stats-title { gap: 8px; }
   .player-stats-title .avatar.large { width: 48px; height: 48px; flex-basis: 48px; }
   .personal-game-card { padding: 10px 8px; }
   .emotion-picker { gap: 3px; }
-  .emotion-choice { min-height: 61px; }
+  .emotion-choice { min-height: 54px; }
   .emotion-choice span { font-size: 23px; }
-  .emotion-choice small { font-size: 7px; }
   .next-game-lineup { margin-bottom: 8px; padding: 10px 9px; }
   .lineup-actions .btn { flex: 1 1 0; min-width: 0; }
 

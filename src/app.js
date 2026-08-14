@@ -178,7 +178,7 @@ let app = {
     setupRules: false,
     setupSeating: true,
     statsRoles: false,
-    statsPlayers: true
+    statsPlayers: false
   }
 };
 let activationPromise = null;
@@ -719,7 +719,7 @@ function navIcon(name) {
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/>',
     game: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="M12 4v3m0 10v3M4 12h3m10 0h3"/>'
   };
-  return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]}</svg>`;
+  return `<svg class="nav-icon nav-icon-${name}" viewBox="0 0 24 24" aria-hidden="true">${paths[name]}</svg>`;
 }
 
 function addPlayerIcon() {
@@ -743,7 +743,11 @@ function eyeIcon() {
 }
 
 function playerStatsIcon() {
-  return '<svg class="player-stats-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11m7 9V4m7 16v-6"/><path d="M3 20h18"/></svg>';
+  return '<svg class="player-stats-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-7M12 20V5m7 15V9"/><path d="M3 20h18"/></svg>';
+}
+
+function backChevronIcon() {
+  return '<svg class="back-chevron-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15.5 4.5-7.5 7.5 7.5 7.5"/></svg>';
 }
 
 function randomActionIcon(kind) {
@@ -1023,9 +1027,16 @@ function playerCard(player) {
     : isGoogleProfile
       ? (ownCloudProfile ? '<button class="icon-btn player-edit" data-action="edit-host-profile" aria-label="Редагувати власний профіль">•••</button>' : '')
       : `<button class="icon-btn player-edit" data-action="edit-player" data-id="${player.id}" aria-label="Редагувати ${esc(player.name)}">•••</button>`;
+  const club = String(player.contact || '').trim();
+  const description = String(player.notes || '').trim();
+  const profileKind = player.linkAccepted
+    ? '<span class="badge green">Google · об’єднано</span>'
+    : isGoogleProfile
+      ? '<span class="badge green">Google · Enjoy</span>'
+      : '<span class="guest-label">Гість</span>';
   return `<article class="card player-card ${isCloud ? 'cloud' : 'local'} ${isGoogleProfile ? 'google-profile' : ''}">
     ${avatar(player)}
-    <div><h3>${esc(player.name)}</h3><p>${esc(player.nickname ? `«${player.nickname}» · ${player.notes || player.contact || 'без опису'}` : player.notes || player.contact || 'Без додаткового опису')}</p><div class="player-stats"><span class="badge ${isCloud ? 'green' : ''}">${player.linkAccepted ? 'Google · об’єднано' : isGoogleProfile ? 'Google · Enjoy' : 'Додано ведучим'}</span>${presence}${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span></div></div>
+    <div class="player-card-copy"><div class="player-name-line"><h3>${esc(preferredPlayerName(player))}</h3>${club ? `<span class="player-club">${esc(club)}</span>` : ''}</div>${description ? `<p>${esc(description)}</p>` : ''}<div class="player-stats">${profileKind}${presence}${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span></div></div>
     <div class="player-card-actions"><button class="queue-player-btn ${queued ? 'selected' : ''}" data-action="toggle-next-player" data-id="${esc(player.id)}" aria-label="${queued ? `Прибрати ${esc(preferredPlayerName(player))} зі складу наступної гри` : `Додати ${esc(preferredPlayerName(player))} до наступної гри`}" aria-pressed="${queued}"><span aria-hidden="true">${queued ? '✓' : '+'}</span>${queued ? `<small>${queueIndex + 1}</small>` : ''}</button><button class="icon-btn player-stats-button" type="button" data-action="open-player-stats" data-id="${esc(player.id)}" aria-label="Статистика ${esc(preferredPlayerName(player))}" title="Персональна статистика">${playerStatsIcon()}</button>${editButton}</div>
   </article>`;
 }
@@ -1610,7 +1621,7 @@ function gameFeedbackControls(game, state) {
       <button class="feedback-choice ${mine.sentiment === 'up' ? 'selected' : ''}" type="button" data-action="rate-game-sentiment" data-id="${esc(game.id)}" data-value="up" aria-pressed="${mine.sentiment === 'up'}" ${busy ? 'disabled' : ''}><span aria-hidden="true">👍</span><b>Зайшла</b></button>
       <button class="feedback-choice ${mine.sentiment === 'down' ? 'selected' : ''}" type="button" data-action="rate-game-sentiment" data-id="${esc(game.id)}" data-value="down" aria-pressed="${mine.sentiment === 'down'}" ${busy ? 'disabled' : ''}><span aria-hidden="true">👎</span><b>Гірчить</b></button>
     </div>
-    <div class="emotion-picker" role="group" aria-label="Емоція від гри">${GAME_EMOTIONS.map(item => `<button class="emotion-choice ${mine.emotion === item.key ? 'selected' : ''}" type="button" data-action="rate-game-emotion" data-id="${esc(game.id)}" data-value="${item.key}" aria-label="${esc(item.label)}" title="${esc(item.label)}" aria-pressed="${mine.emotion === item.key}" ${busy ? 'disabled' : ''}><span aria-hidden="true">${item.icon}</span><small>${esc(item.label)}</small></button>`).join('')}</div>
+    <div class="emotion-picker" role="group" aria-label="Емоція від гри">${GAME_EMOTIONS.map(item => `<button class="emotion-choice ${mine.emotion === item.key ? 'selected' : ''}" type="button" data-action="rate-game-emotion" data-id="${esc(game.id)}" data-value="${item.key}" aria-label="${esc(item.label)}" title="${esc(item.label)}" aria-pressed="${mine.emotion === item.key}" ${busy ? 'disabled' : ''}><span aria-hidden="true">${item.icon}</span></button>`).join('')}</div>
     ${status}${feedbackSummaryHtml(state?.data)}
   </div>`;
 }
@@ -1629,7 +1640,7 @@ function playerStatsModalHtml() {
     }).join('')}</div>`
     : statePanel('empty', 'Ігор у профілі ще немає', 'Історія з’явиться, коли цей профіль буде додано до завершеної гри.');
   return `<div class="modal-backdrop player-stats-backdrop" data-action="close-modal"><div class="card modal player-stats-modal" role="dialog" aria-modal="true" aria-labelledby="player-stats-title" tabindex="-1">
-    <div class="section-title section-heading"><div class="player-stats-title">${avatar(player, 'large')}<div><span class="eyebrow">Персональна статистика</span><h2 id="player-stats-title">${esc(preferredPlayerName(player))}</h2></div></div><button class="icon-btn" type="button" data-action="${backAction}" aria-label="${app.modal.returnModal ? 'Повернутися до профілю' : 'Закрити'}">${app.modal.returnModal ? '←' : '×'}</button></div>
+    <div class="section-title section-heading"><div class="player-stats-title">${avatar(player, 'large')}<div><span class="eyebrow">Персональна статистика</span><h2 id="player-stats-title">${esc(preferredPlayerName(player))}</h2></div></div><button class="icon-btn" type="button" data-action="${backAction}" aria-label="${app.modal.returnModal ? 'Повернутися до профілю' : 'Закрити'}">${app.modal.returnModal ? backChevronIcon() : '×'}</button></div>
     <section class="stat-grid personal-stat-grid"><article class="stat-card"><b>${stats.games}</b><span>ігор</span></article><article class="stat-card"><b>${stats.wins}</b><span>перемог</span></article><article class="stat-card"><b>${stats.winRate}%</b><span>результативність</span></article><article class="stat-card"><b>${esc(stats.favoriteRole ? roleLabel(stats.favoriteRole) : '—')}</b><span>часта роль</span></article></section>
     ${canRate ? `<p class="privacy-note feedback-privacy-note">Ваш вибір бачите тільки ви. Іншим учасникам доступне лише спільне зведення після трьох оцінок.</p>` : ''}
     <div class="personal-history-title"><h3>Історія ігор</h3><span>${stats.games}</span></div>
@@ -2019,11 +2030,11 @@ function publicGame(game) {
 }
 
 function queueActiveGamePublish(game) {
-  if (!app.authUser || LOCAL_AUTH_TEST || game?.status !== 'active' || game.publicOnly) return;
-  if (game.ownerUid && game.ownerUid !== app.authUser.uid) return;
-  if (app.pendingActiveGameDeletes.includes(game.id)) return;
+  if (!app.authUser || LOCAL_AUTH_TEST || game?.status !== 'active' || game.publicOnly) return null;
+  if (game.ownerUid && game.ownerUid !== app.authUser.uid) return null;
+  if (app.pendingActiveGameDeletes.includes(game.id)) return null;
   pendingActiveGames.set(game.id, clone(game));
-  if (activeGamePublishPromise) return;
+  if (activeGamePublishPromise) return activeGamePublishPromise;
   if (activeGamePublishRetryHandle) {
     clearTimeout(activeGamePublishRetryHandle);
     activeGamePublishRetryHandle = null;
@@ -2042,7 +2053,7 @@ function queueActiveGamePublish(game) {
           const next = pendingActiveGames.values().next().value;
           if (next && navigator.onLine) queueActiveGamePublish(next);
         }, 5000);
-        render();
+        renderPassiveCloudUpdate();
         break;
       }
     }
@@ -2050,6 +2061,19 @@ function queueActiveGamePublish(game) {
     activeGamePublishPromise = null;
     if (pendingActiveGames.size && !activeGamePublishRetryHandle) queueActiveGamePublish(pendingActiveGames.values().next().value);
   });
+  return activeGamePublishPromise;
+}
+
+async function waitForActiveGamePublish(gameId, timeoutMs = 8000) {
+  const publish = activeGamePublishPromise;
+  if (!publish) return !pendingActiveGames.has(gameId);
+  let timeoutHandle;
+  await Promise.race([
+    publish,
+    new Promise(resolve => { timeoutHandle = setTimeout(resolve, timeoutMs); })
+  ]);
+  clearTimeout(timeoutHandle);
+  return !pendingActiveGames.has(gameId);
 }
 
 async function flushActiveGamePublish(gameId) {
@@ -2132,6 +2156,14 @@ function setTimer(seconds, purpose = 'speech') {
   app.game.timer = { remaining: Math.max(0, Number(seconds) || 0), running: false, purpose };
 }
 
+function updateGameTimerDisplay() {
+  if (!app.game || !['game', 'observer'].includes(app.route)) return;
+  document.querySelectorAll('.game-page .timer').forEach(timer => {
+    timer.textContent = formatTimer(app.game.timer.remaining);
+    timer.classList.toggle('danger', app.game.timer.remaining <= 10);
+  });
+}
+
 function startTimer() {
   if (!app.game || app.game.timer.running || app.game.timer.remaining <= 0) return;
   prepareTimerAudio();
@@ -2147,12 +2179,14 @@ function startTimer() {
     const previousSecond = lastSecond;
     lastSecond = app.game.timer.remaining;
     if (crossedCountdownWarning(previousSecond, app.game.timer.remaining)) void playTimerSound('warning');
-    if (app.game.timer.remaining === 0) {
+    const completed = app.game.timer.remaining === 0;
+    if (completed) {
       stopTimer();
       announceTimerEnd();
     }
     if (app.game.timer.remaining % 5 === 0) await saveGame();
-    render();
+    if (completed) render();
+    else updateGameTimerDisplay();
   }, 250);
 }
 
@@ -2704,7 +2738,7 @@ async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
   if (cloudDirectoryPromise) return cloudDirectoryPromise;
   app.cloudDirectory = { status: 'loading', error: '', fromCache: false };
   if (app.hostProfile?.avatar) app.profilePhotoSync = { status: 'syncing' };
-  render();
+  renderPassiveCloudUpdate();
   cloudDirectoryPromise = (async () => {
     const remote = await reconcileOwnCommunityProfile(app.authUser, app.hostProfile, { hasLocalProfile });
     if (remote && (!hasLocalProfile || String(remote.profileUpdatedAt || '') > String(app.hostProfile.updatedAt || ''))) {
@@ -2737,11 +2771,11 @@ async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
         error: '',
         fromCache: metadata.fromCache
       };
-      render();
+      renderPassiveCloudUpdate();
     }, error => {
       if (app.hostProfile?.avatar) app.profilePhotoSync = { status: 'error' };
       app.cloudDirectory = { status: 'error', error: cloudDirectoryError(error), fromCache: false };
-      render();
+      renderPassiveCloudUpdate();
     });
     startProfilePresence();
     syncSharedManualPlayers().catch(() => {});
@@ -2751,7 +2785,7 @@ async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
   } catch (error) {
     if (app.hostProfile?.avatar) app.profilePhotoSync = { status: 'error' };
     app.cloudDirectory = { status: 'error', error: cloudDirectoryError(error), fromCache: false };
-    render();
+    renderPassiveCloudUpdate();
   } finally {
     cloudDirectoryPromise = null;
   }
@@ -2862,6 +2896,14 @@ function cloudArchiveError(error) {
   return 'Не вдалося синхронізувати ігри Enjoy.';
 }
 
+function renderPassiveCloudUpdate() {
+  const hostingOwnGame = ['game', 'reveal'].includes(app.route)
+    && app.game
+    && !app.game.publicOnly
+    && canManageGame(app.game);
+  if (!hostingOwnGame) render();
+}
+
 async function publishFinishedGame(game) {
   if (!app.authUser || LOCAL_AUTH_TEST || game?.status !== 'finished') return false;
   await flushActiveGamePublish(game.id);
@@ -2898,7 +2940,7 @@ async function connectCloudArchive() {
   if (!app.authUser || LOCAL_AUTH_TEST) return;
   if (cloudArchivePromise) return cloudArchivePromise;
   app.cloudArchive = { status: 'loading', error: '', fromCache: false };
-  render();
+  renderPassiveCloudUpdate();
   cloudArchiveMigrationStarted = false;
   cloudArchivePromise = subscribeCommunityGames((games, metadata) => {
     app.cloudGames = games;
@@ -2913,25 +2955,25 @@ async function connectCloudArchive() {
       error: metadata.error ? cloudArchiveError(metadata.error) : '',
       fromCache: metadata.fromCache
     };
-    render();
+    renderPassiveCloudUpdate();
     if (app.route === 'stats') void loadStatsGameFeedback(games.filter(game => game.status === 'finished'));
     if (!cloudArchiveMigrationStarted) {
       cloudArchiveMigrationStarted = true;
       syncLocalActiveGames();
       syncLocalFinishedGames(games).catch(error => {
         app.cloudArchive = { status: 'error', error: cloudArchiveError(error), fromCache: metadata.fromCache };
-        render();
+        renderPassiveCloudUpdate();
       });
     }
   }, error => {
     app.cloudArchive = { status: 'error', error: cloudArchiveError(error), fromCache: false };
-    render();
+    renderPassiveCloudUpdate();
   });
   try {
     await cloudArchivePromise;
   } catch (error) {
     app.cloudArchive = { status: 'error', error: cloudArchiveError(error), fromCache: false };
-    render();
+    renderPassiveCloudUpdate();
   } finally {
     cloudArchivePromise = null;
   }
@@ -3545,10 +3587,14 @@ async function handleAction(action, element, sourceEvent) {
     const devicePreferences = { theme: app.settings.theme, sound: app.settings.sound, haptics: app.settings.haptics };
     app.game = createGameFromDraft(); app.settings = { ...app.game.settings, ...devicePreferences }; app.undo = [];
     await setSetting('appSettings', app.settings); await saveGame();
+    const gameId = app.game.id;
     app.nextGameQueue = consumeSeatedPlayers(app.nextGameQueue, app.game.seats);
     await saveNextGameQueue();
     app.draft = null;
     navigate('reveal');
+    void waitForActiveGamePublish(gameId).then(shared => {
+      if (!shared) toast('Гру створено локально · спільний перегляд з’явиться після відновлення синхронізації');
+    });
   } else if (action === 'resume-game') {
     const game = gameById(element.dataset.id);
     if (!game || game.publicOnly || !canManageGame(game)) return toast('Цю гру може продовжити лише її ведучий на пристрої, де її створено');

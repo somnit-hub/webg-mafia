@@ -536,7 +536,7 @@ const statsPlayersDefault = await evaluate(`({
   emptyState: Boolean(document.querySelector('#panel-statsPlayers .ui-state.state-empty'))
 })`);
 await click('[data-action="toggle-panel"][data-panel="statsPlayers"]');
-const statsPlayersCollapsed = await evaluate(`({
+const statsPlayersExpanded = await evaluate(`({
   expanded: document.querySelector('[data-action="toggle-panel"][data-panel="statsPlayers"]')?.getAttribute('aria-expanded'),
   hidden: document.querySelector('#panel-statsPlayers')?.hidden,
   focused: document.activeElement?.dataset.panel,
@@ -635,6 +635,8 @@ const playersLayout = await evaluate(`(() => {
   const actions = [...group.querySelectorAll('.mobile-fab')];
   const rect = group.getBoundingClientRect();
   const navigation = document.querySelector('.bottom-nav').getBoundingClientRect();
+  const manualCard = [...document.querySelectorAll('.player-card')].find(card => card.textContent.includes('Тестовий Нік'));
+  const cardActions = [...(manualCard?.querySelectorAll('.player-card-actions > button') || [])];
   return {
     viewport: innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
@@ -650,7 +652,12 @@ const playersLayout = await evaluate(`(() => {
     seatingRed: actions[1]?.classList.contains('danger-fab'),
     fabCentered: Math.abs((rect.left + rect.width / 2) - innerWidth / 2) <= 1,
     fabAboveNavigation: rect.bottom <= navigation.top - 10,
-    labels: actions.map(button => button.getAttribute('aria-label'))
+    labels: actions.map(button => button.getAttribute('aria-label')),
+    preferredName: manualCard?.querySelector('.player-name-line h3')?.textContent,
+    clubInline: [...document.querySelectorAll('.player-name-line')].some(line => line.querySelector('h3') && line.querySelector('.player-club')),
+    guestPlainText: manualCard?.querySelector('.guest-label')?.textContent === 'Гість' && ![...manualCard.querySelectorAll('.badge')].some(badge => badge.textContent.includes('Додано ведучим')),
+    cardActionCount: cardActions.length,
+    cardActionsSameRow: new Set(cardActions.map(button => Math.round(button.getBoundingClientRect().top))).size === 1
   };
 })()`);
 await captureScreenshot(process.env.SMOKE_PLAYERS_SCREENSHOT);
@@ -662,6 +669,8 @@ const playersCompactLayout = await evaluate(`({
   statusRight: Math.round(document.querySelector('.directory-status').getBoundingClientRect().right),
   refreshWidth: Math.round(document.querySelector('.directory-status .btn').getBoundingClientRect().width),
   smallestQueueButton: Math.round(Math.min(...[...document.querySelectorAll('.queue-player-btn')].map(button => button.getBoundingClientRect().height))),
+  cardsInsideViewport: [...document.querySelectorAll('.player-card')].every(card => card.getBoundingClientRect().right <= innerWidth),
+  actionRowsHorizontal: [...document.querySelectorAll('.player-card-actions')].every(group => new Set([...group.children].map(button => Math.round(button.getBoundingClientRect().top))).size <= 1),
   fabRight: Math.round(document.querySelector('.players-fab-group').getBoundingClientRect().right),
   fabLeft: Math.round(document.querySelector('.players-fab-group').getBoundingClientRect().left)
 })`);
@@ -1085,7 +1094,19 @@ const readTimerSeconds = () => evaluate(`(() => {
   return minutes * 60 + seconds;
 })()`);
 await click('[data-action="timer-toggle"]');
-await wait(350);
+await evaluate(`(() => {
+  window.__gameRootMutationCount = 0;
+  window.__gameRootObserver?.disconnect();
+  window.__gameRootObserver = new MutationObserver(records => {
+    window.__gameRootMutationCount += records.filter(record => record.type === 'childList').length;
+  });
+  window.__gameRootObserver.observe(document.querySelector('#app'), { childList: true });
+})()`);
+await wait(1250);
+const runningTimerStability = await evaluate(`(() => {
+  window.__gameRootObserver?.disconnect();
+  return { rootReplacements: window.__gameRootMutationCount, timer: document.querySelector('.timer')?.textContent };
+})()`);
 const beforeMinusFive = await readTimerSeconds();
 await click('[data-action="timer-minus"]');
 const afterMinusFive = await readTimerSeconds();
@@ -1473,7 +1494,7 @@ const chromeByTab = { home: homeChrome, players: playersChrome, setup: setupChro
 const unifiedModalFrames = { mediaModalFrame, orderModalFrame, hostProfileModalFrame, accountDeleteModalFrame, playerModalFrame, setupMoveModalFrame, setupAvatarModalFrame, gameSettingsModalFrame, seatModalFrame, confirmModalFrame, winnerModalFrame, protocolModalFrame, personalStatsModalFrame };
 const languageSupport = { languageOptions, englishLanguage, frenchLanguage, italianLanguage, restoredUkrainianLanguage };
 const gameCardSystem = { roleReadyLayout, roleOpenLayout, gameSettingsAppearance, confirmModalAppearance, winnerModalAppearance, zeroNightSheriff, zeroNightFreeSeating, bestMoveLayout, bestMoveFarewell, afterBestMove };
-const result = { authenticatedHost, enjoyBrand, initialActiveGames, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, mediaPanel, preparedMedia, orderPanel, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersCollapsed, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupTimersMobileLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, playerStatsShortcut, personalStats, personalFeedback, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameCompactHeader, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
+const result = { authenticatedHost, enjoyBrand, initialActiveGames, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, mediaPanel, preparedMedia, orderPanel, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersExpanded, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupTimersMobileLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, playerStatsShortcut, personalStats, personalFeedback, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, runningTimerStability, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameCompactHeader, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
 console.log(JSON.stringify(result, null, 2));
 
 if (process.env.SMOKE_SCREENSHOT) {
@@ -1487,6 +1508,7 @@ function verify(condition, label) {
 }
 
 verify(firstDay.hash === '#game' && firstDay.seats === 10 && firstDay.phase === 'День 1' && firstDay.timer === '01:00' && firstDay.bottomNav && firstDay.navItems === 5 && firstDay.activeLabel === 'Активна гра' && firstDay.navHeight <= 52 && firstDay.iconOnly && firstDay.scrollWidth <= firstDay.viewport, 'first day timer, layout and compact game navigation');
+verify(runningTimerStability.rootReplacements === 0 && /^\d{2}:\d{2}$/.test(runningTimerStability.timer || ''), 'running timer updates without replacing the mobile game screen');
 verify(runningTimerAdjustment.afterMinusFive === Math.max(0, runningTimerAdjustment.beforeMinusFive - 5) && runningTimerAdjustment.afterMinusTick <= runningTimerAdjustment.afterMinusFive && runningTimerAdjustment.afterMinusTick >= runningTimerAdjustment.afterMinusFive - 2 && runningTimerAdjustment.afterPlusFive === runningTimerAdjustment.afterMinusTick + 5, 'running timer +/- 5 seconds');
 verify(timerNavigation.away === '#players' && timerNavigation.returned === '#game' && timerNavigation.stopped && timerNavigation.navRestored, 'timer pauses and persists when leaving active game');
 verify(activeProfileLocks.locked === 10 && activeProfileLocks.editable >= 3 && activeProfileLocks.lockedButtonsDisabled, 'profiles seated in active game are locked');
@@ -1520,12 +1542,12 @@ verify(compactHelp.count >= 8 && compactHelp.visiblePageDescriptions === 0 && co
 verify(accountDeletion.trashIconOnly && accountDeletion.trashButtonSize >= 40 && accountDeletion.dialog && accountDeletion.title === 'Видалити профіль Mafia?' && accountDeletion.retentionCopyAbsent && accountDeletion.confirm === 'Видалити профіль' && accountDeletion.focused && accountDeletion.scrollTop === 0 && accountDeletion.top >= 6 && accountDeletion.top <= 8 && accountDeletion.left === 6 && accountDeletion.rightGap === 6 && accountDeletion.bottomWithinViewport && accountDeletion.backdropAlign === 'start' && accountDeletion.bordered, 'account deletion controls');
 verify(Object.values(unifiedModalFrames).length === 13 && Object.values(unifiedModalFrames).every(isUnifiedModal), 'unified mobile modal frames');
 verify(statsPanelDefault.expanded === 'false' && statsPanelDefault.hidden && statsPanelDefault.graphPresent && statsPanelExpanded.expanded === 'true' && !statsPanelExpanded.hidden && statsPanelExpanded.focused === 'statsRoles', 'collapsible statistics graph');
-verify(statsPlayersDefault.expanded === 'true' && !statsPlayersDefault.hidden && statsPlayersDefault.emptyState && statsPlayersCollapsed.expanded === 'false' && statsPlayersCollapsed.hidden && statsPlayersCollapsed.focused === 'statsPlayers' && statsPlayersCollapsed.panelHeight <= 72, 'collapsible statistics players section');
+verify(statsPlayersDefault.expanded === 'false' && statsPlayersDefault.hidden && statsPlayersDefault.emptyState && statsPlayersExpanded.expanded === 'true' && !statsPlayersExpanded.hidden && statsPlayersExpanded.focused === 'statsPlayers', 'statistics players section is collapsed by default');
 verify(emptySharedStats.title === 'Статистика' && emptySharedStats.description.includes('усіх ведучих') && emptySharedStats.archiveTitle === 'Спільний архів ігор' && emptySharedStats.blackRate === '0%' && emptySharedStats.summaryCentered && emptySharedStats.technicalTermsAbsent && emptySharedStats.unifiedStates && emptySharedStats.emptyStates, 'empty shared statistics and unified states');
 verify(cameraControl.cameraInput && cameraControl.captureMode === 'environment' && cameraControl.vectorIcon && cameraControl.emojiAbsent && cameraControl.galleryInput && cameraControl.emailInputType === 'email' && cameraControl.emailHelp.includes('Google'), 'camera and player email controls');
 verify(presenceStatuses.googleCards === 2 && presenceStatuses.online === 1 && presenceStatuses.offline === 1 && presenceStatuses.manualPresenceAbsent && presenceStatuses.labels.includes('Онлайн') && presenceStatuses.labels.includes('Офлайн') && presenceStatuses.dots === 2, 'Google profile online and offline presence badges');
 verify(telegramImportAbsent.input && telegramImportAbsent.action && telegramImportAbsent.modal, 'Telegram import removed');
-verify(profile.cards === 13 && !profile.modalOpen && profile.pendingGoogleLink && lineupSelection.selected === 12 && lineupSelection.chips === 12 && lineupSelection.waitingChips === 2 && lineupSelection.status.includes('черга 2') && lineupSelection.positions.length === 12 && playersLayout.scrollWidth <= playersLayout.viewport && playersLayout.topActionHidden && playersLayout.searchActionHidden && playersLayout.textSeatingHidden && playersLayout.fabVisible && playersLayout.actionCount === 2 && playersLayout.fabSquare && playersLayout.addPlayerIcon && playersLayout.seatingIcon && playersLayout.addPlayerGold && playersLayout.seatingRed && playersLayout.fabCentered && playersLayout.fabAboveNavigation && JSON.stringify(playersLayout.labels) === JSON.stringify(['Додати гравця', 'До розсадки']) && playersCompactLayout.scrollWidth <= playersCompactLayout.viewport && playersCompactLayout.statusRight <= playersCompactLayout.viewport && playersCompactLayout.refreshWidth > 0 && playersCompactLayout.smallestQueueButton >= 44 && playersCompactLayout.fabLeft >= 0 && playersCompactLayout.fabRight <= playersCompactLayout.viewport, 'players layout, floating add and seating actions, and next-game queue');
+verify(profile.cards === 13 && !profile.modalOpen && profile.pendingGoogleLink && lineupSelection.selected === 12 && lineupSelection.chips === 12 && lineupSelection.waitingChips === 2 && lineupSelection.status.includes('черга 2') && lineupSelection.positions.length === 12 && playersLayout.scrollWidth <= playersLayout.viewport && playersLayout.topActionHidden && playersLayout.searchActionHidden && playersLayout.textSeatingHidden && playersLayout.fabVisible && playersLayout.actionCount === 2 && playersLayout.fabSquare && playersLayout.addPlayerIcon && playersLayout.seatingIcon && playersLayout.addPlayerGold && playersLayout.seatingRed && playersLayout.fabCentered && playersLayout.fabAboveNavigation && JSON.stringify(playersLayout.labels) === JSON.stringify(['Додати гравця', 'До розсадки']) && playersLayout.preferredName === 'Тестовий Нік' && playersLayout.clubInline && playersLayout.guestPlainText && playersLayout.cardActionCount === 3 && playersLayout.cardActionsSameRow && playersCompactLayout.scrollWidth <= playersCompactLayout.viewport && playersCompactLayout.statusRight <= playersCompactLayout.viewport && playersCompactLayout.refreshWidth > 0 && playersCompactLayout.smallestQueueButton >= 44 && playersCompactLayout.cardsInsideViewport && playersCompactLayout.actionRowsHorizontal && playersCompactLayout.fabLeft >= 0 && playersCompactLayout.fabRight <= playersCompactLayout.viewport, 'compact player identity, horizontal card actions, floating actions, and next-game queue');
 verify(playerStatsShortcut.settingsIcon && playerStatsShortcut.playerIcons >= 1 && personalStats.title === 'Smoke Нік' && personalStats.games === '1' && personalStats.history === 1 && personalStats.sentimentChoices === 2 && personalStats.emotions.length === 5 && personalStats.emotions.includes('Мозок закипів') && personalStats.emotions.includes('Цирк Enjoy') && personalStats.privacy.includes('тільки ви') && personalStats.threshold.includes('3 оцінок') && personalStats.scrollWidth <= 390 && personalFeedback.sentiment === 'true' && personalFeedback.emotion === 'true' && personalFeedback.saved.includes('анонімно') && personalFeedback.selected === 2, 'personal player history and anonymous two-part feedback');
 verify(setupPanelsDefault.setupGame.expanded === 'false' && setupPanelsDefault.setupGame.hidden && setupPanelsDefault.setupTimers.expanded === 'false' && setupPanelsDefault.setupTimers.hidden && setupPanelsDefault.setupRules.expanded === 'false' && setupPanelsDefault.setupRules.hidden && setupPanelsDefault.setupSeating.expanded === 'true' && !setupPanelsDefault.setupSeating.hidden && setupRulesLinks.expanded === 'true' && !setupRulesLinks.hidden && setupRulesLinks.count === 2 && setupRulesLinks.ukrainian?.includes('imafia.org/game-rules') && setupRulesLinks.international?.includes('fiim.world/fiim-rules') && setupRulesLinks.externalSafety && setupRulesLinks.arrowsAbsent && setupGameExpanded.expanded === 'true' && !setupGameExpanded.hidden && setupGameExpanded.focused === 'setupGame' && setupTimersCollapsed.expanded === 'false' && setupTimersCollapsed.hidden && setupSeatingCollapsed.expanded === 'false' && setupSeatingCollapsed.hidden, 'collapsible game setup panels');
 verify(setupPanelOrder.at(-2) === 'setupSeating' && setupPanelOrder.at(-1) === 'setupRules', 'rules follow seating');

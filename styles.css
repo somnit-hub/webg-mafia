@@ -373,7 +373,14 @@ img { display: block; max-width: 100%; }
 .back-chevron-icon { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
 .install-btn { flex: 0 0 40px; }
 .install-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: square; stroke-linejoin: miter; }
-.order-btn { flex: 0 0 40px; color: var(--gold); }
+.order-btn {
+  flex: 0 0 40px;
+  border-color: var(--primary-line);
+  color: var(--on-primary);
+  background: var(--primary-bg);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%);
+}
+.order-btn:hover, .order-btn:focus-visible { border-color: var(--danger); filter: brightness(1.08); }
 .order-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -805,8 +812,11 @@ img { display: block; max-width: 100%; }
 .panel-footer-actions { margin-top: 14px; }
 .setup-options { display: grid; grid-template-columns: 1fr; gap: 10px; }
 
-.reveal-page { min-height: calc(100dvh - var(--top-h) - var(--game-nav-h) - 16px); display: grid; place-items: center; }
-.reveal-card { width: min(520px, 100%); min-height: min(620px, calc(100dvh - var(--top-h) - var(--game-nav-h) - 26px)); padding: 18px; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 14px; text-align: left; overflow: hidden; }
+.reveal-page { min-height: calc(100dvh - var(--top-h) - var(--game-nav-h) - 16px); }
+.reveal-workspace { width: min(520px, 100%); margin-inline: auto; display: grid; gap: 8px; }
+.reveal-host-panel { min-width: 0; }
+.reveal-host-panel .moderator-panel { box-shadow: none; }
+.reveal-card { width: 100%; min-height: min(620px, calc(100dvh - var(--top-h) - var(--game-nav-h) - 102px)); padding: 18px; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 14px; text-align: left; overflow: hidden; }
 .reveal-progress { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 11px; border-bottom: 1px solid var(--line); }
 .reveal-progress > div { display: flex; align-items: center; gap: 3px; color: var(--muted); font-size: 13px; }
 .reveal-progress b { color: var(--gold); font-family: var(--font-numeric); font-size: 22px; font-weight: 950; }
@@ -1625,7 +1635,7 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
 
 .badge { border-radius: 4px; padding: 3px 7px; letter-spacing: .025em; }
 .avatar { border-radius: 8px; }
-.player-grid { gap: 8px; }
+.player-grid { gap: 5px 7px; }
 .player-card { min-width: 0; border-left: 3px solid var(--soft-line); border-radius: 3px 8px 8px 3px; box-shadow: none; }
 .player-card.cloud { border-left-color: var(--green); }
 .player-card h3 { font-size: 16px; letter-spacing: -.01em; }
@@ -1681,11 +1691,25 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   :root {
     --top-h: 60px;
     --nav-h: 72px;
-    --body-art-position: 26% bottom;
-    --body-art-size: auto 56%;
+    --body-art-position: 26% center;
+    --body-art-size: cover;
   }
-  :root[data-theme="light"] { --body-art-position: right bottom; }
-  :root[data-theme="cafe"] { --body-art-position: center bottom; --body-art-size: auto 62%; }
+  :root[data-theme="light"] { --body-art-position: right center; }
+  :root[data-theme="cafe"] { --body-art-position: center center; }
+  .bottom-nav:not(.game-nav) .nav-new-game {
+    margin: -2px 4px 1px;
+    border-radius: 10px;
+    color: var(--gold);
+    background: color-mix(in srgb, var(--gold) 9%, transparent);
+  }
+  .bottom-nav:not(.game-nav) .nav-new-game svg {
+    width: 30px;
+    height: 30px;
+    margin-top: -2px;
+    stroke-width: 2.25;
+  }
+  .bottom-nav:not(.game-nav) .nav-new-game span { font-size: 10.5px; font-weight: 900; }
+  .bottom-nav:not(.game-nav) .nav-new-game.active { background: color-mix(in srgb, var(--gold) 16%, transparent); }
   .btn, .btn.small { font-size: 15px; }
   .shell-header { padding-right: 10px; padding-left: 10px; }
   .header-actions { min-width: 0; gap: 5px; }
@@ -1735,7 +1759,8 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .directory-status { margin-bottom: 8px; grid-template-columns: auto minmax(0, 1fr) auto auto; padding: 9px 8px; }
   .directory-status .btn { min-height: 38px; padding: 6px 8px; font-size: 15px; }
   .search-row { min-width: 0; margin-bottom: 8px; }
-  .player-grid, .setup-grid { gap: 7px; }
+  .player-grid { gap: 4px; }
+  .setup-grid { gap: 7px; }
   .setup-seating-panel, .setup-rules-panel { margin-top: 8px; }
   .setup-page [data-panel="setupTimers"] .setup-options { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 7px; }
   .setup-page [data-panel="setupTimers"] .setup-options .field { min-width: 0; }
@@ -1768,7 +1793,7 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
 
   .game-page { padding: 7px 7px calc(var(--game-nav-h) + 10px + env(safe-area-inset-bottom)); }
   .reveal-page { padding-bottom: calc(var(--game-nav-h) + 10px + env(safe-area-inset-bottom)); }
-  .reveal-card.number-deal { min-height: min(620px, calc(100dvh - var(--top-h) - var(--game-nav-h) - 18px)); padding: 11px; gap: 8px; }
+  .reveal-card.number-deal { min-height: min(620px, calc(100dvh - var(--top-h) - var(--game-nav-h) - 94px)); padding: 11px; gap: 8px; }
   .number-deal .reveal-progress { padding-bottom: 7px; }
   .number-deal .reveal-player { grid-template-columns: 58px 48px minmax(0, 1fr); gap: 8px; }
   .number-deal .reveal-seat { width: 58px; height: 58px; }

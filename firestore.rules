@@ -16,6 +16,22 @@ service cloud.firestore {
         && request.auth.token.email_verified == true;
     }
 
+    function validPrivateActiveGame(uid, gameId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'ownerUid', 'gameUpdatedAt', 'stateJson', 'schemaVersion', 'updatedAt'
+        ])
+        && request.resource.data.id == gameId
+        && request.resource.data.ownerUid == uid
+        && request.resource.data.gameUpdatedAt is string
+        && request.resource.data.gameUpdatedAt.size() > 0
+        && request.resource.data.gameUpdatedAt.size() <= 40
+        && request.resource.data.stateJson is string
+        && request.resource.data.stateJson.size() > 0
+        && request.resource.data.stateJson.size() <= 700000
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.updatedAt is timestamp;
+    }
+
     function validMember(uid) {
       return request.resource.data.keys().hasOnly([
           'uid', 'communityId', 'displayName', 'nickname', 'club',
@@ -341,6 +357,12 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if signedIn()
         && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /privateUsers/{uid}/activeGames/{gameId} {
+      allow get, list: if owns(uid);
+      allow create, update: if owns(uid) && validPrivateActiveGame(uid, gameId);
+      allow delete: if owns(uid);
     }
   }
 }

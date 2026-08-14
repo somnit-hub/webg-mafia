@@ -24,10 +24,10 @@ import {
   stopPlayerLinks, upsertPlayerLink
 } from './player-links.js';
 import {
-  saveActiveCommunityGame, deleteActiveCommunityGame,
+  saveActiveCommunityGame, deleteActiveCommunityGame, saveActiveGameBackup, loadActiveGameBackup, deleteActiveGameBackup,
   saveFinishedCommunityGame, deleteFinishedCommunityGame,
   subscribeCommunityGames, stopCommunityGames
-} from './cloud-games.js?v=154';
+} from './cloud-games.js?v=155';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
   canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
@@ -203,6 +203,7 @@ let activeGamePublishPromise = null;
 let activeGamePublishRetryHandle = null;
 let profilePresenceHandle = null;
 const pendingActiveGames = new Map();
+const activeGameRecoveryAttempts = new Set();
 const presetAvatarDataUrls = new Map();
 
 const LOCAL_AUTH_TEST = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -513,6 +514,10 @@ function canManageGame(game) {
   if (storedForCurrentAccount) return true;
   const ownerUid = game?.cloudOwnerUid || game?.ownerUid || '';
   return Boolean(game) && (!ownerUid || ownerUid === app.authUser?.uid);
+}
+function ownsCloudGame(game) {
+  const ownerUid = game?.cloudOwnerUid || game?.ownerUid || '';
+  return Boolean(app.authUser?.uid && ownerUid === app.authUser.uid);
 }
 function seatByNo(number) { return app.game?.seats.find(seat => seat.number === Number(number)); }
 function aliveSeats() { return app.game?.seats.filter(seat => seat.status === 'alive') || []; }
@@ -825,9 +830,9 @@ function headerHtml() {
   const hasTrack = Boolean(app.media.trackName);
   const bluetoothLabel = 'Bluetooth і музика';
   const canInstall = ['native', 'ios-guide'].includes(currentPwaInstallMode());
-  const cancelableGame = app.game?.status === 'active' && !app.game.publicOnly && canManageGame(app.game)
+  const cancelableGame = app.game?.status === 'active' && canManageGame(app.game)
     ? app.game
-    : activeGames().find(game => !game.publicOnly && canManageGame(game));
+    : activeGames().find(game => canManageGame(game));
   const cancelGameButton = cancelableGame
     ? `<button class="icon-btn header-media-btn cancel-game-btn" type="button" data-action="cancel-active-game" data-id="${esc(cancelableGame.id)}" aria-label="Скасувати активну гру" title="Скасувати активну гру" aria-haspopup="dialog">${headerControlIcon('cancelGame')}</button>`
     : '';
@@ -865,7 +870,7 @@ function bottomNavHtml() {
     ['home', 'Огляд'], ['players', 'Гравці'], ['setup', 'Нова гра'], ['stats', 'Статистика'], ['settings', 'Ще']
   ];
   return `<nav class="bottom-nav" aria-label="Основна навігація">${items.map(([route, label]) => `
-    <a class="nav-item ${app.route === route ? 'active' : ''}" href="#${route}" ${app.route === route ? 'aria-current="page"' : ''}>${navIcon(route)}<span>${label}</span></a>`).join('')}</nav>`;
+    <a class="nav-item ${route === 'setup' ? 'nav-new-game' : ''} ${app.route === route ? 'active' : ''}" href="#${route}" ${app.route === route ? 'aria-current="page"' : ''}>${navIcon(route)}<span>${label}</span></a>`).join('')}</nav>`;
 }
 
 function helpIcon(text, label = 'Відкрити пояснення') {
@@ -1006,7 +1011,7 @@ function activeGamesPanel(active, refreshAction = false, collapsibleId = '') {
 }
 
 function activeGameRow(game) {
-  const resumable = canManageGame(game) && !game.publicOnly;
+  const resumable = canManageGame(game) && (!game.publicOnly || ownsCloudGame(game));
   const host = preferredGameHostName(game);
   const alive = game.seats.filter(seat => seat.status === 'alive').length;
   const gameId = esc(game.id);
@@ -1111,12 +1116,18 @@ function playerAvatarModalHtml() {
   </div></div>`;
 }
 
+function defaultGameTitle(date = new Date()) {
+  const gameDate = new Intl.DateTimeFormat('uk-UA', { day: '2-digit', month: '2-digit' }).format(date);
+  const gameTime = new Intl.DateTimeFormat('uk-UA', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
+  return `Мафія в Enjoy · ${gameDate} · ${gameTime}`;
+}
+
 function createDraft() {
   const selectedPlayers = app.nextGameQueue.length
     ? queuedPlayers().slice(0, TABLE_SIZE)
     : app.players.length >= TABLE_SIZE ? shuffled(app.players).slice(0, TABLE_SIZE) : [];
   return {
-    title: `Мафія в Enjoy · ${new Intl.DateTimeFormat('uk-UA', { day: '2-digit', month: '2-digit' }).format(new Date())}`,
+    title: defaultGameTitle(), autoTitle: true,
     venue: ENJOY_CAFE.venue, notes: '',
     settings: { ...app.settings },
     seats: draftSeatsForPlayers(selectedPlayers)
@@ -1340,12 +1351,15 @@ function revealView() {
     content = `<div class="reveal-privacy"><div class="reveal-privacy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg></div><h2>Екран бачить лише гравець №${seat.number}</h2><p>${numberDeal ? 'Карту вже визначено. Суддя відкриває роль лише перед відповідним гравцем.' : 'Після перегляду роль автоматично сховається перед передачею телефона наступному гравцеві.'}</p></div>`;
     actions = '<button class="btn primary wide game-lead-action" data-action="reveal-role">Показати мою роль</button>';
   }
-  return `<main class="page reveal-page"><section class="card reveal-card ${numberDeal ? 'number-deal' : ''} ${game.revealOpen ? 'role-open' : 'role-ready'}">
+  return `<main class="page reveal-page"><div class="reveal-workspace">
+    <aside class="reveal-host-panel">${moderatorSideHtml({ includeProtocol: false })}</aside>
+    <section class="card reveal-card ${numberDeal ? 'number-deal' : ''} ${game.revealOpen ? 'role-open' : 'role-ready'}">
     <div class="reveal-progress"><span class="eyebrow">Роздача ролей</span><div><b>${game.revealIndex + 1}</b><span> / ${game.seats.length}</span>${helpIcon('Браузер не може гарантовано заблокувати скриншоти. Показуйте роль так, щоб екран бачив лише відповідний гравець.', 'Безпека показу ролі')}</div></div>
     <div class="reveal-player"><div class="reveal-seat"><span>Місце</span><strong>${seat.number}</strong></div>${avatar(seat, 'reveal-avatar')}<div class="reveal-player-copy"><div class="eyebrow">${numberDeal ? 'Суддя працює з колодою' : 'Передайте телефон особисто'}</div><h1>${esc(seat.name)}</h1></div></div>
     <div class="reveal-content">${content}</div>
     <div class="reveal-actions">${actions}</div>
-  </section></main>`;
+    </section>
+  </div></main>`;
 }
 
 function missingGameView() {
@@ -1601,12 +1615,14 @@ function nightCheckPanel(kind) {
   return nightTargetPanel(actorRole, title, isDon ? 'Дон показує номер одного живого гравця.' : 'Шериф показує номер одного живого гравця.', selected, `<button class="btn danger wide game-lead-action" data-action="night-show-result" ${selected ? '' : 'disabled'}>Показати сигнал ведучого</button>`, steps, cue);
 }
 
-function moderatorSideHtml() {
+function moderatorSideHtml({ includeProtocol = true } = {}) {
   const game = app.game;
   const black = game.seats.filter(seat => teamOf(seat) === 'black');
   const moderatorControls = `<div class="actions moderator-actions"><button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати ролі' : 'Ролі'}</button><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button></div>${game.showSecrets ? `<div class="divider"></div><div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}<div class="divider"></div><button class="btn danger wide moderator-finish-game" data-action="end-game-manual">Завершити гру</button>`;
-  return `${collapsiblePanel('moderatorPanel', 'Панель ведучого', 'Ця панель містить приватну інформацію. Ролі початково приховані від випадкового погляду.', moderatorControls, 'moderator-panel')}
-    <section class="card card-pad moderator-protocol-panel"><div class="section-title section-heading"><div><h3>Протокол</h3><p>${game.history.length} подій</p></div></div><div class="quick-log">${game.history.slice(0, 25).map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('') || statePanel('empty', 'Подій ще немає', '', '', true)}</div></section>`;
+  const protocol = includeProtocol
+    ? `<section class="card card-pad moderator-protocol-panel"><div class="section-title section-heading"><div><h3>Протокол</h3><p>${game.history.length} подій</p></div></div><div class="quick-log">${game.history.slice(0, 25).map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('') || statePanel('empty', 'Подій ще немає', '', '', true)}</div></section>`
+    : '';
+  return `${collapsiblePanel('moderatorPanel', 'Панель ведучого', 'Ця панель містить приватну інформацію. Ролі початково приховані від випадкового погляду.', moderatorControls, 'moderator-panel')}${protocol}`;
 }
 
 function observerSideHtml() {
@@ -2115,9 +2131,13 @@ function createGameFromDraft() {
       restrictionDay: null, shortSpeechDay: null, eliminatedReason: ''
     };
   });
-  const timestamp = nowIso();
+  const startedAt = new Date();
+  const timestamp = startedAt.toISOString();
+  const title = app.draft.autoTitle !== false
+    ? defaultGameTitle(startedAt)
+    : app.draft.title.trim() || 'Гра в Мафію';
   return {
-    id: uid('game'), title: app.draft.title.trim() || 'Гра в Мафію', venue: app.draft.venue.trim(), notes: app.draft.notes.trim(),
+    id: uid('game'), title, venue: app.draft.venue.trim(), notes: app.draft.notes.trim(),
     ownerUid: app.authUser?.uid || '', hostName: String(app.hostProfile?.nickname || '').trim() || app.hostProfile?.displayName || app.authUser?.googleName || 'Ведучий',
     createdAt: timestamp, startedAt: timestamp, updatedAt: timestamp, endedAt: null,
     status: 'active', phase: 'reveal', subphase: '', day: 1, winner: null, durationSeconds: 0,
@@ -2160,7 +2180,10 @@ function queueActiveGamePublish(game) {
       const [gameId, pending] = pendingActiveGames.entries().next().value;
       pendingActiveGames.delete(gameId);
       try {
-        await saveActiveCommunityGame(app.authUser, app.hostProfile, pending);
+        await Promise.all([
+          saveActiveCommunityGame(app.authUser, app.hostProfile, pending),
+          saveActiveGameBackup(app.authUser, pending)
+        ]);
       } catch (error) {
         pendingActiveGames.set(gameId, pending);
         app.cloudArchive = { status: 'error', error: cloudArchiveError(error), fromCache: false };
@@ -2214,6 +2237,45 @@ async function saveGame({ broadcast = true } = {}) {
   mergeGameSources();
   if (broadcast) channel?.postMessage({ type: 'game', game: publicGame(app.game) });
   if (app.game.status === 'active') queueActiveGamePublish(app.game);
+}
+
+async function recoverOwnedActiveGame(publicGame, { force = false } = {}) {
+  if (!publicGame?.publicOnly || !ownsCloudGame(publicGame) || !app.authUser) return publicGame;
+  const existing = app.localGames.find(game => game.id === publicGame.id && !game.publicOnly);
+  if (existing) return existing;
+  const recoveryKey = `${publicGame.id}:${publicGame.updatedAt || ''}`;
+  if (!force && activeGameRecoveryAttempts.has(recoveryKey)) return null;
+  activeGameRecoveryAttempts.add(recoveryKey);
+  const backup = await loadActiveGameBackup(app.authUser, publicGame.id);
+  if (!backup) return null;
+  const recovered = normalizeGameState({
+    ...backup,
+    ownerUid: app.authUser.uid,
+    cloudOwnerUid: app.authUser.uid,
+    cloudHostName: publicGame.cloudHostName || backup.hostName || '',
+    shared: true,
+    source: 'private-backup'
+  }, DEFAULT_SETTINGS, { closeReveal: true });
+  delete recovered.publicOnly;
+  recovered.seats.forEach(seat => {
+    if (seat.avatar) return;
+    const player = seat.profileId ? playerById(seat.profileId) : null;
+    seat.avatar = player?.avatar || player?.avatarPreset || '';
+  });
+  const errors = gameStateErrors(recovered);
+  if (errors.length) throw new Error(`Приватну копію гри пошкоджено: ${errors[0]}`);
+  await putOne('games', recovered);
+  app.localGames = [...app.localGames.filter(game => game.id !== recovered.id), clone(recovered)];
+  mergeGameSources();
+  if (!app.game || app.game.id === recovered.id) app.game = recovered;
+  renderPassiveCloudUpdate();
+  return recovered;
+}
+
+function restoreOwnedActiveGames(games = app.cloudGames) {
+  games
+    .filter(game => game.status === 'active' && game.publicOnly && ownsCloudGame(game))
+    .forEach(game => { void recoverOwnedActiveGame(game).catch(() => {}); });
 }
 
 function addLog(text, secret = false) {
@@ -3025,6 +3087,7 @@ async function publishFinishedGame(game) {
   await flushActiveGamePublish(game.id);
   const saved = await saveFinishedCommunityGame(app.authUser, app.hostProfile, game);
   await deleteActiveCommunityGame(app.authUser, game.id);
+  await deleteActiveGameBackup(app.authUser, game.id);
   return saved;
 }
 
@@ -3055,10 +3118,11 @@ async function publishLocalActiveGamesNow() {
   }
   for (const game of candidates) {
     await flushActiveGamePublish(game.id);
-    await saveActiveCommunityGame(app.authUser, app.hostProfile, {
-      ...clone(game),
-      ownerUid: app.authUser.uid
-    });
+    const state = { ...clone(game), ownerUid: app.authUser.uid };
+    await Promise.all([
+      saveActiveCommunityGame(app.authUser, app.hostProfile, state),
+      saveActiveGameBackup(app.authUser, state)
+    ]);
   }
   return candidates.length;
 }
@@ -3099,6 +3163,7 @@ async function connectCloudArchive() {
     }
     app.cloudGames = games;
     mergeGameSources();
+    restoreOwnedActiveGames(games);
     const routed = routeFromHash();
     if (routed.id && ['observer', 'game'].includes(routed.route)) {
       const routedGame = gameById(routed.id);
@@ -3278,6 +3343,7 @@ async function cleanUpCanceledActiveGame(user, gameId) {
     await flushActiveGamePublish(gameId);
     if (!navigator.onLine) return;
     await deleteActiveCommunityGame(user, gameId);
+    await deleteActiveGameBackup(user, gameId);
     await forgetActiveGameDelete(gameId);
   } catch (error) {
     if (!retryableCloudDeleteError(error)) await forgetActiveGameDelete(gameId);
@@ -3769,6 +3835,7 @@ async function handleAction(action, element, sourceEvent) {
     if (new Set(selected).size !== selected.length) return toast('Один профіль не можна посадити двічі');
     const devicePreferences = { theme: app.settings.theme, sound: app.settings.sound, haptics: app.settings.haptics };
     app.game = createGameFromDraft(); app.settings = { ...app.game.settings, ...devicePreferences }; app.undo = [];
+    app.panelExpanded.moderatorPanel = false;
     await setSetting('appSettings', app.settings); await saveGame();
     const gameId = app.game.id;
     app.nextGameQueue = consumeSeatedPlayers(app.nextGameQueue, app.game.seats);
@@ -3779,8 +3846,12 @@ async function handleAction(action, element, sourceEvent) {
       if (!shared) toast('Гру створено локально · спільний перегляд з’явиться після відновлення синхронізації');
     });
   } else if (action === 'resume-game') {
-    const game = gameById(element.dataset.id);
-    if (!game || game.publicOnly || !canManageGame(game)) return toast('Цю гру може продовжити лише її ведучий на пристрої, де її створено');
+    let game = gameById(element.dataset.id);
+    if (game?.publicOnly && ownsCloudGame(game)) {
+      toast('Відновлюю приватний стан гри…');
+      game = await recoverOwnedActiveGame(game, { force: true });
+    }
+    if (!game || game.publicOnly || !canManageGame(game)) return toast('Приватну копію цієї гри не знайдено. Її можна скасувати й створити нову');
     app.game = normalizeGameState(game, DEFAULT_SETTINGS, { closeReveal: true }); app.undo = []; navigate(app.game.phase === 'reveal' ? 'reveal' : 'game');
   } else if (action === 'watch-game') {
     const game = gameById(element.dataset.id);
@@ -3806,12 +3877,14 @@ async function handleAction(action, element, sourceEvent) {
     const dealt = takeNumberRoleCard(app.game.roleDeal, chosenCard);
     seat.role = dealt.role;
     app.game.roleDeal = dealt.roleDeal;
+    app.panelExpanded.moderatorPanel = false;
     app.game.revealOpen = true;
     addLog(`Гравець №${seat.number} отримав карту №${dealt.cardNumber}: ${roleOf(seat)?.label}.`, true);
     await saveGame();
     render();
   } else if (action === 'reveal-role') {
     if (!roleOf(app.game?.seats?.[app.game.revealIndex])) return toast('Спочатку оберіть карту гравця');
+    app.panelExpanded.moderatorPanel = false;
     app.game.revealOpen = true; render();
   } else if (action === 'reveal-next') {
     if (!roleOf(app.game?.seats?.[app.game.revealIndex])) return toast('Роль цього гравця ще не визначена');
@@ -3934,7 +4007,7 @@ async function handleAction(action, element, sourceEvent) {
     await finishGame(action === 'finish-red' ? 'red' : action === 'finish-black' ? 'black' : 'draw');
   }
   else if (action === 'rematch') {
-    const previous = app.game; app.draft = createDraft(); app.draft.title = `${previous.title} · реванш`; app.draft.venue = previous.venue; app.draft.seats = previous.seats.map(seat => ({ number: seat.number, profileId: seat.profileId || '', name: seat.name, autoGuestName: false })); navigate('setup');
+    const previous = app.game; app.draft = createDraft(); app.draft.title = `${previous.title} · реванш`; app.draft.autoTitle = false; app.draft.venue = previous.venue; app.draft.seats = previous.seats.map(seat => ({ number: seat.number, profileId: seat.profileId || '', name: seat.name, autoGuestName: false })); navigate('setup');
   } else if (action === 'setting-sound' || action === 'setting-haptics') {
     const key = action === 'setting-sound' ? 'sound' : 'haptics'; app.settings[key] = !app.settings[key]; await setSetting('appSettings', app.settings); render();
   } else if (action === 'set-theme') {
@@ -3977,6 +4050,7 @@ async function handleInput(element) {
     search?.setSelectionRange(app.search.length, app.search.length);
   } else if (element.dataset.draft) {
     app.draft[element.dataset.draft] = element.value;
+    if (element.dataset.draft === 'title') app.draft.autoTitle = false;
   } else if (element.dataset.draftSetting) {
     const key = element.dataset.draftSetting;
     if (key === 'penaltyMode') app.draft.settings[key] = element.value === 'club' ? 'club' : 'tournament';
@@ -4091,6 +4165,7 @@ function clearAuthenticatedState() {
   cloudArchivePromise = null;
   cloudArchiveMigrationStarted = false;
   pendingActiveGames.clear();
+  activeGameRecoveryAttempts.clear();
   if (activeGamePublishRetryHandle) clearTimeout(activeGamePublishRetryHandle);
   activeGamePublishRetryHandle = null;
   activationPromise = null;

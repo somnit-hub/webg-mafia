@@ -23,6 +23,10 @@ function gameDeletionPath(sdk, database, gameId) {
   return sdk.doc(database, 'communities', COMMUNITY_ID, 'gameDeletions', gameId);
 }
 
+function activeGameBackupPath(sdk, database, userUid, gameId) {
+  return sdk.doc(database, 'privateUsers', userUid, 'activeGames', gameId);
+}
+
 function firestoreValue(value) {
   if (value === null || value === undefined) return { nullValue: null };
   if (typeof value === 'boolean') return { booleanValue: value };
@@ -152,6 +156,36 @@ export function createActiveGameDocument(user, profile, game) {
   };
 }
 
+export function createActiveGameBackupDocument(user, game) {
+  if (!user?.uid || game?.status !== 'active' || !ACTIVE_PHASES.has(game.phase)) {
+    throw new Error('До приватної копії можна додати лише активну гру ведучого');
+  }
+  const state = JSON.parse(JSON.stringify(game));
+  state.ownerUid = user.uid;
+  delete state.publicOnly;
+  delete state.shared;
+  delete state.source;
+  delete state.cloudOwnerUid;
+  delete state.cloudHostName;
+  state.seats = (state.seats || []).map(seat => ({
+    ...seat,
+    avatar: String(seat.avatar || '').startsWith('data:image/') ? '' : String(seat.avatar || '')
+  }));
+  let stateJson = JSON.stringify(state);
+  if (stateJson.length > 700000 && Array.isArray(state.history)) {
+    state.history = state.history.slice(0, 100);
+    stateJson = JSON.stringify(state);
+  }
+  if (stateJson.length > 700000) throw new Error('Приватна копія активної гри завелика');
+  return {
+    id: clean(game.id, 160),
+    ownerUid: user.uid,
+    gameUpdatedAt: clean(game.updatedAt || game.startedAt, 40),
+    stateJson,
+    schemaVersion: 1
+  };
+}
+
 export function createFinishedGameDocument(user, profile, game) {
   if (game?.status !== 'finished' || !['red', 'black', 'draw'].includes(game.winner)) {
     throw new Error('До спільного архіву можна додати лише завершену гру');
@@ -243,6 +277,38 @@ export async function saveActiveCommunityGame(user, profile, game) {
     game: createActiveGameDocument(user, profile, game)
   });
   return result.changed !== false;
+}
+
+export async function saveActiveGameBackup(user, game) {
+  const { database, sdk } = await getCommunityFirestore();
+  const fields = createActiveGameBackupDocument(user, game);
+  await sdk.setDoc(activeGameBackupPath(sdk, database, user.uid, fields.id), {
+    ...fields,
+    updatedAt: sdk.serverTimestamp()
+  });
+  return true;
+}
+
+export async function loadActiveGameBackup(user, gameId) {
+  if (!user?.uid) throw new Error('Спочатку увійдіть через Google');
+  const { database, sdk } = await getCommunityFirestore();
+  const cleanGameId = clean(gameId, 160);
+  const snapshot = await sdk.getDoc(activeGameBackupPath(sdk, database, user.uid, cleanGameId));
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data();
+  if (data.ownerUid !== user.uid || data.id !== cleanGameId || data.schemaVersion !== 1) return null;
+  try {
+    const game = JSON.parse(data.stateJson);
+    return game?.id === data.id && game?.status === 'active' ? game : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteActiveGameBackup(user, gameId) {
+  if (!user?.uid) return;
+  const { database, sdk } = await getCommunityFirestore();
+  await sdk.deleteDoc(activeGameBackupPath(sdk, database, user.uid, clean(gameId, 160)));
 }
 
 export async function deleteActiveCommunityGame(user, gameId) {

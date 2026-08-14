@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createActiveGameDocument, createFinishedGameDocument, encodeFirestoreFields, excludeDeletedGames } from '../src/cloud-games.js';
+import { createActiveGameBackupDocument, createActiveGameDocument, createFinishedGameDocument, encodeFirestoreFields, excludeDeletedGames } from '../src/cloud-games.js';
 
 function finishedGame() {
   return {
@@ -104,6 +104,23 @@ test('live game projection contains public state without roles or night targets'
   for (const privateField of ['notes', 'history', 'profileId', 'role', 'avatar', 'target', 'donCheck', 'sheriffCheck', 'settings']) {
     assert.equal(serialized.includes(`"${privateField}"`), false, `${privateField} must stay private`);
   }
+});
+
+test('private active-game backup preserves host state but strips embedded avatar data', () => {
+  const game = finishedGame();
+  game.status = 'active';
+  game.phase = 'day';
+  game.endedAt = null;
+  const document = createActiveGameBackupDocument({ uid: 'host_uid' }, game);
+  const state = JSON.parse(document.stateJson);
+
+  assert.equal(document.ownerUid, 'host_uid');
+  assert.equal(state.ownerUid, 'host_uid');
+  assert.equal(state.seats[0].role, 'sheriff');
+  assert.equal(state.night.sheriffCheck, 8);
+  assert.equal(state.history[0].secret, true);
+  assert.equal(state.seats.every(seat => seat.avatar === ''), true);
+  assert.equal('publicOnly' in state, false);
 });
 
 test('live game REST document preserves Firestore value types', () => {

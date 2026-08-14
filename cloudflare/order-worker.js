@@ -192,7 +192,7 @@ export function orderPayload(body = {}, menu = FALLBACK_MENU) {
   };
 }
 
-export function telegramOrderText(order, email = '') {
+export function telegramOrderText(order) {
   const lines = [
     '☕ <b>Нове замовлення · Enjoy Mafia</b>',
     `Напій: <b>${escapeHtml(order.label)}</b>`,
@@ -202,7 +202,6 @@ export function telegramOrderText(order, email = '') {
   if (order.options?.length) lines.splice(order.volumeMl ? 3 : 2, 0, `Додатково: ${order.options.map(option => escapeHtml(option.label)).join(', ')}`);
   if (order.priceUah !== null && order.priceUah !== undefined) lines.splice(-1, 0, `Сума: <b>${escapeHtml(order.priceUah)} грн</b>`);
   if (order.game) lines.push(`Гра: ${escapeHtml(order.game)}`);
-  if (email) lines.push(`Акаунт: ${escapeHtml(clean(email, 120))}`);
   return lines.join('\n');
 }
 
@@ -458,14 +457,14 @@ async function checkRateLimit(identity, env) {
   if (!response.ok) throw new Error('Rate limiter unavailable');
 }
 
-async function sendTelegram(order, identity, env) {
+async function sendTelegram(order, env) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.ORDER_TELEGRAM_CHAT_ID) throw new HttpError(503, 'Telegram-одержувача ще не підключено');
   const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       chat_id: env.ORDER_TELEGRAM_CHAT_ID,
-      text: telegramOrderText(order, identity.email),
+      text: telegramOrderText(order),
       parse_mode: 'HTML',
       disable_notification: false
     })
@@ -539,7 +538,7 @@ export async function handleRequest(request, env) {
     const body = await request.json().catch(() => { throw new HttpError(400, 'Некоректний запит'); });
     const order = orderPayload(body, await loadMenu(env));
     await checkRateLimit(identity, env);
-    await sendTelegram(order, identity, env);
+    await sendTelegram(order, env);
     return json(origin, 200, { ok: true, item: order.item, label: order.label });
   } catch (error) {
     const status = Number(error?.status) || 500;

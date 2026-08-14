@@ -42,8 +42,9 @@ test.afterEach(() => { globalThis.fetch = originalFetch; });
 test('order model accepts only menu drinks and escapes Telegram HTML', () => {
   const order = orderPayload({ item: 'cappuccino', sender: '<Host>', game: 'Гра & кава' });
   assert.equal(order.label, 'Капучино');
-  assert.match(telegramOrderText(order, 'host@example.com'), /&lt;Host&gt;/);
-  assert.match(telegramOrderText(order, 'host@example.com'), /Гра &amp; кава/);
+  assert.match(telegramOrderText(order), /&lt;Host&gt;/);
+  assert.match(telegramOrderText(order), /Гра &amp; кава/);
+  assert.doesNotMatch(telegramOrderText(order), /Акаунт:|host@example[.]com/);
   assert.throws(() => orderPayload({ item: 'unknown' }), /Невідома позиція/);
 });
 
@@ -100,7 +101,7 @@ test('authorized Firebase user can send a Telegram order', async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, item: 'latte', label: 'Лате' });
   assert.equal(telegramBody.chat_id, '123456');
-  assert.match(telegramBody.text, /host@example.com/);
+  assert.doesNotMatch(telegramBody.text, /Акаунт:|host@example[.]com/);
 });
 
 test('missing login and repeated order are rejected', async () => {

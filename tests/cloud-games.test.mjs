@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createActiveGameDocument, createFinishedGameDocument } from '../src/cloud-games.js';
+import { createActiveGameDocument, createFinishedGameDocument, encodeFirestoreFields } from '../src/cloud-games.js';
 
 function finishedGame() {
   return {
@@ -104,6 +104,18 @@ test('live game projection contains public state without roles or night targets'
   for (const privateField of ['notes', 'history', 'profileId', 'role', 'avatar', 'target', 'donCheck', 'sheriffCheck', 'settings']) {
     assert.equal(serialized.includes(`"${privateField}"`), false, `${privateField} must stay private`);
   }
+});
+
+test('live game REST document preserves Firestore value types', () => {
+  const fields = encodeFirestoreFields({
+    status: 'active', day: 2, running: false,
+    seats: [{ number: 1, name: 'Гравець', noVote: false }]
+  });
+  assert.equal(fields.status.stringValue, 'active');
+  assert.equal(fields.day.integerValue, '2');
+  assert.equal(fields.running.booleanValue, false);
+  assert.equal(fields.seats.arrayValue.values[0].mapValue.fields.number.integerValue, '1');
+  assert.equal(fields.seats.arrayValue.values[0].mapValue.fields.name.stringValue, 'Гравець');
 });
 
 test('finished games cannot enter the live list', () => {

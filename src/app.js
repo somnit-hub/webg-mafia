@@ -1037,7 +1037,7 @@ function playerCard(player) {
   return `<article class="card player-card ${isCloud ? 'cloud' : 'local'} ${isGoogleProfile ? 'google-profile' : ''}">
     ${avatar(player)}
     <div class="player-card-copy"><div class="player-name-line"><h3>${esc(preferredPlayerName(player))}</h3>${club ? `<span class="player-club">${esc(club)}</span>` : ''}</div>${description ? `<p>${esc(description)}</p>` : ''}<div class="player-stats">${profileKind}${presence}${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span></div></div>
-    <div class="player-card-actions"><button class="queue-player-btn ${queued ? 'selected' : ''}" data-action="toggle-next-player" data-id="${esc(player.id)}" aria-label="${queued ? `Прибрати ${esc(preferredPlayerName(player))} зі складу наступної гри` : `Додати ${esc(preferredPlayerName(player))} до наступної гри`}" aria-pressed="${queued}"><span aria-hidden="true">${queued ? '✓' : '+'}</span>${queued ? `<small>${queueIndex + 1}</small>` : ''}</button><button class="icon-btn player-stats-button" type="button" data-action="open-player-stats" data-id="${esc(player.id)}" aria-label="Статистика ${esc(preferredPlayerName(player))}" title="Персональна статистика">${playerStatsIcon()}</button>${editButton}</div>
+    <div class="player-card-actions"><button class="icon-btn player-stats-button" type="button" data-action="open-player-stats" data-id="${esc(player.id)}" aria-label="Статистика ${esc(preferredPlayerName(player))}" title="Персональна статистика">${playerStatsIcon()}</button>${editButton}<button class="queue-player-btn ${queued ? 'selected' : ''}" data-action="toggle-next-player" data-id="${esc(player.id)}" aria-label="${queued ? `Прибрати ${esc(preferredPlayerName(player))} зі складу наступної гри` : `Додати ${esc(preferredPlayerName(player))} до наступної гри`}" aria-pressed="${queued}"><span aria-hidden="true">${queued ? '✓' : '+'}</span>${queued ? `<small>${queueIndex + 1}</small>` : ''}</button></div>
   </article>`;
 }
 
@@ -2979,6 +2979,13 @@ async function connectCloudArchive() {
   }
 }
 
+async function reconnectCloudArchive() {
+  stopCommunityGames();
+  cloudArchivePromise = null;
+  cloudArchiveMigrationStarted = false;
+  return connectCloudArchive();
+}
+
 async function loadPersonalGameFeedback(playerId) {
   if (playerId !== `google_${app.authUser?.uid || ''}`) return;
   const history = personalPlayerStats(finishedGames(), playerId).history.slice(0, 25);
@@ -3400,8 +3407,7 @@ async function handleAction(action, element, sourceEvent) {
     await connectCloudDirectory({ hasLocalProfile: true });
   } else if (action === 'cloud-games-refresh') {
     app.gameFeedbackSummaries = {};
-    stopCommunityGames();
-    await connectCloudArchive();
+    await reconnectCloudArchive();
     syncLocalActiveGames();
   } else if (action === 'host-use-google-photo') {
     captureHostProfileDraft();
@@ -4041,7 +4047,7 @@ window.addEventListener('beforeinstallprompt', event => { event.preventDefault()
 window.addEventListener('online', () => {
   toast('Інтернет-з’єднання відновлено');
   if (app.authUser && app.cloudDirectory.status === 'error') connectCloudDirectory({ hasLocalProfile: true });
-  if (app.authUser && ['error', 'offline'].includes(app.cloudArchive.status)) connectCloudArchive();
+  if (app.authUser && ['error', 'offline'].includes(app.cloudArchive.status)) reconnectCloudArchive();
   if (app.authUser) syncLocalActiveGames();
   if (app.authUser) syncSharedManualPlayers().catch(() => {});
   if (app.authUser) connectPlayerLinks().catch(() => {});

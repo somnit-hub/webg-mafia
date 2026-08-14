@@ -250,7 +250,7 @@ function firestoreValue(field) {
   return null;
 }
 
-async function requireFinishedGameParticipant(gameId, idToken, identity, env) {
+async function requireFinishedGame(gameId, idToken, env) {
   const cleanGameId = clean(gameId, 160);
   if (!cleanGameId) throw new HttpError(400, 'Гру не знайдено');
   const projectId = clean(env.FIREBASE_PROJECT_ID, 120);
@@ -262,11 +262,16 @@ async function requireFinishedGameParticipant(gameId, idToken, identity, env) {
   if (!response.ok) throw new HttpError(response.status === 403 ? 403 : 502, 'Не вдалося перевірити участь у грі');
   const game = Object.fromEntries(Object.entries(document.fields || {}).map(([key, value]) => [key, firestoreValue(value)]));
   if (game.status !== 'finished') throw new HttpError(409, 'Оцінити можна лише завершену гру');
+  return { gameId: cleanGameId, game };
+}
+
+async function requireFinishedGameParticipant(gameId, idToken, identity, env) {
+  const finished = await requireFinishedGame(gameId, idToken, env);
   const profileId = `google_${identity.uid}`;
-  if (!(game.seats || []).some(seat => seat?.profileId === profileId)) {
+  if (!(finished.game.seats || []).some(seat => seat?.profileId === profileId)) {
     throw new HttpError(403, 'Оцінювати гру можуть лише її учасники');
   }
-  return cleanGameId;
+  return finished.gameId;
 }
 
 function feedbackVote(body = {}) {
@@ -284,6 +289,13 @@ async function feedbackStore(gameId, identity, env, vote = null) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ uid: identity.uid, vote })
   } : { method: 'GET' });
+  if (!response.ok) throw new Error('Feedback store unavailable');
+  return response.json();
+}
+
+async function feedbackSummaryStore(gameId, env) {
+  const id = env.GAME_FEEDBACK.idFromName(gameId);
+  const response = await env.GAME_FEEDBACK.get(id).fetch('https://game-feedback.internal/summary');
   if (!response.ok) throw new Error('Feedback store unavailable');
   return response.json();
 }
@@ -329,16 +341,25 @@ export async function handleRequest(request, env) {
     if (request.method !== 'GET') return json(origin, 405, { error: 'Потрібен GET-запит' });
     return json(origin, 200, await loadMenu(env), 'public,max-age=60,s-maxage=300,stale-while-revalidate=3600');
   }
-  if (!['/orders', '/ratings', '/ratings/batch'].includes(url.pathname)) return json(origin, 404, { error: 'Маршрут не знайдено' });
+  if (!['/orders', '/ratings', '/ratings/batch', '/ratings/summary/batch'].includes(url.pathname)) return json(origin, 404, { error: 'Маршрут не знайдено' });
   if (url.pathname === '/orders' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
   if (url.pathname === '/ratings' && !['GET', 'POST'].includes(request.method)) return json(origin, 405, { error: 'Метод не підтримується' });
   if (url.pathname === '/ratings/batch' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
+  if (url.pathname === '/ratings/summary/batch' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
   if (Number(request.headers.get('Content-Length') || 0) > 4096) return json(origin, 413, { error: 'Запит завеликий' });
 
   try {
     const match = (request.headers.get('Authorization') || '').match(/^Bearer\s+(.+)$/i);
     if (!match) throw new HttpError(401, 'Потрібен Google-вхід');
     const identity = await firebaseIdentity(match[1], env);
+    if (url.pathname === '/ratings/summary/batch') {
+      const body = await request.json().catch(() => { throw new HttpError(400, 'Некоректний запит'); });
+      const requestedIds = Array.isArray(body.gameIds) ? [...new Set(body.gameIds.map(value => clean(value, 160)).filter(Boolean))] : [];
+      if (!requestedIds.length || requestedIds.length > 25) throw new HttpError(400, 'За один раз можна перевірити від 1 до 25 ігор');
+      const games = await Promise.all(requestedIds.map(gameId => requireFinishedGame(gameId, match[1], env)));
+      const results = await Promise.all(games.map(({ gameId }) => feedbackSummaryStore(gameId, env)));
+      return json(origin, 200, { summaries: Object.fromEntries(games.map(({ gameId }, index) => [gameId, results[index].summary])) });
+    }
     if (url.pathname === '/ratings/batch') {
       const body = await request.json().catch(() => { throw new HttpError(400, 'Некоректний запит'); });
       const requestedIds = Array.isArray(body.gameIds) ? [...new Set(body.gameIds.map(value => clean(value, 160)).filter(Boolean))] : [];
@@ -403,11 +424,13 @@ export class GameFeedbackStore {
 
   async fetch(request) {
     if (!['GET', 'POST'].includes(request.method)) return new Response(null, { status: 405 });
+    const summaryOnly = new URL(request.url).pathname === '/summary';
     const payload = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
     const uid = payload.uid || new URL(request.url).searchParams.get('uid');
     const vote = payload.vote;
-    if (!uid) return new Response(null, { status: 400 });
-    const key = await privateFeedbackKey(uid);
+    if (!uid && !summaryOnly) return new Response(null, { status: 400 });
+    if (summaryOnly && request.method !== 'GET') return new Response(null, { status: 405 });
+    const key = uid ? await privateFeedbackKey(uid) : '';
     if (request.method === 'POST') {
       await this.state.storage.put(key, {
         sentiment: ['up', 'down'].includes(vote?.sentiment) ? vote.sentiment : '',
@@ -415,7 +438,7 @@ export class GameFeedbackStore {
         updatedAt: new Date().toISOString()
       });
     }
-    const mine = await this.state.storage.get(key) || { sentiment: '', emotion: '' };
+    const mine = key ? await this.state.storage.get(key) || { sentiment: '', emotion: '' } : null;
     const stored = await this.state.storage.list({ prefix: 'vote:' });
     const votes = [...stored.values()];
     const sentiment = { up: 0, down: 0 };
@@ -425,14 +448,15 @@ export class GameFeedbackStore {
       if (item?.emotion in emotions) emotions[item.emotion] += 1;
     });
     const total = votes.filter(item => item?.sentiment || item?.emotion).length;
-    return Response.json({
-      mine: { sentiment: mine.sentiment || '', emotion: mine.emotion || '' },
-      summary: {
+    const summary = {
         visible: total >= 3,
         total,
         sentiment: total >= 3 ? sentiment : { up: 0, down: 0 },
         emotions: total >= 3 ? emotions : { ...EMPTY_EMOTIONS }
-      }
+    };
+    return Response.json(summaryOnly ? { summary } : {
+      mine: { sentiment: mine.sentiment || '', emotion: mine.emotion || '' },
+      summary
     });
   }
 }

@@ -1309,6 +1309,9 @@ await wait(150);
 const finishedSharedStats = await evaluate(`({
   games: document.querySelector('.stat-card b')?.textContent,
   archivedGames: document.querySelectorAll('[data-action="view-protocol"]').length,
+  feedbackCards: document.querySelectorAll('[data-archive-feedback]').length,
+  anonymousFeedback: document.querySelector('[data-archive-feedback]')?.textContent,
+  feedbackContainsIdentity: /test\.host@example\.com|Smoke Нік/.test(document.querySelector('[data-archive-feedback]')?.textContent || ''),
   manageableGames: document.querySelectorAll('[data-action="delete-game"]').length,
   protocolActionsFill: (() => {
     const row = document.querySelector('.archive-game-actions');
@@ -1549,7 +1552,7 @@ verify(sheriffBlackSignal.source.endsWith('/mafia.webp') && sheriffBlackSignal.l
 verify(sheriffRedSignal.source.endsWith('/citizen.webp') && sheriffRedSignal.label === 'ЧЕРВОНИЙ' && sheriffRedSignal.instruction.includes('палець угору'), 'Sheriff red signal');
 verify(nightResultAnnouncement.title === 'У місті триває ніч' && nightResultAnnouncement.cue.includes('У місті триває ніч') && !nightResultAnnouncement.cue.includes('ранок') && nightResultAnnouncement.action === 'Зафіксувати вибуття', 'night result is announced before morning');
 verify(bestMoveLayout.phase === 'Кращий хід' && bestMoveLayout.timer === '00:20' && bestMoveLayout.candidates === 10 && bestMoveLayout.unavailable === 1 && bestMoveLayout.selected === 0 && bestMoveLayout.cue.includes('трійку чорних') && bestMoveLayout.insideViewport && bestMoveLayout.scrollWidth <= 390 && bestMoveFarewell.phase === 'Останнє слово' && bestMoveFarewell.timer === '01:00' && bestMoveFarewell.player.includes('№1') && bestMoveFarewell.cue.includes('У місті ранок') && afterBestMove.phase === 'День 2' && afterBestMove.logged, 'first-night Best Move, morning and farewell flow');
-verify(finishedSharedStats.games === '1' && finishedSharedStats.archivedGames === 1 && finishedSharedStats.manageableGames === 1 && finishedSharedStats.protocolActionsFill && finishedSharedStats.leaderboardRows > 0 && finishedSharedStats.status.includes('Активні й завершені') && finishedSharedStats.hostUsesNickname && finishedSharedStats.hostDisplayNameHidden, 'finished shared statistics, archive actions and host nickname');
+verify(finishedSharedStats.games === '1' && finishedSharedStats.archivedGames === 1 && finishedSharedStats.feedbackCards === finishedSharedStats.archivedGames && finishedSharedStats.anonymousFeedback.includes('Анонімна оцінка') && finishedSharedStats.anonymousFeedback.includes('3') && !finishedSharedStats.feedbackContainsIdentity && finishedSharedStats.manageableGames === 1 && finishedSharedStats.protocolActionsFill && finishedSharedStats.leaderboardRows > 0 && finishedSharedStats.status.includes('Активні й завершені') && finishedSharedStats.hostUsesNickname && finishedSharedStats.hostDisplayNameHidden, 'finished shared statistics, anonymous feedback, archive actions and host nickname');
 verify(protocolModal.focused && protocolModal.scrollTop === 0 && protocolModal.top >= 6 && protocolModal.top <= 8 && protocolModal.left === 6 && protocolModal.rightGap === 6 && protocolModal.bottomWithinViewport && protocolModal.borders.every(width => parseFloat(width) >= 1) && protocolModal.backdropAlign === 'start' && protocolModal.logScrollable, 'top-anchored bounded protocol modal');
 verify(queueAfterGame.selected === 2 && queueAfterGame.status.includes('2/10') && queueAfterGame.positions.join(',') === '1,2', 'waiting players carry into the next game');
 socket.close();

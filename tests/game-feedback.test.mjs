@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { GAME_EMOTIONS, loadGameFeedback, loadGameFeedbackBatch, personalPlayerStats, saveGameFeedback } from '../src/game-feedback.js';
+import { GAME_EMOTIONS, loadGameFeedback, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback } from '../src/game-feedback.js';
 
 const games = [{
   id: 'g2', status: 'finished', winner: 'black', endedAt: '2026-08-13T20:00:00.000Z',
@@ -37,4 +37,8 @@ test('local feedback mode preserves the current private choice', async () => {
   const batch = await loadGameFeedbackBatch({ gameIds: ['g1', 'g2'], testMode: true });
   assert.deepEqual(batch.g1.mine, saved.mine);
   assert.deepEqual(batch.g2.mine, { sentiment: '', emotion: '' });
+  const summaries = await loadGameFeedbackSummaryBatch({ gameIds: ['g1', 'g2'], testMode: true });
+  assert.equal(summaries.g1.total, 1);
+  assert.equal(summaries.g1.visible, false);
+  assert.equal('mine' in summaries.g1, false);
 });

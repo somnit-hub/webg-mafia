@@ -665,10 +665,23 @@ Object.assign(COPY.fr, {
   'Коли ведучий почне гру, тут з’явиться кнопка «Спостерігати».': 'Lorsque l’animateur démarre une partie, le bouton «Regarder» apparaît ici.'
 });
 
+Object.assign(COPY.it, {
+  'Анонімна оцінка': 'Valutazione anonima', 'сподобалась': 'piaciuta', 'не сподобалась': 'non piaciuta',
+  'Завантажуємо анонімні оцінки…': 'Caricamento delle valutazioni anonime…', 'Оцінки тимчасово недоступні': 'Valutazioni temporaneamente non disponibili'
+});
+Object.assign(COPY.en, {
+  'Анонімна оцінка': 'Anonymous rating', 'сподобалась': 'liked it', 'не сподобалась': 'did not like it',
+  'Завантажуємо анонімні оцінки…': 'Loading anonymous ratings…', 'Оцінки тимчасово недоступні': 'Ratings are temporarily unavailable'
+});
+Object.assign(COPY.fr, {
+  'Анонімна оцінка': 'Évaluation anonyme', 'сподобалась': 'aimée', 'не сподобалась': 'pas aimée',
+  'Завантажуємо анонімні оцінки…': 'Chargement des évaluations anonymes…', 'Оцінки тимчасово недоступні': 'Évaluations temporairement indisponibles'
+});
+
 const PATTERNS = {
-  it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+)% перемог/g, '$1% vittorie'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
-  en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+)% перемог/g, '$1% wins'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],
-  fr: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 parties'], [/(\d+)% перемог/g, '$1 % de victoires'], [/тимчасових (\d+)/g, '$1 temporaires'], [/черга (\d+)/g, 'file $1'], [/ · ведучий /g, ' · animateur '], [/(\d+) гравців за столом/g, '$1 joueurs à table'], [/(\d+)\/10 живих/g, '$1/10 en vie'], [/Екран бачить лише гравець №(\d+)/g, 'Seul le joueur n°$1 voit l’écran'], [/Змінити аватар/g, 'Changer l’avatar']]
+  it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+) оцінок/g, '$1 valutazioni'], [/(\d+)% перемог/g, '$1% vittorie'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
+  en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+) оцінок/g, '$1 ratings'], [/(\d+)% перемог/g, '$1% wins'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],
+  fr: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 parties'], [/(\d+) оцінок/g, '$1 évaluations'], [/(\d+)% перемог/g, '$1 % de victoires'], [/тимчасових (\d+)/g, '$1 temporaires'], [/черга (\d+)/g, 'file $1'], [/ · ведучий /g, ' · animateur '], [/(\d+) гравців за столом/g, '$1 joueurs à table'], [/(\d+)\/10 живих/g, '$1/10 en vie'], [/Екран бачить лише гравець №(\d+)/g, 'Seul le joueur n°$1 voit l’écran'], [/Змінити аватар/g, 'Changer l’avatar']]
 };
 
 export function normalizeLanguage(value) {

@@ -675,6 +675,33 @@ img { display: block; max-width: 100%; }
 .feedback-status, .feedback-threshold { margin: 7px 0 0 !important; color: var(--muted); font-size: 10px; line-height: 1.35; }
 .feedback-summary { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
 .feedback-summary span { padding: 4px 7px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-2); font-size: 11px; font-weight: 800; }
+.archive-games-list { gap: 10px; }
+.archive-game-entry { min-width: 0; padding-bottom: 10px; border-bottom: 1px solid var(--list-line); }
+.archive-game-entry:last-child { padding-bottom: 0; border-bottom: 0; }
+.archive-game-entry > .list-row { padding-top: 6px; }
+.archive-feedback { min-width: 0; margin: 0 0 9px; padding: 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--row-bg); }
+.archive-feedback.is-loading, .archive-feedback.is-error, .archive-feedback.is-private { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; }
+.archive-feedback.is-error { border-left: 3px solid var(--danger); }
+.archive-feedback-icon { width: 25px; height: 25px; flex: 0 0 25px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--gold); font-weight: 900; }
+.archive-feedback.is-private > span:last-child { min-width: 0; display: grid; gap: 2px; }
+.archive-feedback.is-private b { color: var(--text); font-size: 12px; }
+.archive-feedback.is-private small { color: var(--muted); font-size: 10px; }
+.archive-feedback-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.archive-feedback-heading > span:first-child { min-width: 0; display: grid; gap: 2px; }
+.archive-feedback-heading > span:first-child b { font-size: 12px; }
+.archive-feedback-heading > span:first-child small { color: var(--muted); font-size: 10px; }
+.archive-sentiments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.archive-sentiments > span { min-width: 0; padding: 5px 7px; border: 1px solid var(--line); border-radius: 4px; display: flex; align-items: center; gap: 4px; background: var(--surface-2); font-size: 13px; }
+.archive-sentiments small { color: var(--muted); font-size: 9px; }
+.archive-sentiments .positive { border-left: 2px solid var(--green); }
+.archive-sentiments .negative { border-left: 2px solid var(--danger); }
+.archive-emotions { margin-top: 7px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+.archive-emotions > span { min-width: 0; min-height: 44px; padding: 4px 2px; border: 1px solid var(--line); border-radius: 4px; display: grid; grid-template-columns: auto auto; place-content: center; align-items: center; gap: 3px; background: var(--surface-2); }
+.archive-emotions i { font-style: normal; font-size: 19px; line-height: 1; }
+.archive-emotions b { font-size: 12px; }
+.archive-emotions small { grid-column: 1 / -1; overflow: hidden; color: var(--muted); font-size: 7px; line-height: 1.1; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.archive-emotions .is-zero { opacity: .42; }
+.archive-game-actions { margin-top: 0; }
 .personal-protocol-button { width: 100%; margin-top: 9px; }
 .language-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .language-choice { min-width: 0; min-height: 58px; padding: 9px; border: 1px solid var(--line); border-radius: 7px; display: grid; place-items: center; color: var(--text); background: var(--control-bg); cursor: pointer; }
@@ -1480,6 +1507,20 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
 .icon-btn { border-radius: 5px; background: var(--control-bg); }
 
 .input, .select, .textarea { min-height: 48px; border-radius: 5px; padding: 11px 12px; background: var(--field-bg); font-size: 16px; }
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 40px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) calc(50% + 1px),
+    calc(100% - 15px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.setup-deal-action .select { padding-right: 34px; }
 .field > label, .field-label { color: var(--muted); letter-spacing: .065em; }
 .toggle-row, .theme-choice { border-radius: 6px; }
 .switch { border-radius: 5px; }

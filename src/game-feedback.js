@@ -108,6 +108,20 @@ export async function loadGameFeedbackBatch({ idToken, gameIds = [], testMode = 
   return result.ratings || {};
 }
 
+export async function loadGameFeedbackSummaryBatch({ idToken, gameIds = [], testMode = false }) {
+  const ids = [...new Set(gameIds.map(feedbackKey).filter(Boolean))].slice(0, 25);
+  if (testMode) return Object.fromEntries(ids.map(gameId => [gameId, localResult(gameId).summary]));
+  if (!idToken) throw new Error('Для перегляду оцінок потрібен Google-вхід');
+  const response = await fetch(`${FEEDBACK_ENDPOINT}/summary/batch`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gameIds: ids })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || 'Не вдалося завантажити анонімні оцінки ігор');
+  return result.summaries || {};
+}
+
 export function saveGameFeedback(options) {
   return feedbackRequest({ ...options, method: 'POST' });
 }

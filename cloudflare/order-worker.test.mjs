@@ -179,6 +179,35 @@ test('feedback history loads in one authenticated batch', async () => {
   assert.equal(gameRequests, 2);
 });
 
+test('signed-in users can load anonymous summaries for finished games without participant identities', async () => {
+  let identityRequests = 0;
+  let gameRequests = 0;
+  const aggregate = {
+    visible: true,
+    total: 4,
+    sentiment: { up: 3, down: 1 },
+    emotions: { brain: 1, oscar: 0, fire: 2, circus: 1, dead: 0 }
+  };
+  globalThis.fetch = async url => {
+    if (String(url).includes('identitytoolkit.googleapis.com')) {
+      identityRequests += 1;
+      return Response.json({ users: [{ localId: 'viewer-1', email: 'viewer@example.com', emailVerified: true }] });
+    }
+    gameRequests += 1;
+    return Response.json(firestoreGame('google_someone-else'));
+  };
+  const response = await handleRequest(
+    request('/ratings/summary/batch', { body: { gameIds: ['game-1'] } }),
+    environment({ feedbackResult: { summary: aggregate } })
+  );
+  const result = await response.json();
+  assert.equal(response.status, 200);
+  assert.deepEqual(result.summaries['game-1'], aggregate);
+  assert.equal(JSON.stringify(result).includes('mine'), false);
+  assert.equal(identityRequests, 1);
+  assert.equal(gameRequests, 1);
+});
+
 test('feedback aggregate stays hidden until three private votes', async () => {
   const values = new Map();
   const store = new GameFeedbackStore({
@@ -203,4 +232,7 @@ test('feedback aggregate stays hidden until three private votes', async () => {
   assert.equal(result.summary.emotions.fire, 2);
   assert.equal(result.summary.emotions.circus, 1);
   assert.equal([...values.keys()].some(key => key.includes('u1')), false);
+  const anonymous = await (await store.fetch(new Request('https://feedback.internal/summary'))).json();
+  assert.deepEqual(anonymous.summary, result.summary);
+  assert.equal('mine' in anonymous, false);
 });

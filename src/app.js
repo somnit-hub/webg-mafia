@@ -41,7 +41,7 @@ import { pickFunnyGuestNames } from './guest-names.js';
 import { LANGUAGES, applyLanguage, languageLocale, localizeDom, normalizeLanguage } from './i18n.js';
 import { DEFAULT_ORDER_MENU, loadOrderMenu, sendTelegramOrder } from './order-service.js';
 import {
-  GAME_EMOTIONS, loadGameFeedbackBatch, personalPlayerStats, saveGameFeedback
+  GAME_EMOTIONS, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
 
 const ROLE_DECK = [
@@ -163,6 +163,7 @@ let app = {
   orderMenu: DEFAULT_ORDER_MENU,
   profilePhotoSync: { status: 'idle' },
   gameFeedback: {},
+  gameFeedbackSummaries: {},
   pendingActiveGameDeletes: [],
   bluetooth: {
     supported: 'bluetooth' in navigator,
@@ -1151,8 +1152,28 @@ function statsView() {
       ${collapsiblePanel('statsRoles', 'Результативність ролей', 'Показано частку перемог команди гравця для кожної ролі.', `<div class="bar-chart">${roles.map(role => `<div class="bar-row"><span>${esc(role.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${role.rate}%"></div></div><span class="bar-value">${role.rate}%</span></div>`).join('')}</div>`)}
       ${collapsiblePanel('statsPlayers', 'Гравці', 'Рейтинг упорядковано за кількістю перемог.', leaderboard.length ? `<div class="list">${leaderboard.map((row, index) => `<div class="list-row"><div style="display:flex;align-items:center;gap:9px"><b class="muted">${index + 1}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог</span></div></div><b>${row.wins}</b></div>`).join('')}</div>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.'))}
     </div>
-    <section class="card card-pad"><div class="section-title section-heading">${titleHelp('h2', 'Спільний архів ігор', 'Протоколи синхронізуються між пристроями та кешуються для офлайн-перегляду.')}</div>${games.length ? `<div class="list">${games.map(game => `${gameRow(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div>`).join('')}</div>` : statePanel('empty', 'Архів ігор порожній', 'Завершені ігри з’являться тут автоматично.')}</section>
+    <section class="card card-pad"><div class="section-title section-heading">${titleHelp('h2', 'Спільний архів ігор', 'Протоколи та анонімні оцінки синхронізуються між пристроями. Розподіл відповідей відкривається після трьох оцінок.')}</div>${games.length ? `<div class="list archive-games-list">${games.map(game => `<article class="archive-game-entry">${gameRow(game)}${archiveGameFeedbackHtml(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div></article>`).join('')}</div>` : statePanel('empty', 'Архів ігор порожній', 'Завершені ігри з’являться тут автоматично.')}</section>
   </main>`;
+}
+
+function archiveGameFeedbackHtml(game) {
+  const state = app.gameFeedbackSummaries[game.id];
+  if (!state || state.status === 'loading') {
+    return `<div class="archive-feedback is-loading" data-archive-feedback="${esc(game.id)}"><span class="archive-feedback-icon" aria-hidden="true">◌</span><span>Завантажуємо анонімні оцінки…</span></div>`;
+  }
+  if (state.status === 'error') {
+    return `<div class="archive-feedback is-error" data-archive-feedback="${esc(game.id)}"><span class="archive-feedback-icon" aria-hidden="true">!</span><span>Оцінки тимчасово недоступні</span></div>`;
+  }
+  const summary = state.summary || {};
+  const total = Number(summary.total || 0);
+  if (!summary.visible) {
+    return `<div class="archive-feedback is-private" data-archive-feedback="${esc(game.id)}"><span class="archive-feedback-icon" aria-hidden="true">🔒</span><span><b>Анонімна оцінка</b><small>Зведення відкриється після 3 оцінок · ${Math.min(total, 3)}/3</small></span></div>`;
+  }
+  const emotions = GAME_EMOTIONS.map(item => ({ ...item, count: Number(summary.emotions?.[item.key] || 0) }));
+  return `<div class="archive-feedback is-visible" data-archive-feedback="${esc(game.id)}">
+    <div class="archive-feedback-heading"><span><b>Анонімна оцінка</b><small>${total} оцінок</small></span><div class="archive-sentiments" aria-label="Сподобалась або не сподобалась"><span class="positive">👍 <b>${Number(summary.sentiment?.up || 0)}</b><small>сподобалась</small></span><span class="negative">👎 <b>${Number(summary.sentiment?.down || 0)}</b><small>не сподобалась</small></span></div></div>
+    <div class="archive-emotions" aria-label="Емоції гри">${emotions.map(item => `<span class="${item.count ? '' : 'is-zero'}" title="${esc(item.label)}"><i aria-hidden="true">${item.icon}</i><b>${item.count}</b><small>${esc(item.label)}</small></span>`).join('')}</div>
+  </div>`;
 }
 
 function settingsView() {
@@ -1570,10 +1591,8 @@ function feedbackSummaryHtml(feedback) {
   if (!summary.visible) {
     return `<p class="feedback-threshold">🔒 Анонімне зведення відкриється після 3 оцінок · ${Math.min(summary.total || 0, 3)}/3</p>`;
   }
-  const leadingEmotion = GAME_EMOTIONS
-    .map(item => ({ ...item, count: Number(summary.emotions?.[item.key] || 0) }))
-    .sort((left, right) => right.count - left.count)[0];
-  return `<div class="feedback-summary" aria-label="Анонімне зведення оцінок"><span>👍 ${Number(summary.sentiment?.up || 0)}</span><span>👎 ${Number(summary.sentiment?.down || 0)}</span>${leadingEmotion?.count ? `<span>${leadingEmotion.icon} ${leadingEmotion.count}</span>` : ''}</div>`;
+  const emotions = GAME_EMOTIONS.map(item => ({ ...item, count: Number(summary.emotions?.[item.key] || 0) }));
+  return `<div class="feedback-summary" aria-label="Анонімне зведення оцінок"><span>👍 ${Number(summary.sentiment?.up || 0)}</span><span>👎 ${Number(summary.sentiment?.down || 0)}</span>${emotions.filter(item => item.count).map(item => `<span title="${esc(item.label)}">${item.icon} ${item.count}</span>`).join('')}</div>`;
 }
 
 function gameFeedbackControls(game, state) {
@@ -2895,6 +2914,7 @@ async function connectCloudArchive() {
       fromCache: metadata.fromCache
     };
     render();
+    if (app.route === 'stats') void loadStatsGameFeedback(games.filter(game => game.status === 'finished'));
     if (!cloudArchiveMigrationStarted) {
       cloudArchiveMigrationStarted = true;
       syncLocalActiveGames();
@@ -2945,6 +2965,36 @@ async function loadPersonalGameFeedback(playerId) {
   if (app.modal?.type === 'player-stats' && app.modal.playerId === playerId) render();
 }
 
+async function loadStatsGameFeedback(games = finishedGames()) {
+  if (!app.authUser || app.route !== 'stats') return;
+  const pendingGames = games.filter(game => !app.gameFeedbackSummaries[game.id]);
+  if (!pendingGames.length) return;
+  pendingGames.forEach(game => { app.gameFeedbackSummaries[game.id] = { status: 'loading', summary: null, error: '' }; });
+  render();
+  let idToken = '';
+  try {
+    idToken = LOCAL_AUTH_TEST ? '' : await getFirebaseIdToken();
+  } catch (error) {
+    pendingGames.forEach(game => { app.gameFeedbackSummaries[game.id] = { status: 'error', summary: null, error: error.message }; });
+    if (app.route === 'stats') render();
+    return;
+  }
+  for (let index = 0; index < pendingGames.length; index += 25) {
+    const batch = pendingGames.slice(index, index + 25);
+    try {
+      const summaries = await loadGameFeedbackSummaryBatch({ idToken, gameIds: batch.map(game => game.id), testMode: LOCAL_AUTH_TEST });
+      batch.forEach(game => {
+        app.gameFeedbackSummaries[game.id] = summaries[game.id]
+          ? { status: 'ready', summary: summaries[game.id], error: '' }
+          : { status: 'error', summary: null, error: 'Оцінки недоступні' };
+      });
+    } catch (error) {
+      batch.forEach(game => { app.gameFeedbackSummaries[game.id] = { status: 'error', summary: null, error: error.message || 'Оцінки недоступні' }; });
+    }
+  }
+  if (app.route === 'stats') render();
+}
+
 async function updatePersonalGameFeedback(gameId, field, value) {
   const game = gameById(gameId);
   const playerId = `google_${app.authUser?.uid || ''}`;
@@ -2961,6 +3011,7 @@ async function updatePersonalGameFeedback(gameId, field, value) {
     const idToken = LOCAL_AUTH_TEST ? '' : await getFirebaseIdToken();
     const data = await saveGameFeedback({ idToken, gameId, vote, testMode: LOCAL_AUTH_TEST });
     app.gameFeedback[gameId] = { status: 'saved', data, error: '' };
+    delete app.gameFeedbackSummaries[gameId];
     vibrate(35);
     render();
   } catch (error) {
@@ -3306,6 +3357,7 @@ async function handleAction(action, element, sourceEvent) {
     stopCommunityProfiles();
     await connectCloudDirectory({ hasLocalProfile: true });
   } else if (action === 'cloud-games-refresh') {
+    app.gameFeedbackSummaries = {};
     stopCommunityGames();
     await connectCloudArchive();
     syncLocalActiveGames();
@@ -3772,6 +3824,7 @@ async function activateAuthenticatedUser(user) {
   activationPromise = (async () => {
     app.authUser = user;
     app.gameFeedback = {};
+    app.gameFeedbackSummaries = {};
     app.authError = '';
     app.authBusy = false;
     useDatabaseForUser(user.uid);
@@ -3817,6 +3870,7 @@ function clearAuthenticatedState() {
   app.hostProfile = null;
   app.profilePhotoSync = { status: 'idle' };
   app.gameFeedback = {};
+  app.gameFeedbackSummaries = {};
   app.localPlayers = [];
   app.cloudPlayers = [];
   app.players = [];
@@ -3881,6 +3935,7 @@ async function onRouteChange() {
   app.modal = null;
   closeOverlays();
   render();
+  if (app.route === 'stats') void loadStatsGameFeedback();
   if (['game', 'reveal'].includes(app.route)) requestGameWakeLock();
   else if (app.wakeLock) { app.wakeLock.release?.().catch(() => {}); app.wakeLock = null; }
   window.scrollTo({ top: 0, behavior: 'instant' });

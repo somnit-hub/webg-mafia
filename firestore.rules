@@ -135,36 +135,10 @@ service cloud.firestore {
         && request.resource.data.updatedAt is timestamp;
     }
 
-    function validLiveSeat(seat, number) {
-      return seat.keys().hasOnly([
-          'number', 'name', 'status', 'faults', 'eliminatedReason', 'noVote'
-        ])
-        && seat.number == number
-        && seat.name is string
-        && seat.name.size() > 0
-        && seat.name.size() <= 60
-        && seat.status in ['alive', 'dead']
-        && seat.faults is int
-        && seat.faults >= 0
-        && seat.faults <= 4
-        && seat.eliminatedReason is string
-        && seat.eliminatedReason.size() <= 160
-        && seat.noVote is bool;
-    }
-
     function validSeatNumbers(values) {
       return values is list
         && values.size() <= 10
-        && (values.size() < 1 || (values[0] is int && values[0] >= 1 && values[0] <= 10))
-        && (values.size() < 2 || (values[1] is int && values[1] >= 1 && values[1] <= 10))
-        && (values.size() < 3 || (values[2] is int && values[2] >= 1 && values[2] <= 10))
-        && (values.size() < 4 || (values[3] is int && values[3] >= 1 && values[3] <= 10))
-        && (values.size() < 5 || (values[4] is int && values[4] >= 1 && values[4] <= 10))
-        && (values.size() < 6 || (values[5] is int && values[5] >= 1 && values[5] <= 10))
-        && (values.size() < 7 || (values[6] is int && values[6] >= 1 && values[6] <= 10))
-        && (values.size() < 8 || (values[7] is int && values[7] >= 1 && values[7] <= 10))
-        && (values.size() < 9 || (values[8] is int && values[8] >= 1 && values[8] <= 10))
-        && (values.size() < 10 || (values[9] is int && values[9] >= 1 && values[9] <= 10));
+        && values.hasOnly([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     }
 
     function validLiveGame(uid, gameId) {
@@ -204,16 +178,6 @@ service cloud.firestore {
         && request.resource.data.day <= 100
         && request.resource.data.seats is list
         && request.resource.data.seats.size() == 10
-        && validLiveSeat(request.resource.data.seats[0], 1)
-        && validLiveSeat(request.resource.data.seats[1], 2)
-        && validLiveSeat(request.resource.data.seats[2], 3)
-        && validLiveSeat(request.resource.data.seats[3], 4)
-        && validLiveSeat(request.resource.data.seats[4], 5)
-        && validLiveSeat(request.resource.data.seats[5], 6)
-        && validLiveSeat(request.resource.data.seats[6], 7)
-        && validLiveSeat(request.resource.data.seats[7], 8)
-        && validLiveSeat(request.resource.data.seats[8], 9)
-        && validLiveSeat(request.resource.data.seats[9], 10)
         && validSeatNumbers(request.resource.data.nominations)
         && validSeatNumbers(request.resource.data.tied)
         && request.resource.data.speakerIndex is int

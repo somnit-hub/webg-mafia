@@ -5,6 +5,7 @@ import { getFirebaseIdToken } from './auth.js';
 const COMMUNITY_ID = 'enjoy';
 const ACTIVE_PHASES = new Set(ACTIVE_GAME_PHASES);
 let stopArchive = null;
+let stopHostTransfers = [];
 const LIVE_GAMES_ENDPOINT = 'https://enjoy-mafia-orders.webg-mafia.workers.dev/live-games';
 
 function clean(value, maximum) {
@@ -25,6 +26,14 @@ function gameDeletionPath(sdk, database, gameId) {
 
 function activeGameBackupPath(sdk, database, userUid, gameId) {
   return sdk.doc(database, 'privateUsers', userUid, 'activeGames', gameId);
+}
+
+function hostTransferPath(sdk, database, gameId) {
+  return sdk.doc(database, 'communities', COMMUNITY_ID, 'gameHostTransfers', gameId);
+}
+
+function liveGamePath(sdk, database, gameId) {
+  return sdk.doc(database, 'communities', COMMUNITY_ID, 'liveGames', gameId);
 }
 
 function firestoreValue(value) {
@@ -184,6 +193,156 @@ export function createActiveGameBackupDocument(user, game) {
     stateJson,
     schemaVersion: 1
   };
+}
+
+function hostTransferTimestamp(value) {
+  if (typeof value?.toMillis === 'function') return value.toMillis();
+  if (Number.isFinite(value?.seconds)) return (Number(value.seconds) * 1000) + Math.floor(Number(value.nanoseconds || 0) / 1000000);
+  return Number(value) || 0;
+}
+
+function hostTransferFromSnapshot(snapshot) {
+  const data = snapshot.data();
+  return {
+    id: snapshot.id,
+    gameId: clean(data.gameId, 160),
+    gameTitle: clean(data.gameTitle, 80),
+    fromUid: clean(data.fromUid, 128),
+    fromName: clean(data.fromName, 60),
+    toUid: clean(data.toUid, 128),
+    toName: clean(data.toName, 60),
+    status: data.status === 'accepted' ? 'accepted' : 'pending',
+    gameUpdatedAt: clean(data.gameUpdatedAt, 40),
+    stateJson: String(data.stateJson || ''),
+    createdAt: hostTransferTimestamp(data.createdAt),
+    updatedAt: hostTransferTimestamp(data.updatedAt),
+    acceptedAt: hostTransferTimestamp(data.acceptedAt)
+  };
+}
+
+export function createHostTransferDocument(user, profile, game, recipient) {
+  if (!recipient?.uid || recipient.uid === user?.uid) throw new Error('Оберіть іншого авторизованого гравця');
+  const backup = createActiveGameBackupDocument(user, game);
+  return {
+    gameId: backup.id,
+    communityId: COMMUNITY_ID,
+    fromUid: clean(user.uid, 128),
+    fromName: hostName(user, profile, game),
+    toUid: clean(recipient.uid, 128),
+    toName: clean(recipient.name, 60) || 'Новий ведучий',
+    gameTitle: clean(game.title, 80) || 'Гра в Мафію',
+    status: 'pending',
+    gameUpdatedAt: backup.gameUpdatedAt,
+    stateJson: backup.stateJson,
+    schemaVersion: 1,
+    acceptedAt: null
+  };
+}
+
+export async function requestGameHostTransfer(user, profile, game, recipient) {
+  if (!user?.uid) throw new Error('Спочатку увійдіть через Google');
+  const { database, sdk } = await getCommunityFirestore();
+  const fields = createHostTransferDocument(user, profile, game, recipient);
+  const reference = hostTransferPath(sdk, database, fields.gameId);
+  const existing = await sdk.getDoc(reference);
+  await sdk.setDoc(reference, {
+    ...fields,
+    createdAt: existing.exists() ? existing.data().createdAt : sdk.serverTimestamp(),
+    updatedAt: sdk.serverTimestamp()
+  });
+  return fields;
+}
+
+export async function resolveGameHostTransfer(user, gameId) {
+  if (!user?.uid) throw new Error('Спочатку увійдіть через Google');
+  const { database, sdk } = await getCommunityFirestore();
+  const reference = hostTransferPath(sdk, database, clean(gameId, 160));
+  const snapshot = await sdk.getDoc(reference);
+  if (!snapshot.exists()) return;
+  const transfer = hostTransferFromSnapshot(snapshot);
+  if (![transfer.fromUid, transfer.toUid].includes(user.uid)) throw new Error('Цей запит вам недоступний');
+  await sdk.deleteDoc(reference);
+}
+
+export async function acceptGameHostTransfer(user, profile, transfer) {
+  if (!user?.uid || transfer?.toUid !== user.uid) throw new Error('Цей запит адресовано іншому користувачу');
+  const { database, sdk } = await getCommunityFirestore();
+  const gameId = clean(transfer.gameId, 160);
+  const transferReference = hostTransferPath(sdk, database, gameId);
+  const liveReference = liveGamePath(sdk, database, gameId);
+  const [transferSnapshot, liveSnapshot] = await Promise.all([
+    sdk.getDoc(transferReference),
+    sdk.getDoc(liveReference)
+  ]);
+  if (!transferSnapshot.exists() || !liveSnapshot.exists()) throw new Error('Запит або активна гра вже недоступні');
+  const currentTransfer = hostTransferFromSnapshot(transferSnapshot);
+  if (currentTransfer.status !== 'pending' || currentTransfer.toUid !== user.uid) throw new Error('Запит уже оброблено');
+  if (liveSnapshot.data().ownerUid !== currentTransfer.fromUid) throw new Error('Ведучий гри вже змінився');
+  let game;
+  try { game = JSON.parse(currentTransfer.stateJson); }
+  catch { throw new Error('Не вдалося прочитати стан гри'); }
+  if (game?.id !== gameId || game?.status !== 'active') throw new Error('Переданий стан гри пошкоджено');
+  const acceptedAt = new Date().toISOString();
+  game.ownerUid = user.uid;
+  game.hostName = hostName(user, profile, game);
+  game.updatedAt = acceptedAt;
+  delete game.publicOnly;
+  delete game.shared;
+  delete game.source;
+  delete game.cloudOwnerUid;
+  delete game.cloudHostName;
+  const publicFields = createActiveGameDocument(user, profile, game);
+  const privateFields = createActiveGameBackupDocument(user, game);
+  const batch = sdk.writeBatch(database);
+  batch.set(activeGameBackupPath(sdk, database, user.uid, gameId), {
+    ...privateFields,
+    updatedAt: sdk.serverTimestamp()
+  });
+  batch.set(liveReference, {
+    ...publicFields,
+    createdAt: liveSnapshot.data().createdAt,
+    updatedAt: sdk.serverTimestamp()
+  });
+  batch.update(transferReference, {
+    status: 'accepted',
+    acceptedAt: sdk.serverTimestamp(),
+    updatedAt: sdk.serverTimestamp()
+  });
+  await batch.commit();
+  return game;
+}
+
+export async function subscribeGameHostTransfers(user, onTransfers, onError) {
+  if (!user?.uid) return () => {};
+  const { database, sdk } = await getCommunityFirestore();
+  stopHostTransfers.forEach(stop => stop());
+  stopHostTransfers = [];
+  let incoming = [];
+  let outgoing = [];
+  const emit = () => onTransfers({
+    incoming: [...incoming].sort((left, right) => right.updatedAt - left.updatedAt),
+    outgoing: [...outgoing].sort((left, right) => right.updatedAt - left.updatedAt)
+  });
+  const collectionReference = sdk.collection(database, 'communities', COMMUNITY_ID, 'gameHostTransfers');
+  stopHostTransfers.push(sdk.onSnapshot(
+    sdk.query(collectionReference, sdk.where('toUid', '==', user.uid)),
+    snapshot => { incoming = snapshot.docs.map(hostTransferFromSnapshot); emit(); },
+    error => onError?.(error)
+  ));
+  stopHostTransfers.push(sdk.onSnapshot(
+    sdk.query(collectionReference, sdk.where('fromUid', '==', user.uid)),
+    snapshot => { outgoing = snapshot.docs.map(hostTransferFromSnapshot); emit(); },
+    error => onError?.(error)
+  ));
+  return () => {
+    stopHostTransfers.forEach(stop => stop());
+    stopHostTransfers = [];
+  };
+}
+
+export function stopGameHostTransfers() {
+  stopHostTransfers.forEach(stop => stop());
+  stopHostTransfers = [];
 }
 
 export function createFinishedGameDocument(user, profile, game) {

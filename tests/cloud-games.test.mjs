@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createActiveGameBackupDocument, createActiveGameDocument, createFinishedGameDocument, encodeFirestoreFields, excludeDeletedGames } from '../src/cloud-games.js';
+import { createActiveGameBackupDocument, createActiveGameDocument, createFinishedGameDocument, createHostTransferDocument, encodeFirestoreFields, excludeDeletedGames } from '../src/cloud-games.js';
 
 function finishedGame() {
   return {
@@ -121,6 +121,32 @@ test('private active-game backup preserves host state but strips embedded avatar
   assert.equal(state.history[0].secret, true);
   assert.equal(state.seats.every(seat => seat.avatar === ''), true);
   assert.equal('publicOnly' in state, false);
+});
+
+test('host transfer targets another signed-in player and keeps roles inside the protected state only', () => {
+  const game = finishedGame();
+  game.status = 'active';
+  game.phase = 'day';
+  game.endedAt = null;
+  const transfer = createHostTransferDocument(
+    { uid: 'host_uid', googleName: 'Старий ведучий' },
+    { nickname: 'Суддя' },
+    game,
+    { uid: 'next_host_uid', name: 'Новий ведучий' }
+  );
+  const state = JSON.parse(transfer.stateJson);
+
+  assert.equal(transfer.fromUid, 'host_uid');
+  assert.equal(transfer.toUid, 'next_host_uid');
+  assert.equal(transfer.status, 'pending');
+  assert.equal(transfer.acceptedAt, null);
+  assert.equal(state.seats[0].role, 'sheriff');
+  assert.equal('roles' in transfer, false);
+  assert.equal('seats' in transfer, false);
+  assert.throws(
+    () => createHostTransferDocument({ uid: 'host_uid' }, {}, game, { uid: 'host_uid', name: 'Той самий' }),
+    /іншого авторизованого/
+  );
 });
 
 test('live game REST document preserves Firestore value types', () => {

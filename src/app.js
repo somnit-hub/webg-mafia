@@ -26,8 +26,9 @@ import {
 import {
   saveActiveCommunityGame, deleteActiveCommunityGame, saveActiveGameBackup, loadActiveGameBackup, deleteActiveGameBackup,
   saveFinishedCommunityGame, deleteFinishedCommunityGame,
-  subscribeCommunityGames, stopCommunityGames
-} from './cloud-games.js?v=155';
+  requestGameHostTransfer, acceptGameHostTransfer, resolveGameHostTransfer,
+  subscribeCommunityGames, stopCommunityGames, subscribeGameHostTransfers, stopGameHostTransfers
+} from './cloud-games.js?v=156';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
   canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
@@ -174,6 +175,7 @@ let app = {
   gameFeedback: {},
   gameFeedbackSummaries: {},
   pendingActiveGameDeletes: [],
+  hostTransfers: { incoming: [], outgoing: [], busy: false, error: '' },
   bluetooth: {
     supported: 'bluetooth' in navigator,
     available: null,
@@ -182,6 +184,7 @@ let app = {
     error: ''
   },
   panelExpanded: {
+    homeActiveGames: true,
     homeRecentGames: false,
     moderatorPanel: false,
     setupGame: false,
@@ -204,6 +207,7 @@ let activeGamePublishRetryHandle = null;
 let profilePresenceHandle = null;
 const pendingActiveGames = new Map();
 const activeGameRecoveryAttempts = new Set();
+const handledHostTransfers = new Set();
 const presetAvatarDataUrls = new Map();
 
 const LOCAL_AUTH_TEST = ['localhost', '127.0.0.1'].includes(location.hostname)
@@ -510,6 +514,8 @@ function mergeGameSources() {
   app.games = [...local, ...visibleCloudGames.filter(game => !localIds.has(game.id))];
 }
 function canManageGame(game) {
+  const remote = game?.id ? app.cloudGames.find(item => item.id === game.id && item.status === 'active') : null;
+  if (remote?.cloudOwnerUid && remote.cloudOwnerUid !== app.authUser?.uid) return false;
   const storedForCurrentAccount = Boolean(game && !game.publicOnly && app.localGames.some(item => item.id === game.id));
   if (storedForCurrentAccount) return true;
   const ownerUid = game?.cloudOwnerUid || game?.ownerUid || '';
@@ -518,6 +524,27 @@ function canManageGame(game) {
 function ownsCloudGame(game) {
   const ownerUid = game?.cloudOwnerUid || game?.ownerUid || '';
   return Boolean(app.authUser?.uid && ownerUid === app.authUser.uid);
+}
+function pendingIncomingHostTransfer() {
+  return app.hostTransfers.incoming.find(transfer => transfer.status === 'pending' && transfer.toUid === app.authUser?.uid) || null;
+}
+function outgoingHostTransfer(gameId = app.game?.id) {
+  return app.hostTransfers.outgoing.find(transfer => transfer.gameId === gameId && transfer.status === 'pending') || null;
+}
+function hostTransferCandidates(game = app.game) {
+  const candidates = new Map();
+  (game?.seats || []).forEach(seat => {
+    const player = seat.profileId ? playerById(seat.profileId) : null;
+    const cloudUid = seat.cloudUid || player?.cloudUid || '';
+    if (!cloudUid || cloudUid === app.authUser?.uid || candidates.has(cloudUid)) return;
+    candidates.set(cloudUid, {
+      uid: cloudUid,
+      name: preferredPlayerName(player) || seat.name,
+      seatNumber: seat.number,
+      avatar: player?.avatar || player?.avatarPreset || seat.avatar || ''
+    });
+  });
+  return [...candidates.values()].sort((left, right) => left.seatNumber - right.seatNumber);
 }
 function seatByNo(number) { return app.game?.seats.find(seat => seat.number === Number(number)); }
 function aliveSeats() { return app.game?.seats.filter(seat => seat.status === 'alive') || []; }
@@ -968,7 +995,7 @@ function homeView() {
       <div class="hero-title-row"><h1>Мафія <span>enjoy</span><svg class="hero-cup" viewBox="0 0 48 48" aria-hidden="true"><path d="M9 17h25v10a10 10 0 0 1-10 10h-5A10 10 0 0 1 9 27V17Z"/><path d="M34 20h3a5 5 0 0 1 0 10h-4"/><path d="M7 41h32M16 13c-3-3 3-5 0-8m9 8c-3-3 3-5 0-8"/></svg></h1></div>
       <div class="actions"><button class="btn primary" data-nav="setup">Створити гру</button><button class="btn secondary" data-nav="players">Додати гравців</button></div>
     </section>
-    ${activeGamesPanel(active, true)}
+    ${activeGamesPanel(active, true, 'homeActiveGames')}
     <section class="stat-grid home-stat-grid">
       <article class="card stat-card"><b>${stats.games}</b><span>завершених ігор</span></article>
       <article class="card stat-card"><b>${app.players.length}</b><span>гравців у базі</span></article>
@@ -1340,15 +1367,15 @@ function revealView() {
   } else if (numberDeal && !role) {
     const isLastCard = remaining === 1;
     content = isLastCard
-      ? `<div class="reveal-privacy number-deal-last"><div class="reveal-privacy-icon role-card-back" aria-hidden="true"><b>1</b></div><h2>Остання карта</h2><p>Гравець №${seat.number} отримує останню карту автоматично. Перед показом переконайтеся, що екран бачить лише він.</p></div>`
-      : `<div class="number-role-deal"><div class="number-role-instruction"><h2>Гравець №${seat.number} обирає цифру</h2><p>Попросіть показати жестом число від <b>1</b> до <b>${remaining}</b>. Якщо число більше ${remaining} — гравець обирає повторно.</p></div><div class="number-role-grid" role="group" aria-label="Оберіть карту від 1 до ${remaining}">${Array.from({ length: remaining }, (_, index) => {
+      ? `<div class="reveal-privacy number-deal-last"><div class="reveal-privacy-icon role-card-back" aria-hidden="true"><b>1</b></div><h2>Остання карта — гравець №${seat.number}</h2><p class="reveal-spoken-cue">Скажіть: «${esc(seat.name)}, ви отримуєте останню карту». Перед показом переконайтеся, що екран бачить лише цей гравець.</p></div>`
+      : `<div class="number-role-deal"><div class="number-role-instruction"><h2>Гравець №${seat.number} · ${esc(seat.name)} обирає цифру</h2><p class="reveal-spoken-cue">Скажіть: «Гравець номер ${seat.number}, покажіть число від <b>1</b> до <b>${remaining}</b>». Якщо число більше ${remaining} — попросіть обрати повторно.</p></div><div class="number-role-grid" role="group" aria-label="Оберіть карту від 1 до ${remaining}">${Array.from({ length: remaining }, (_, index) => {
         const card = index + 1;
         return `<button class="number-role-card ${selectedCard === card ? 'selected' : ''}" type="button" data-action="select-role-card" data-card="${card}" aria-pressed="${selectedCard === card}" aria-label="Карта ${card}"><span>${card}</span></button>`;
       }).join('')}</div>${selectedCard ? `<div class="number-role-confirm">Обрано карту <b>№${selectedCard}</b>. Суддя показує її лише цьому гравцеві.</div>` : '<div class="number-role-confirm muted">Торкніться цифри, яку показав гравець.</div>'}</div>`;
     const confirmButton = `<button class="btn primary wide game-lead-action" data-action="confirm-number-role" ${!isLastCard && !selectedCard ? 'disabled' : ''}>${isLastCard ? 'Показати останню роль' : selectedCard ? `Показати роль за картою №${selectedCard}` : 'Спочатку оберіть цифру'}</button>`;
     actions = selectedCard ? `<div class="number-deal-main-actions"><button class="btn secondary" data-action="change-role-card">Змінити цифру</button>${confirmButton}</div>` : confirmButton;
   } else {
-    content = `<div class="reveal-privacy"><div class="reveal-privacy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg></div><h2>Екран бачить лише гравець №${seat.number}</h2><p>${numberDeal ? 'Карту вже визначено. Суддя відкриває роль лише перед відповідним гравцем.' : 'Після перегляду роль автоматично сховається перед передачею телефона наступному гравцеві.'}</p></div>`;
+    content = `<div class="reveal-privacy"><div class="reveal-privacy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/></svg></div><h2>Екран бачить лише №${seat.number} · ${esc(seat.name)}</h2><p class="reveal-spoken-cue">Скажіть: «${esc(seat.name)}, візьміть телефон, подивіться свою роль і натисніть кнопку нижче».</p></div>`;
     actions = '<button class="btn primary wide game-lead-action" data-action="reveal-role">Показати мою роль</button>';
   }
   return `<main class="page reveal-page"><div class="reveal-workspace">
@@ -1618,7 +1645,9 @@ function nightCheckPanel(kind) {
 function moderatorSideHtml({ includeProtocol = true } = {}) {
   const game = app.game;
   const black = game.seats.filter(seat => teamOf(seat) === 'black');
-  const moderatorControls = `<div class="actions moderator-actions"><button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати ролі' : 'Ролі'}</button><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button></div>${game.showSecrets ? `<div class="divider"></div><div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}<div class="divider"></div><button class="btn danger wide moderator-finish-game" data-action="end-game-manual">Завершити гру</button>`;
+  const pendingTransfer = outgoingHostTransfer(game.id);
+  const transferLabel = pendingTransfer ? `Очікує: ${pendingTransfer.toName}` : 'Передати ведення';
+  const moderatorControls = `<div class="actions moderator-actions"><button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати ролі' : 'Ролі'}</button><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button><button class="btn small ${pendingTransfer ? 'primary' : 'secondary'} host-transfer-button" data-action="open-host-transfer">${esc(transferLabel)}</button></div>${game.showSecrets ? `<div class="divider"></div><div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}<div class="divider"></div><button class="btn danger wide moderator-finish-game" data-action="end-game-manual">Завершити гру</button>`;
   const protocol = includeProtocol
     ? `<section class="card card-pad moderator-protocol-panel"><div class="section-title section-heading"><div><h3>Протокол</h3><p>${game.history.length} подій</p></div></div><div class="quick-log">${game.history.slice(0, 25).map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('') || statePanel('empty', 'Подій ще немає', '', '', true)}</div></section>`
     : '';
@@ -2008,6 +2037,36 @@ function iosInstallModalHtml() {
   </div></div>`;
 }
 
+function hostTransferModalHtml() {
+  if (app.modal.type === 'host-transfer-incoming') {
+    const transfer = app.hostTransfers.incoming.find(item => item.gameId === app.modal.gameId && item.status === 'pending');
+    if (!transfer) return '';
+    return `<div class="modal-backdrop host-transfer-backdrop"><div class="card modal host-transfer-modal" role="dialog" aria-modal="true" aria-labelledby="host-transfer-title" tabindex="-1">
+      <div class="game-dialog-head"><div><span class="eyebrow">Запит на передачу</span><h2 id="host-transfer-title">Стати ведучим гри?</h2></div></div>
+      <div class="host-transfer-callout"><span class="host-transfer-symbol" aria-hidden="true">⇄</span><div><b>${esc(transfer.fromName)} передає вам ведення</b><p>${esc(transfer.gameTitle)}</p></div></div>
+      <p class="game-dialog-copy">Після підтвердження ви отримаєте повний стан гри, ролі та панель ведучого. Попередній ведучий перейде в режим оглядача.</p>
+      <div class="modal-actions"><button class="btn secondary" type="button" data-action="decline-host-transfer" ${app.hostTransfers.busy ? 'disabled' : ''}>Відхилити</button><button class="btn primary" type="button" data-action="accept-host-transfer" ${app.hostTransfers.busy ? 'disabled' : ''}>${app.hostTransfers.busy ? 'Приймаємо…' : 'Прийняти ведення'}</button></div>
+    </div></div>`;
+  }
+  const pending = outgoingHostTransfer(app.game?.id);
+  if (app.modal.type === 'host-transfer-waiting' || pending) {
+    const transfer = pending || app.modal.transfer;
+    return `<div class="modal-backdrop host-transfer-backdrop" data-action="close-modal"><div class="card modal host-transfer-modal" role="dialog" aria-modal="true" aria-labelledby="host-transfer-title" tabindex="-1">
+      <div class="game-dialog-head"><div><span class="eyebrow">Передача ведення</span><h2 id="host-transfer-title">Очікуємо підтвердження</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div>
+      <div class="host-transfer-callout waiting"><span class="host-transfer-symbol" aria-hidden="true">…</span><div><b>${esc(transfer?.toName || 'Новий ведучий')}</b><p>Гра поставлена на паузу до відповіді.</p></div></div>
+      <p class="game-dialog-copy">На пристрої обраного гравця вже з’явився запит. Після прийняття ви автоматично перейдете до перегляду гри.</p>
+      <div class="modal-actions"><button class="btn danger" type="button" data-action="cancel-host-transfer" ${app.hostTransfers.busy ? 'disabled' : ''}>Скасувати передачу</button><button class="btn secondary" type="button" data-action="close-modal">Закрити</button></div>
+    </div></div>`;
+  }
+  const candidates = hostTransferCandidates();
+  return `<div class="modal-backdrop host-transfer-backdrop" data-action="close-modal"><div class="card modal host-transfer-modal" role="dialog" aria-modal="true" aria-labelledby="host-transfer-title" tabindex="-1">
+    <div class="game-dialog-head"><div><span class="eyebrow">Панель ведучого</span><h2 id="host-transfer-title">Передати ведення</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div>
+    <p class="game-dialog-copy">Оберіть авторизованого учасника за столом. Він має підтвердити запит на своєму пристрої.</p>
+    ${candidates.length ? `<div class="host-transfer-candidates">${candidates.map(candidate => `<button class="host-transfer-candidate" type="button" data-action="request-host-transfer" data-uid="${esc(candidate.uid)}"><span class="host-transfer-seat">${candidate.seatNumber}</span>${avatar({ name: candidate.name, avatar: candidate.avatar }, 'small')}<span><b>${esc(candidate.name)}</b><small>Авторизований учасник</small></span><span class="host-transfer-chevron" aria-hidden="true">›</span></button>`).join('')}</div>` : statePanel('empty', 'Немає доступного нового ведучого', 'Передати ведення можна учаснику за столом, який увійшов через Google.')}
+    <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Закрити</button></div>
+  </div></div>`;
+}
+
 function modalHtml() {
   if (!app.modal) return '';
   if (app.modal.type === 'player') return playerModalHtml();
@@ -2026,6 +2085,7 @@ function modalHtml() {
   if (app.modal.type === 'media') return mediaModalHtml();
   if (app.modal.type === 'order') return orderModalHtml();
   if (app.modal.type === 'ios-install') return iosInstallModalHtml();
+  if (app.modal.type.startsWith('host-transfer')) return hostTransferModalHtml();
   if (app.modal.type === 'winner') return `<div class="modal-backdrop"><div class="card modal game-modal decision-modal" role="dialog" aria-modal="true"><div class="game-dialog-head"><div><span class="eyebrow">Завершення гри</span>${titleHelp('h2', 'Результат гри', 'Ручне завершення потрібне для нестандартної ситуації, нічиєї або рішення судді.')}</div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div><p class="game-dialog-copy">Оберіть результат. Він одразу потрапить до протоколу та статистики.</p><div class="winner-choice-grid"><button class="btn primary winner-choice" data-action="finish-red"><span>●</span><strong>Мирне місто</strong><small>Червона команда</small></button><button class="btn danger winner-choice" data-action="finish-black"><span>◆</span><strong>Мафія</strong><small>Чорна команда</small></button><button class="btn secondary winner-choice winner-draw-choice" data-action="finish-draw"><span>＝</span><strong>Нічия</strong><small>Без переможця</small></button></div><div class="modal-actions"><button class="btn secondary" data-action="close-modal">Скасувати</button></div></div></div>`;
   return '';
 }
@@ -2053,6 +2113,7 @@ function render() {
     appRoot.setAttribute('aria-busy', 'false');
     return;
   }
+  showIncomingHostTransfer();
   showPlayerLinkOffer();
   const observer = app.route === 'observer' || Boolean(app.game?.publicOnly) || (app.route === 'game' && !canManageGame(app.game));
   let content = '';
@@ -2124,6 +2185,7 @@ function createGameFromDraft() {
     return {
       number: index + 1,
       profileId: profile?.id || null,
+      cloudUid: profile?.cloudUid || null,
       name: preferredPlayerName(profile) || draftSeat.name.trim() || missingGuestNames.shift(),
       avatar: profile?.avatar || profile?.avatarPreset || fallbackAvatars.get(setupAvatarKey(draftSeat, profile)) || ANIMAL_AVATARS[index % ANIMAL_AVATARS.length],
       role: dealMode === 'automatic' ? roles[index] : null,
@@ -2157,7 +2219,7 @@ function createGameFromDraft() {
 function publicGame(game) {
   if (!game) return null;
   const clean = clone(game);
-  clean.seats.forEach(seat => { delete seat.role; delete seat.profileId; });
+  clean.seats.forEach(seat => { delete seat.role; delete seat.profileId; delete seat.cloudUid; });
   delete clean.roleDeal;
   clean.history = clean.history.filter(event => !event.secret);
   clean.night = { step: clean.night.step, target: clean.night.step >= 4 ? clean.night.target : null };
@@ -3051,6 +3113,11 @@ function showPlayerLinkOffer() {
   if (!app.modal && app.playerLinkOffers.length) app.modal = { type: 'player-link-offer' };
 }
 
+function showIncomingHostTransfer() {
+  const transfer = pendingIncomingHostTransfer();
+  if (!app.modal && transfer) app.modal = { type: 'host-transfer-incoming', gameId: transfer.gameId };
+}
+
 async function connectPlayerLinks() {
   if (!app.authUser || LOCAL_AUTH_TEST) return;
   await syncLocalPlayerLinks();
@@ -3066,6 +3133,68 @@ async function connectPlayerLinks() {
   app.playerLinkOffers = await findPendingPlayerLinks(app.authUser);
   showPlayerLinkOffer();
   render();
+}
+
+async function handleAcceptedOutgoingHostTransfer(transfer) {
+  const key = `${transfer.gameId}:${transfer.toUid}:${transfer.acceptedAt || transfer.updatedAt}`;
+  if (handledHostTransfers.has(key)) return;
+  handledHostTransfers.add(key);
+  const localGame = app.localGames.find(game => game.id === transfer.gameId);
+  const currentGame = app.game?.id === transfer.gameId ? app.game : localGame;
+  if (currentGame && !currentGame.publicOnly) {
+    if (app.game?.id === transfer.gameId) stopTimer();
+    pendingActiveGames.delete(transfer.gameId);
+    await deleteOne('games', transfer.gameId);
+    app.localGames = app.localGames.filter(game => game.id !== transfer.gameId);
+  }
+  try { await deleteActiveGameBackup(app.authUser, transfer.gameId); } catch { /* The old private copy is inaccessible to everyone else. */ }
+  app.cloudGames = app.cloudGames.map(game => game.id === transfer.gameId ? {
+    ...game,
+    cloudOwnerUid: transfer.toUid,
+    cloudHostName: transfer.toName
+  } : game);
+  mergeGameSources();
+  let observerGame = gameById(transfer.gameId);
+  if (!observerGame && currentGame) observerGame = {
+    ...publicGame(currentGame),
+    cloudOwnerUid: transfer.toUid,
+    cloudHostName: transfer.toName,
+    shared: true,
+    publicOnly: true,
+    source: 'cloud-live'
+  };
+  if (observerGame) {
+    observerGame = { ...observerGame, cloudOwnerUid: transfer.toUid, cloudHostName: transfer.toName, publicOnly: true };
+    app.game = observerGame;
+  }
+  app.undo = [];
+  app.modal = null;
+  try { await resolveGameHostTransfer(app.authUser, transfer.gameId); } catch { /* Cleanup will retry on the next session. */ }
+  if (observerGame) navigate(`observer/${transfer.gameId}`);
+  else navigate('home');
+  render();
+  toast(`Ведення передано · ${transfer.toName}`);
+}
+
+async function connectHostTransfers() {
+  if (!app.authUser || LOCAL_AUTH_TEST) return;
+  await subscribeGameHostTransfers(app.authUser, transfers => {
+    app.hostTransfers = { ...app.hostTransfers, ...transfers, error: '' };
+    if (app.modal?.type === 'host-transfer-incoming' && !pendingIncomingHostTransfer()) app.modal = null;
+    if (app.modal?.type === 'host-transfer-waiting' && !outgoingHostTransfer(app.game?.id) && !app.hostTransfers.busy) {
+      app.modal = null;
+      toast('Запит на передачу більше не активний');
+    }
+    transfers.outgoing
+      .filter(transfer => transfer.status === 'accepted')
+      .forEach(transfer => { void handleAcceptedOutgoingHostTransfer(transfer).catch(() => {}); });
+    showIncomingHostTransfer();
+    if (pendingIncomingHostTransfer() || outgoingHostTransfer(app.game?.id)) render();
+    else renderPassiveCloudUpdate();
+  }, error => {
+    app.hostTransfers = { ...app.hostTransfers, error: error?.message || 'Не вдалося синхронізувати передачу ведення' };
+    renderPassiveCloudUpdate();
+  });
 }
 
 function cloudArchiveError(error) {
@@ -3161,8 +3290,21 @@ async function connectCloudArchive() {
       if (app.game?.status === 'finished' && deleted.has(app.game.id)) app.game = null;
       void Promise.all(removedLocalIds.map(gameId => deleteOne('games', gameId))).catch(() => {});
     }
+    const transferredAwayIds = app.localGames
+      .filter(localGame => localGame.status === 'active'
+        && games.some(remoteGame => remoteGame.id === localGame.id
+          && remoteGame.status === 'active'
+          && remoteGame.cloudOwnerUid
+          && remoteGame.cloudOwnerUid !== app.authUser?.uid))
+      .map(game => game.id);
+    if (transferredAwayIds.length) {
+      transferredAwayIds.forEach(gameId => pendingActiveGames.delete(gameId));
+      app.localGames = app.localGames.filter(game => !transferredAwayIds.includes(game.id));
+      void Promise.all(transferredAwayIds.map(gameId => deleteOne('games', gameId))).catch(() => {});
+    }
     app.cloudGames = games;
     mergeGameSources();
+    if (app.game && transferredAwayIds.includes(app.game.id)) app.game = gameById(app.game.id) || null;
     restoreOwnedActiveGames(games);
     const routed = routeFromHash();
     if (routed.id && ['observer', 'game'].includes(routed.route)) {
@@ -3497,8 +3639,18 @@ const GUARDED_GAME_ACTIONS = new Set([
   'undo', 'finish-red', 'finish-black', 'finish-draw'
 ]);
 
+const HOST_TRANSFER_BLOCKED_ACTIONS = new Set([
+  ...GUARDED_GAME_ACTIONS,
+  'reveal-role', 'select-role-card', 'change-role-card',
+  'timer-minus', 'timer-plus', 'timer-reset', 'seat-menu',
+  'game-settings', 'end-game-manual', 'cancel-active-game'
+]);
+
 async function handleAction(action, element, sourceEvent) {
   const number = Number(element.dataset.seat);
+  if (outgoingHostTransfer(app.game?.id) && HOST_TRANSFER_BLOCKED_ACTIONS.has(action)) {
+    return toast('Гра на паузі · дочекайтеся відповіді або скасуйте передачу');
+  }
   const guardedGameAction = GUARDED_GAME_ACTIONS.has(action);
   if (guardedGameAction && app.gameTransitionBusy) return;
   if (guardedGameAction) {
@@ -3777,6 +3929,112 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'close-modal') {
     if (element.classList.contains('modal-backdrop') && element !== sourceEvent?.target) return;
     app.modal = null; render();
+  } else if (action === 'open-host-transfer') {
+    if (!app.game || app.game.status !== 'active' || !canManageGame(app.game)) return toast('Передача доступна лише поточному ведучому');
+    app.modal = { type: outgoingHostTransfer(app.game.id) ? 'host-transfer-waiting' : 'host-transfer-select' };
+    render();
+  } else if (action === 'request-host-transfer') {
+    if (!app.game || !canManageGame(app.game) || app.hostTransfers.busy) return;
+    if (LOCAL_AUTH_TEST) return toast('Для передачі потрібні два авторизовані пристрої');
+    const recipient = hostTransferCandidates().find(candidate => candidate.uid === element.dataset.uid);
+    if (!recipient) return toast('Цей учасник недоступний для передачі');
+    app.hostTransfers.busy = true;
+    render();
+    try {
+      stopTimer();
+      await saveGame();
+      const published = await waitForActiveGamePublish(app.game.id);
+      if (!published) throw new Error('Не вдалося зафіксувати актуальний стан гри');
+      const transfer = await requestGameHostTransfer(app.authUser, app.hostProfile, app.game, recipient);
+      app.hostTransfers.outgoing = [transfer, ...app.hostTransfers.outgoing.filter(item => item.gameId !== transfer.gameId)];
+      app.hostTransfers.busy = false;
+      app.modal = { type: 'host-transfer-waiting', transfer };
+      render();
+      toast(`Запит надіслано · ${recipient.name}`);
+    } catch (error) {
+      app.hostTransfers.busy = false;
+      render();
+      toast(error?.message || 'Не вдалося передати ведення');
+    }
+  } else if (action === 'cancel-host-transfer') {
+    const transfer = outgoingHostTransfer(app.game?.id);
+    if (!transfer || app.hostTransfers.busy) return;
+    app.hostTransfers.busy = true;
+    render();
+    try {
+      await resolveGameHostTransfer(app.authUser, transfer.gameId);
+      app.hostTransfers.outgoing = app.hostTransfers.outgoing.filter(item => item.gameId !== transfer.gameId);
+      app.hostTransfers.busy = false;
+      app.modal = null;
+      render();
+      toast('Передачу скасовано · гру можна продовжити');
+    } catch (error) {
+      app.hostTransfers.busy = false;
+      render();
+      toast(error?.message || 'Не вдалося скасувати передачу');
+    }
+  } else if (action === 'decline-host-transfer') {
+    const transfer = pendingIncomingHostTransfer();
+    if (!transfer || app.hostTransfers.busy) return;
+    app.hostTransfers.busy = true;
+    render();
+    try {
+      await resolveGameHostTransfer(app.authUser, transfer.gameId);
+      app.hostTransfers.incoming = app.hostTransfers.incoming.filter(item => item.gameId !== transfer.gameId);
+      app.hostTransfers.busy = false;
+      app.modal = null;
+      render();
+      toast('Запит відхилено');
+    } catch (error) {
+      app.hostTransfers.busy = false;
+      render();
+      toast(error?.message || 'Не вдалося відхилити запит');
+    }
+  } else if (action === 'accept-host-transfer') {
+    const transfer = pendingIncomingHostTransfer();
+    if (!transfer || app.hostTransfers.busy) return;
+    const otherHostedGame = activeGames().find(game => game.id !== transfer.gameId && canManageGame(game));
+    if (otherHostedGame) return toast('Спочатку завершіть або скасуйте іншу гру, яку ви ведете');
+    app.hostTransfers.busy = true;
+    render();
+    try {
+      const received = await acceptGameHostTransfer(app.authUser, app.hostProfile, transfer);
+      const game = normalizeGameState({
+        ...received,
+        ownerUid: app.authUser.uid,
+        cloudOwnerUid: app.authUser.uid,
+        cloudHostName: app.hostProfile?.nickname || app.hostProfile?.displayName || app.authUser.googleName || transfer.toName,
+        shared: true,
+        source: 'host-transfer'
+      }, DEFAULT_SETTINGS, { closeReveal: true });
+      delete game.publicOnly;
+      game.seats.forEach(seat => {
+        if (seat.avatar) return;
+        const player = seat.profileId ? playerById(seat.profileId) : null;
+        seat.avatar = player?.avatar || player?.avatarPreset || '';
+      });
+      const errors = gameStateErrors(game);
+      if (errors.length) throw new Error(`Переданий стан гри пошкоджено: ${errors[0]}`);
+      const at = nowIso();
+      game.history.unshift({ at, time: new Date(at).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }), text: `Ведення гри передано: ${transfer.fromName} → ${transfer.toName}.`, secret: false });
+      await putOne('games', game);
+      app.localGames = [...app.localGames.filter(item => item.id !== game.id), clone(game)];
+      app.cloudGames = app.cloudGames.map(item => item.id === game.id ? { ...item, cloudOwnerUid: app.authUser.uid, cloudHostName: transfer.toName } : item);
+      app.hostTransfers.incoming = app.hostTransfers.incoming.filter(item => item.gameId !== transfer.gameId);
+      app.hostTransfers.busy = false;
+      app.game = game;
+      app.undo = [];
+      app.modal = null;
+      mergeGameSources();
+      queueActiveGamePublish(game);
+      navigate(`${game.phase === 'reveal' ? 'reveal' : 'game'}/${game.id}`);
+      render();
+      toast('Ви тепер ведучий цієї гри');
+    } catch (error) {
+      app.hostTransfers.busy = false;
+      render();
+      toast(error?.message || 'Не вдалося прийняти ведення');
+    }
   } else if (action === 'game-settings') {
     app.modal = { type: 'game-settings' }; render();
   } else if (action === 'toggle-panel') {
@@ -4138,7 +4396,8 @@ async function activateAuthenticatedUser(user) {
     await Promise.all([
       connectCloudDirectory({ hasLocalProfile }),
       connectCloudArchive(),
-      connectPlayerLinks()
+      connectPlayerLinks(),
+      connectHostTransfers()
     ]);
     await flushPendingActiveGameDeletes();
     await flushPendingFinishedGameDeletes();
@@ -4159,6 +4418,7 @@ function clearAuthenticatedState() {
   clearDriveAccess();
   stopCommunityProfiles();
   stopCommunityGames();
+  stopGameHostTransfers();
   stopPlayerLinks();
   stopProfilePresence();
   cloudDirectoryPromise = null;
@@ -4166,6 +4426,7 @@ function clearAuthenticatedState() {
   cloudArchiveMigrationStarted = false;
   pendingActiveGames.clear();
   activeGameRecoveryAttempts.clear();
+  handledHostTransfers.clear();
   if (activeGamePublishRetryHandle) clearTimeout(activeGamePublishRetryHandle);
   activeGamePublishRetryHandle = null;
   activationPromise = null;
@@ -4186,6 +4447,7 @@ function clearAuthenticatedState() {
   app.playerLinkBusy = false;
   app.accountDeleteBusy = false;
   app.pendingActiveGameDeletes = [];
+  app.hostTransfers = { incoming: [], outgoing: [], busy: false, error: '' };
   app.games = [];
   app.nextGameQueue = [];
   app.game = null;
@@ -4353,7 +4615,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=154', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=155', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

@@ -32,6 +32,56 @@ service cloud.firestore {
         && request.resource.data.updatedAt is timestamp;
     }
 
+    function validHostTransfer(gameId) {
+      return request.resource.data.keys().hasOnly([
+          'gameId', 'communityId', 'fromUid', 'fromName', 'toUid', 'toName',
+          'gameTitle', 'status', 'gameUpdatedAt', 'stateJson', 'schemaVersion',
+          'createdAt', 'updatedAt', 'acceptedAt'
+        ])
+        && request.resource.data.gameId == gameId
+        && request.resource.data.communityId == 'enjoy'
+        && request.resource.data.fromUid is string
+        && request.resource.data.fromUid.size() > 0
+        && request.resource.data.fromUid.size() <= 128
+        && request.resource.data.toUid is string
+        && request.resource.data.toUid.size() > 0
+        && request.resource.data.toUid.size() <= 128
+        && request.resource.data.toUid != request.resource.data.fromUid
+        && request.resource.data.fromName is string
+        && request.resource.data.fromName.size() > 0
+        && request.resource.data.fromName.size() <= 60
+        && request.resource.data.toName is string
+        && request.resource.data.toName.size() > 0
+        && request.resource.data.toName.size() <= 60
+        && request.resource.data.gameTitle is string
+        && request.resource.data.gameTitle.size() > 0
+        && request.resource.data.gameTitle.size() <= 80
+        && request.resource.data.status in ['pending', 'accepted']
+        && request.resource.data.gameUpdatedAt is string
+        && request.resource.data.gameUpdatedAt.size() > 0
+        && request.resource.data.gameUpdatedAt.size() <= 40
+        && request.resource.data.stateJson is string
+        && request.resource.data.stateJson.size() > 0
+        && request.resource.data.stateJson.size() <= 700000
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && ((request.resource.data.status == 'pending'
+            && request.resource.data.acceptedAt == null)
+          || (request.resource.data.status == 'accepted'
+            && request.resource.data.acceptedAt is timestamp));
+    }
+
+    function acceptedHostTransfer(uid, previousOwnerUid, gameId) {
+      return exists(/databases/$(database)/documents/communities/enjoy/gameHostTransfers/$(gameId))
+        && get(/databases/$(database)/documents/communities/enjoy/gameHostTransfers/$(gameId)).data.status == 'pending'
+        && get(/databases/$(database)/documents/communities/enjoy/gameHostTransfers/$(gameId)).data.fromUid == previousOwnerUid
+        && get(/databases/$(database)/documents/communities/enjoy/gameHostTransfers/$(gameId)).data.toUid == uid
+        && getAfter(/databases/$(database)/documents/communities/enjoy/gameHostTransfers/$(gameId)).data.status == 'accepted'
+        && getAfter(/databases/$(database)/documents/communities/enjoy/gameHostTransfers/$(gameId)).data.fromUid == previousOwnerUid
+        && getAfter(/databases/$(database)/documents/communities/enjoy/gameHostTransfers/$(gameId)).data.toUid == uid;
+    }
+
     function validMember(uid) {
       return request.resource.data.keys().hasOnly([
           'uid', 'communityId', 'displayName', 'nickname', 'club',
@@ -352,11 +402,40 @@ service cloud.firestore {
       allow create: if signedIn()
         && validLiveGame(request.auth.uid, gameId);
       allow update: if signedIn()
-        && resource.data.ownerUid == request.auth.uid
         && validLiveGame(request.auth.uid, gameId)
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (resource.data.ownerUid == request.auth.uid
+          || acceptedHostTransfer(request.auth.uid, resource.data.ownerUid, gameId));
       allow delete: if signedIn()
         && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /communities/enjoy/gameHostTransfers/{gameId} {
+      allow get, list: if signedIn()
+        && (resource.data.fromUid == request.auth.uid
+          || resource.data.toUid == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && exists(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId))
+        && get(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId)).data.ownerUid == request.auth.uid
+        && validHostTransfer(gameId);
+      allow update: if signedIn()
+        && validHostTransfer(gameId)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && ((request.resource.data.fromUid == request.auth.uid
+            && request.resource.data.status == 'pending'
+            && exists(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId))
+            && get(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId)).data.ownerUid == request.auth.uid)
+          || (resource.data.toUid == request.auth.uid
+            && resource.data.status == 'pending'
+            && request.resource.data.status == 'accepted'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'acceptedAt', 'updatedAt'
+            ])));
+      allow delete: if signedIn()
+        && (resource.data.fromUid == request.auth.uid
+          || resource.data.toUid == request.auth.uid);
     }
 
     match /privateUsers/{uid}/activeGames/{gameId} {

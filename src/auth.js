@@ -1,4 +1,5 @@
 import { FIREBASE_CONFIG, hasFirebaseConfig } from './firebase-config.js';
+import { shouldUseMobileAuthRedirect } from './pwa.js';
 
 const FIREBASE_VERSION = '12.16.0';
 const APP_SDK = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`;
@@ -91,6 +92,14 @@ export async function initializeGoogleAuth() {
 export async function signInWithGoogle() {
   if (!auth) await initializeGoogleAuth();
   const { authSdk } = await loadFirebase();
+  if (shouldUseMobileAuthRedirect({
+    navigatorLike: navigator,
+    authDomain: FIREBASE_CONFIG.authDomain,
+    locationLike: location
+  })) {
+    await authSdk.signInWithRedirect(auth, googleProvider(authSdk));
+    return null;
+  }
   try {
     const result = await authSdk.signInWithPopup(auth, googleProvider(authSdk));
     firebaseUser = result.user;

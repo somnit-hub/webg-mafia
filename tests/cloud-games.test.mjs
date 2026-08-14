@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createActiveGameDocument, createFinishedGameDocument, encodeFirestoreFields } from '../src/cloud-games.js';
+import { createActiveGameDocument, createFinishedGameDocument, encodeFirestoreFields, excludeDeletedGames } from '../src/cloud-games.js';
 
 function finishedGame() {
   return {
@@ -130,4 +130,9 @@ test('shared archive supports an official draw result', () => {
   game.winner = 'draw';
   const document = createFinishedGameDocument({ uid: 'host_uid' }, {}, game);
   assert.equal(document.winner, 'draw');
+});
+
+test('deleted archive games stay excluded from cloud synchronization', () => {
+  const games = [{ id: 'kept' }, { id: 'deleted' }];
+  assert.deepEqual(excludeDeletedGames(games, ['deleted']), [{ id: 'kept' }]);
 });

@@ -27,7 +27,7 @@ import {
   saveActiveCommunityGame, deleteActiveCommunityGame,
   saveFinishedCommunityGame, deleteFinishedCommunityGame,
   subscribeCommunityGames, stopCommunityGames
-} from './cloud-games.js?v=150';
+} from './cloud-games.js?v=151';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
   canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
@@ -40,6 +40,7 @@ import {
 import { pickFunnyGuestNames } from './guest-names.js';
 import { LANGUAGES, applyLanguage, languageLocale, localizeDom, normalizeLanguage } from './i18n.js';
 import { DEFAULT_ORDER_MENU, loadOrderMenu, sendTelegramOrder } from './order-service.js';
+import { pwaInstallMode } from './pwa.js';
 import {
   GAME_EMOTIONS, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
@@ -136,6 +137,7 @@ let app = {
   players: [],
   localGames: [],
   cloudGames: [],
+  deletedGameIds: [],
   games: [],
   settings: { ...DEFAULT_SETTINGS },
   draft: null,
@@ -179,6 +181,7 @@ let app = {
     error: ''
   },
   panelExpanded: {
+    homeRecentGames: false,
     setupGame: false,
     setupTimers: false,
     setupRules: false,
@@ -788,22 +791,48 @@ function mediaChoiceIcon(name) {
   return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/><path d="M4 5h5M6.5 2.5v5"/></svg>';
 }
 
+function currentPwaInstallMode() {
+  return pwaInstallMode({
+    deferredPrompt: app.installPrompt,
+    navigatorLike: navigator,
+    matchMediaLike: typeof window.matchMedia === 'function' ? window.matchMedia.bind(window) : null
+  });
+}
+
+function pwaInstallIcon(mode = currentPwaInstallMode()) {
+  if (mode === 'ios-guide') {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m0 0L8 7m4-4 4 4"/><path d="M7 10H5v10h14V10h-2"/></svg>';
+  }
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg>';
+}
+
+function pwaInstallButtonHtml({ access = false } = {}) {
+  const mode = currentPwaInstallMode();
+  if (!['native', 'ios-guide'].includes(mode)) return '';
+  if (access) {
+    const label = mode === 'ios-guide' ? 'Встановити на iPhone' : 'Встановити застосунок';
+    return `<button class="btn secondary wide access-install-btn" type="button" data-action="install">${pwaInstallIcon(mode)}<span>${label}</span></button>`;
+  }
+  return `<button class="icon-btn install-btn" type="button" data-action="install" aria-label="Встановити застосунок" title="Встановити застосунок">${pwaInstallIcon(mode)}</button>`;
+}
+
 function headerHtml() {
   const profileLabel = app.hostProfile?.displayName || app.authUser?.googleName || app.authUser?.email || 'Google';
   const hasTrack = Boolean(app.media.trackName);
   const bluetoothLabel = 'Bluetooth і музика';
+  const canInstall = ['native', 'ios-guide'].includes(currentPwaInstallMode());
   const cancelableGame = app.game?.status === 'active' && !app.game.publicOnly && canManageGame(app.game)
     ? app.game
     : activeGames().find(game => !game.publicOnly && canManageGame(game));
   const cancelGameButton = cancelableGame
     ? `<button class="icon-btn header-media-btn cancel-game-btn" type="button" data-action="cancel-active-game" data-id="${esc(cancelableGame.id)}" aria-label="Скасувати активну гру" title="Скасувати активну гру" aria-haspopup="dialog">${headerControlIcon('cancelGame')}</button>`
     : '';
-  return `<header class="shell-header ${app.installPrompt && !['game', 'reveal'].includes(app.route) ? 'has-install' : ''} ${cancelableGame ? 'has-cancel-game' : ''}">
+  return `<header class="shell-header ${canInstall && !['game', 'reveal'].includes(app.route) ? 'has-install' : ''} ${cancelableGame ? 'has-cancel-game' : ''}">
     <a class="brand" href="#home" aria-label="Mafia — головна">
       <img class="brand-mark" src="./assets/logo-mafia.webp" alt="" width="44" height="44" aria-hidden="true">
     </a>
     <div class="header-actions">
-      ${app.installPrompt && !['game', 'reveal'].includes(app.route) ? '<button class="icon-btn install-btn" data-action="install" aria-label="Встановити застосунок" title="Встановити застосунок"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg></button>' : ''}
+      ${canInstall && !['game', 'reveal'].includes(app.route) ? pwaInstallButtonHtml() : ''}
       <button class="icon-btn order-btn" type="button" data-action="open-order-panel" aria-label="Замовити напій" title="Замовити напій" aria-haspopup="dialog">${headerControlIcon('order')}</button>
       <div class="header-media-controls" role="group" aria-label="Bluetooth і музика">
         <button class="icon-btn header-media-btn play-btn ${app.media.playing ? 'active' : ''}" data-action="media-play" aria-label="Відтворити музику" title="Відтворити музику" ${!hasTrack || app.media.playing ? 'disabled' : ''}>${headerControlIcon('play')}</button>
@@ -885,7 +914,7 @@ function statePanel(kind, title, detail = '', action = '', compact = false) {
   return `<div class="ui-state state-${esc(kind)} ${compact ? 'ui-state-inline' : 'ui-state-panel'}" role="status">${stateIcon(kind)}<div class="state-copy"><b>${esc(title)}</b>${detail ? `<small>${esc(detail)}</small>` : ''}</div>${action}</div>`;
 }
 
-function collapsiblePanel(id, title, explanation, content, className = '') {
+function collapsiblePanel(id, title, explanation, content, className = '', headerAction = '') {
   const expanded = Boolean(app.panelExpanded[id]);
   const contentId = `panel-${id}`;
   return `<section class="card card-pad collapsible-panel ${expanded ? 'expanded' : 'collapsed'} ${className}" data-panel="${id}">
@@ -893,7 +922,7 @@ function collapsiblePanel(id, title, explanation, content, className = '') {
       <button class="collapsible-toggle" type="button" data-action="toggle-panel" data-panel="${id}" aria-expanded="${expanded}" aria-controls="${contentId}">
         <span class="panel-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></span><h2>${title}</h2>
       </button>
-      ${helpIcon(explanation, `Пояснення: ${title}`)}
+      <div class="collapsible-head-tools">${helpIcon(explanation, `Пояснення: ${title}`)}${headerAction}</div>
     </div>
     <div id="${contentId}" class="collapsible-content" ${expanded ? '' : 'hidden'}>${content}</div>
   </section>`;
@@ -909,7 +938,7 @@ function firebaseSetupView() {
 
 function loginView() {
   const explanation = 'Оберіть Google-акаунт. Ім’я та Google-фото створять редагований профіль у закритому каталозі Enjoy. Email не публікується. Активні і завершені ігри синхронізуються; для глядачів активна гра передається без ролей, нічних цілей і приватного протоколу.';
-  return `<main class="access-page"><section class="card access-card"><img class="brand-mark access-logo" src="./assets/logo-mafia.webp" alt="" width="60" height="60" aria-hidden="true"><div class="eyebrow">Мафія у кав’ярні Enjoy</div>${titleHelp('h1', 'Увійдіть у Mafia', explanation)}<button class="btn primary google-btn wide" data-action="auth-signin" ${app.authBusy ? 'disabled' : ''}><span class="google-mark" aria-hidden="true">G</span>${app.authBusy ? 'Відкриваємо Google…' : 'Увійти через Google'}</button>${app.authError ? `<p class="danger-text">${esc(app.authError)}</p>` : ''}</section></main>`;
+  return `<main class="access-page"><section class="card access-card"><img class="brand-mark access-logo" src="./assets/logo-mafia.webp" alt="" width="60" height="60" aria-hidden="true"><div class="eyebrow">Мафія у кав’ярні Enjoy</div>${titleHelp('h1', 'Увійдіть у Mafia', explanation)}<div class="access-actions"><button class="btn primary google-btn wide" data-action="auth-signin" ${app.authBusy ? 'disabled' : ''}><span class="google-mark" aria-hidden="true">G</span>${app.authBusy ? 'Відкриваємо Google…' : 'Увійти через Google'}</button>${pwaInstallButtonHtml({ access: true })}</div>${app.authError ? `<p class="danger-text">${esc(app.authError)}</p>` : ''}</section></main>`;
 }
 
 function archiveStatusText() {
@@ -937,10 +966,14 @@ function homeView() {
       <article class="card stat-card"><b>${stats.redWinRate}%</b><span>перемог міста</span></article>
       <article class="card stat-card"><b>${formatDuration(stats.totalSeconds)}</b><span>за ігровим столом</span></article>
     </section>
-    <section class="card card-pad">
-      <div class="section-title section-heading">${titleHelp('h2', 'Останні ігри', archiveStatusText())}<button class="btn small secondary" data-nav="stats">Усі</button></div>
-      ${recent.length ? `<div class="list">${recent.map(gameRow).join('')}</div>` : statePanel('empty', 'Ігор ще немає', 'Створіть першу гру — усі дії потраплять до протоколу.')}
-    </section>
+    ${collapsiblePanel(
+      'homeRecentGames',
+      'Останні ігри',
+      archiveStatusText(),
+      recent.length ? `<div class="list">${recent.map(gameRow).join('')}</div>` : statePanel('empty', 'Ігор ще немає', 'Створіть першу гру — усі дії потраплять до протоколу.'),
+      '',
+      '<button class="btn small secondary" data-nav="stats">Усі</button>'
+    )}
     <div class="home-fab-group" role="group" aria-label="Швидкі дії"><button class="mobile-fab primary-fab" type="button" data-action="new-player" aria-label="Додати гравця" title="Додати гравця">${addPlayerIcon()}</button><button class="mobile-fab danger-fab" type="button" data-nav="setup" aria-label="Створити гру" title="Створити гру">${navIcon('setup')}</button></div>
   </main>`;
 }
@@ -1907,6 +1940,26 @@ function orderModalHtml() {
   </div></div>`;
 }
 
+function iosInstallModalHtml() {
+  const primaryHost = 'mafia-cafe.web.app';
+  const localHost = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const readyToInstall = location.hostname === primaryHost || localHost;
+  const shareIcon = pwaInstallIcon('ios-guide');
+  const homeIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 11 8-7 8 7v9h-6v-6h-4v6H4z"/></svg>';
+  const addIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8m-4-4h8"/></svg>';
+  const guide = readyToInstall ? `<div class="ios-install-steps">
+    <article><span class="ios-install-step-icon">${shareIcon}</span><span class="ios-install-step-number">1</span><div><b>Натисніть «Поділитися»</b><p>У Safari це квадрат зі стрілкою вгору.</p></div></article>
+    <article><span class="ios-install-step-icon">${homeIcon}</span><span class="ios-install-step-number">2</span><div><b>Оберіть «На екран “Домівка”»</b><p>Якщо пункту немає, відкрийте цю сторінку в Safari.</p></div></article>
+    <article><span class="ios-install-step-icon">${addIcon}</span><span class="ios-install-step-number">3</span><div><b>Натисніть «Додати»</b><p>Після цього запускайте Mafia Enjoy з нової іконки на екрані iPhone.</p></div></article>
+  </div>` : `<div class="ios-install-origin">${stateIcon('idle')}<div><b>Відкрийте основну адресу</b><p>Для надійного Google-входу на iPhone встановлюйте застосунок із ${primaryHost}.</p></div></div><a class="btn primary wide" href="https://${primaryHost}/">Відкрити адресу для iPhone</a>`;
+  return `<div class="modal-backdrop ios-install-backdrop" data-action="close-modal"><div class="card modal ios-install-modal" role="dialog" aria-modal="true" aria-labelledby="ios-install-title" tabindex="-1">
+    <div class="section-title section-heading"><div><span class="eyebrow">PWA · iPhone</span><h2 id="ios-install-title">Встановлення на iPhone</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div>
+    <p class="ios-install-lead">Додайте Mafia Enjoy на головний екран — застосунок відкриватиметься без панелей браузера.</p>
+    ${guide}
+    <div class="modal-actions"><button class="btn primary" type="button" data-action="close-modal">Готово</button></div>
+  </div></div>`;
+}
+
 function modalHtml() {
   if (!app.modal) return '';
   if (app.modal.type === 'player') return playerModalHtml();
@@ -1923,6 +1976,7 @@ function modalHtml() {
   if (app.modal.type === 'delete-account') return deleteAccountModalHtml();
   if (app.modal.type === 'media') return mediaModalHtml();
   if (app.modal.type === 'order') return orderModalHtml();
+  if (app.modal.type === 'ios-install') return iosInstallModalHtml();
   if (app.modal.type === 'winner') return `<div class="modal-backdrop"><div class="card modal game-modal decision-modal" role="dialog" aria-modal="true"><div class="game-dialog-head"><div><span class="eyebrow">Завершення гри</span>${titleHelp('h2', 'Результат гри', 'Ручне завершення потрібне для нестандартної ситуації, нічиєї або рішення судді.')}</div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div><p class="game-dialog-copy">Оберіть результат. Він одразу потрапить до протоколу та статистики.</p><div class="winner-choice-grid"><button class="btn primary winner-choice" data-action="finish-red"><span>●</span><strong>Мирне місто</strong><small>Червона команда</small></button><button class="btn danger winner-choice" data-action="finish-black"><span>◆</span><strong>Мафія</strong><small>Чорна команда</small></button><button class="btn secondary winner-choice winner-draw-choice" data-action="finish-draw"><span>＝</span><strong>Нічия</strong><small>Без переможця</small></button></div><div class="modal-actions"><button class="btn secondary" data-action="close-modal">Скасувати</button></div></div></div>`;
   return '';
 }
@@ -2976,11 +3030,13 @@ async function publishLocalActiveGamesNow() {
   return candidates.length;
 }
 
-async function syncLocalFinishedGames(remoteGames = app.cloudGames) {
+async function syncLocalFinishedGames(remoteGames = app.cloudGames, deletedGameIds = app.deletedGameIds) {
   if (!app.authUser || LOCAL_AUTH_TEST) return;
+  const deleted = new Set(deletedGameIds || []);
   const remoteById = new Map(remoteGames.map(game => [game.id, game]));
   const pending = app.localGames.filter(game => {
     if (game.status !== 'finished') return false;
+    if (deleted.has(game.id)) return false;
     const remote = remoteById.get(game.id);
     return !remote || remote.cloudOwnerUid === app.authUser.uid && String(remote.updatedAt || '') < String(game.updatedAt || game.endedAt || '');
   });
@@ -2998,6 +3054,16 @@ async function connectCloudArchive() {
   renderPassiveCloudUpdate();
   cloudArchiveMigrationStarted = false;
   cloudArchivePromise = subscribeCommunityGames((games, metadata) => {
+    app.deletedGameIds = metadata.deletedGameIds || [];
+    const deleted = new Set(app.deletedGameIds);
+    const removedLocalIds = app.localGames
+      .filter(game => game.status === 'finished' && deleted.has(game.id))
+      .map(game => game.id);
+    if (removedLocalIds.length) {
+      app.localGames = app.localGames.filter(game => !removedLocalIds.includes(game.id));
+      if (app.game?.status === 'finished' && deleted.has(app.game.id)) app.game = null;
+      void Promise.all(removedLocalIds.map(gameId => deleteOne('games', gameId))).catch(() => {});
+    }
     app.cloudGames = games;
     mergeGameSources();
     const routed = routeFromHash();
@@ -3012,10 +3078,10 @@ async function connectCloudArchive() {
     };
     renderPassiveCloudUpdate();
     if (app.route === 'stats') void loadStatsGameFeedback(games.filter(game => game.status === 'finished'));
-    if (!cloudArchiveMigrationStarted) {
+    if (metadata.ready && !cloudArchiveMigrationStarted) {
       cloudArchiveMigrationStarted = true;
       syncLocalActiveGames();
-      syncLocalFinishedGames(games).catch(error => {
+      syncLocalFinishedGames(games, app.deletedGameIds).catch(error => {
         app.cloudArchive = { status: 'error', error: cloudArchiveError(error), fromCache: metadata.fromCache };
         renderPassiveCloudUpdate();
       });
@@ -3217,7 +3283,7 @@ async function flushPendingFinishedGameDeletes() {
   const pending = await getSetting('pendingFinishedGameDeletes', []);
   const remaining = [];
   for (const gameId of pending) {
-    try { await deleteFinishedCommunityGame(app.authUser, gameId); }
+    try { await deleteFinishedCommunityGame(app.authUser, gameId, { tombstone: false }); }
     catch { remaining.push(gameId); }
   }
   await setSetting('pendingFinishedGameDeletes', remaining);
@@ -3226,7 +3292,7 @@ async function flushPendingFinishedGameDeletes() {
 async function removeFinishedResultForReopen(gameId) {
   app.cloudGames = app.cloudGames.filter(game => !(game.id === gameId && game.status === 'finished'));
   if (LOCAL_AUTH_TEST) return;
-  try { await deleteFinishedCommunityGame(app.authUser, gameId); }
+  try { await deleteFinishedCommunityGame(app.authUser, gameId, { tombstone: false }); }
   catch { await rememberFinishedGameDelete(gameId); }
 }
 
@@ -3516,9 +3582,17 @@ async function handleAction(action, element, sourceEvent) {
     app.modal = null;
     render();
   } else if (action === 'install') {
-    app.installPrompt?.prompt();
-    await app.installPrompt?.userChoice;
-    app.installPrompt = null; render();
+    const mode = currentPwaInstallMode();
+    if (mode === 'ios-guide') {
+      app.modal = { type: 'ios-install' };
+      render();
+      return;
+    }
+    if (mode !== 'native' || !app.installPrompt) return;
+    app.installPrompt.prompt();
+    await app.installPrompt.userChoice;
+    app.installPrompt = null;
+    render();
   } else if (action === 'toggle-next-player') {
     const player = playerById(element.dataset.id);
     if (!player) return;
@@ -3993,6 +4067,7 @@ function clearAuthenticatedState() {
   app.players = [];
   app.localGames = [];
   app.cloudGames = [];
+  app.deletedGameIds = [];
   app.ownedPlayerLinks = [];
   app.playerLinkOffers = [];
   app.playerLinkBusy = false;
@@ -4014,6 +4089,7 @@ async function loadAppData() {
   app.players = [];
   app.localPlayers = [];
   app.localGames = [];
+  app.deletedGameIds = [];
   app.games = [];
   app.game = null;
   app.draft = null;
@@ -4109,6 +4185,13 @@ document.addEventListener('keydown', async event => {
 });
 window.addEventListener('hashchange', onRouteChange);
 window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); app.installPrompt = event; render(); });
+window.addEventListener('appinstalled', () => {
+  app.installPrompt = null;
+  if (app.modal?.type === 'ios-install') app.modal = null;
+  render();
+  toast('Mafia Enjoy встановлено');
+});
+window.matchMedia?.('(display-mode: standalone)').addEventListener?.('change', () => render());
 window.addEventListener('online', () => {
   toast('Інтернет-з’єднання відновлено');
   if (app.authUser && app.cloudDirectory.status === 'error') connectCloudDirectory({ hasLocalProfile: true });
@@ -4157,7 +4240,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=150', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=151', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

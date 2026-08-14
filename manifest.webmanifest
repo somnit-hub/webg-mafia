@@ -3,6 +3,7 @@
   "short_name": "Mafia Enjoy",
   "description": "Local-first помічник мафія-клубу кав’ярні Enjoy",
   "lang": "uk",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

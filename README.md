@@ -93,6 +93,8 @@ Worker працює окремо від Firebase Hosting і Firestore, тому 
 
 Основний production-хостинг — [mafia-cafe.web.app](https://mafia-cafe.web.app). Сторінка та службовий обробник Google-входу працюють на одному домені, що також усуває проблему redirect-входу в Safari на iPhone.
 
+На iPhone застосунок показує власну кнопку встановлення, оскільки Safari не підтримує системну подію `beforeinstallprompt`. Вона відкриває коротку інструкцію: **Поділитися → На екран «Домівка» → Додати**. Після запуску з домашнього екрана PWA визначає standalone-режим, приховує кнопку встановлення та враховує safe-area навколо вирізу й нижнього індикатора. Мобільний Google-вхід на основному Firebase-домені виконується через redirect, як рекомендовано для мобільних браузерів.
+
 ```powershell
 npx --yes firebase-tools@15.26.0 deploy --only hosting:mafia,auth
 ```

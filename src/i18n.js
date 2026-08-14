@@ -687,6 +687,55 @@ Object.assign(COPY.fr, {
   'Завантажуємо анонімні оцінки…': 'Chargement des évaluations anonymes…', 'Оцінки тимчасово недоступні': 'Évaluations temporairement indisponibles'
 });
 
+Object.assign(COPY.it, {
+  'Встановити на iPhone': 'Installa su iPhone',
+  'Встановлення на iPhone': 'Installazione su iPhone',
+  'Додайте Mafia Enjoy на головний екран — застосунок відкриватиметься без панелей браузера.': 'Aggiungi Mafia Enjoy alla schermata Home: l’app si aprirà senza le barre del browser.',
+  'Натисніть «Поділитися»': 'Tocca «Condividi»',
+  'У Safari це квадрат зі стрілкою вгору.': 'In Safari è il quadrato con una freccia verso l’alto.',
+  'Оберіть «На екран “Домівка”»': 'Scegli «Aggiungi alla schermata Home»',
+  'Якщо пункту немає, відкрийте цю сторінку в Safari.': 'Se l’opzione non è presente, apri questa pagina in Safari.',
+  'Натисніть «Додати»': 'Tocca «Aggiungi»',
+  'Після цього запускайте Mafia Enjoy з нової іконки на екрані iPhone.': 'Quindi avvia Mafia Enjoy dalla nuova icona sullo schermo dell’iPhone.',
+  'Відкрийте основну адресу': 'Apri l’indirizzo principale',
+  'Для надійного Google-входу на iPhone встановлюйте застосунок із mafia-cafe.web.app.': 'Per un accesso Google affidabile su iPhone, installa l’app da mafia-cafe.web.app.',
+  'Відкрити адресу для iPhone': 'Apri l’indirizzo per iPhone',
+  'Готово': 'Fatto',
+  'Mafia Enjoy встановлено': 'Mafia Enjoy è stata installata'
+});
+Object.assign(COPY.en, {
+  'Встановити на iPhone': 'Install on iPhone',
+  'Встановлення на iPhone': 'Install on iPhone',
+  'Додайте Mafia Enjoy на головний екран — застосунок відкриватиметься без панелей браузера.': 'Add Mafia Enjoy to your Home Screen so it opens without browser bars.',
+  'Натисніть «Поділитися»': 'Tap Share',
+  'У Safari це квадрат зі стрілкою вгору.': 'In Safari, it is the square with an upward arrow.',
+  'Оберіть «На екран “Домівка”»': 'Choose “Add to Home Screen”',
+  'Якщо пункту немає, відкрийте цю сторінку в Safari.': 'If the option is missing, open this page in Safari.',
+  'Натисніть «Додати»': 'Tap Add',
+  'Після цього запускайте Mafia Enjoy з нової іконки на екрані iPhone.': 'Then launch Mafia Enjoy from its new icon on your iPhone.',
+  'Відкрийте основну адресу': 'Open the primary address',
+  'Для надійного Google-входу на iPhone встановлюйте застосунок із mafia-cafe.web.app.': 'For reliable Google sign-in on iPhone, install the app from mafia-cafe.web.app.',
+  'Відкрити адресу для iPhone': 'Open the iPhone address',
+  'Готово': 'Done',
+  'Mafia Enjoy встановлено': 'Mafia Enjoy is installed'
+});
+Object.assign(COPY.fr, {
+  'Встановити на iPhone': 'Installer sur iPhone',
+  'Встановлення на iPhone': 'Installation sur iPhone',
+  'Додайте Mafia Enjoy на головний екран — застосунок відкриватиметься без панелей браузера.': 'Ajoutez Mafia Enjoy à l’écran d’accueil pour l’ouvrir sans les barres du navigateur.',
+  'Натисніть «Поділитися»': 'Touchez «Partager»',
+  'У Safari це квадрат зі стрілкою вгору.': 'Dans Safari, c’est le carré avec une flèche vers le haut.',
+  'Оберіть «На екран “Домівка”»': 'Choisissez «Sur l’écran d’accueil»',
+  'Якщо пункту немає, відкрийте цю сторінку в Safari.': 'Si l’option n’apparaît pas, ouvrez cette page dans Safari.',
+  'Натисніть «Додати»': 'Touchez «Ajouter»',
+  'Після цього запускайте Mafia Enjoy з нової іконки на екрані iPhone.': 'Lancez ensuite Mafia Enjoy depuis sa nouvelle icône sur l’iPhone.',
+  'Відкрийте основну адресу': 'Ouvrez l’adresse principale',
+  'Для надійного Google-входу на iPhone встановлюйте застосунок із mafia-cafe.web.app.': 'Pour une connexion Google fiable sur iPhone, installez l’app depuis mafia-cafe.web.app.',
+  'Відкрити адресу для iPhone': 'Ouvrir l’adresse pour iPhone',
+  'Готово': 'Terminé',
+  'Mafia Enjoy встановлено': 'Mafia Enjoy est installée'
+});
+
 const PATTERNS = {
   it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+) оцінок/g, '$1 valutazioni'], [/(\d+)% перемог/g, '$1% vittorie'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
   en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+) оцінок/g, '$1 ratings'], [/(\d+)% перемог/g, '$1% wins'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],

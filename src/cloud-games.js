@@ -19,6 +19,10 @@ function gamePath(sdk, database, gameId) {
   return sdk.doc(database, 'communities', COMMUNITY_ID, 'games', gameId);
 }
 
+function gameDeletionPath(sdk, database, gameId) {
+  return sdk.doc(database, 'communities', COMMUNITY_ID, 'gameDeletions', gameId);
+}
+
 function firestoreValue(value) {
   if (value === null || value === undefined) return { nullValue: null };
   if (typeof value === 'boolean') return { booleanValue: value };
@@ -262,13 +266,28 @@ export async function saveFinishedCommunityGame(user, profile, game) {
   return true;
 }
 
-export async function deleteFinishedCommunityGame(user, gameId) {
+export async function deleteFinishedCommunityGame(user, gameId, { tombstone = true } = {}) {
   const { database, sdk } = await getCommunityFirestore();
-  const reference = gamePath(sdk, database, clean(gameId, 160));
+  const cleanGameId = clean(gameId, 160);
+  const reference = gamePath(sdk, database, cleanGameId);
   const snapshot = await sdk.getDoc(reference);
   if (!snapshot.exists()) return;
   if (snapshot.data().ownerUid !== user.uid) throw new Error('Цю гру може видалити лише її ведучий');
+  if (tombstone) {
+    await sdk.setDoc(gameDeletionPath(sdk, database, cleanGameId), {
+      id: cleanGameId,
+      communityId: COMMUNITY_ID,
+      ownerUid: user.uid,
+      deletedAt: sdk.serverTimestamp(),
+      schemaVersion: 1
+    });
+  }
   await sdk.deleteDoc(reference);
+}
+
+export function excludeDeletedGames(games, deletedGameIds) {
+  const deleted = deletedGameIds instanceof Set ? deletedGameIds : new Set(deletedGameIds || []);
+  return (games || []).filter(game => !deleted.has(game.id));
 }
 
 export async function subscribeCommunityGames(onGames, onError) {
@@ -276,19 +295,24 @@ export async function subscribeCommunityGames(onGames, onError) {
   stopArchive?.();
   let finished = [];
   let active = [];
+  let deletedGameIds = new Set();
   let finishedReady = false;
   let activeReady = false;
+  let deletionsReady = false;
   let finishedError = null;
   let activeError = null;
+  let deletionsError = null;
   let finishedMetadata = { fromCache: true, hasPendingWrites: false };
   let activeMetadata = { fromCache: true, hasPendingWrites: false };
+  let deletionsMetadata = { fromCache: true, hasPendingWrites: false };
   const emit = () => onGames(
-    [...active, ...finished].sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt))),
+    [...active, ...excludeDeletedGames(finished, deletedGameIds)].sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt))),
     {
-      ready: finishedReady && activeReady,
-      error: activeError || finishedError,
-      fromCache: finishedMetadata.fromCache && activeMetadata.fromCache,
-      hasPendingWrites: finishedMetadata.hasPendingWrites || activeMetadata.hasPendingWrites
+      ready: finishedReady && activeReady && deletionsReady,
+      error: activeError || finishedError || deletionsError,
+      fromCache: finishedMetadata.fromCache && activeMetadata.fromCache && deletionsMetadata.fromCache,
+      hasPendingWrites: finishedMetadata.hasPendingWrites || activeMetadata.hasPendingWrites || deletionsMetadata.hasPendingWrites,
+      deletedGameIds: [...deletedGameIds]
     }
   );
   const stopFinished = sdk.onSnapshot(
@@ -325,9 +349,27 @@ export async function subscribeCommunityGames(onGames, onError) {
       emit();
     }
   );
+  const stopDeletions = sdk.onSnapshot(
+    sdk.collection(database, 'communities', COMMUNITY_ID, 'gameDeletions'),
+    { includeMetadataChanges: true },
+    snapshot => {
+      deletedGameIds = new Set(snapshot.docs.map(document => document.id));
+      deletionsReady = true;
+      deletionsError = null;
+      deletionsMetadata = snapshot.metadata;
+      emit();
+    },
+    error => {
+      deletionsReady = true;
+      deletionsError = error;
+      onError?.(error);
+      emit();
+    }
+  );
   stopArchive = () => {
     stopFinished();
     stopActive();
+    stopDeletions();
   };
   return () => {
     stopArchive?.();

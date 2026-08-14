@@ -182,6 +182,7 @@ let app = {
   },
   panelExpanded: {
     homeRecentGames: false,
+    moderatorPanel: false,
     setupGame: false,
     setupTimers: false,
     setupRules: false,
@@ -1382,11 +1383,16 @@ function tableHtml(observer = false) {
 function gameSeatHtml(seat, observer) {
   const current = (app.game.phase === 'day' && currentSpeaker()?.number === seat.number) || (app.game.phase === 'tieSpeech' && app.game.vote.tied[app.game.speakerIndex] === seat.number);
   const nominated = app.game.nominations.includes(seat.number) || app.game.vote.tied.includes(seat.number);
-  const profile = seat.profileId ? (playerById(seat.profileId) || seat) : seat;
+  const seatNameKey = String(seat.name || '').trim().toLocaleLowerCase('uk');
+  const directoryProfile = seat.profileId
+    ? playerById(seat.profileId)
+    : app.players.find(player => preferredPlayerName(player).trim().toLocaleLowerCase('uk') === seatNameKey);
+  const seatAvatar = directoryProfile?.avatar || directoryProfile?.avatarPreset || seat.avatar || seat.avatarPreset || ANIMAL_AVATARS[(seat.number - 1) % ANIMAL_AVATARS.length];
+  const faultDots = Array.from({ length: 4 }, (_, index) => `<i class="fault-dot ${index < seat.faults ? 'active' : ''}" aria-hidden="true"></i>`).join('');
   const tags = seat.status === 'dead' ? 'вибув' : nominated ? 'кандидат' : seat.noVote ? 'без голосу' : '';
-  return `<button class="game-seat ${seat.status === 'alive' ? 'alive' : 'dead'} ${current ? 'current' : ''} ${nominated ? 'nominated' : ''}" ${observer ? '' : `data-action="seat-menu" data-seat="${seat.number}"`} aria-label="Гравець ${seat.number}, ${esc(seat.name)}${tags ? `, ${tags}` : ''}">
-    <span class="seat-top"><span class="num">${seat.number}</span><span class="fault-mini">${'●'.repeat(seat.faults)}${'○'.repeat(Math.max(0, 4 - seat.faults))}</span></span>
-    ${avatar({ ...profile, name: seat.name }, '')}<span class="seat-name">${esc(seat.name)}</span><span class="seat-tag ${nominated ? 'alert' : ''}">${tags}</span>
+  return `<button class="game-seat ${seat.status === 'alive' ? 'alive' : 'dead'} ${current ? 'current' : ''} ${nominated ? 'nominated' : ''}" ${observer ? '' : `data-action="seat-menu" data-seat="${seat.number}"`} aria-label="Гравець ${seat.number}, ${esc(seat.name)}, фолів ${seat.faults} з 4${tags ? `, ${tags}` : ''}">
+    <span class="seat-top"><span class="num">${seat.number}</span><span class="fault-mini" aria-label="Фоли: ${seat.faults} з 4">${faultDots}</span></span>
+    ${avatar({ name: seat.name, avatar: seatAvatar }, '')}<span class="seat-name">${esc(seat.name)}</span><span class="seat-tag ${nominated ? 'alert' : ''}">${tags}</span>
   </button>`;
 }
 
@@ -1407,8 +1413,7 @@ function phaseControlHtml(observer) {
 function timerControls(nextAction, nextLabel) {
   const game = app.game;
   const prominentNext = ['zero-night-sheriff', 'zero-night-free-seating', 'zero-to-day', 'finish-best-move'].includes(nextAction) ? 'game-lead-action' : '';
-  return `<div class="timer ${game.timer.remaining <= 10 ? 'danger' : ''}">${formatTimer(game.timer.remaining)}</div>
-    <div class="timer-controls"><button class="btn secondary icon" data-action="timer-minus" aria-label="Мінус 5 секунд">−5</button><button class="btn secondary icon" data-action="timer-plus" aria-label="Плюс 5 секунд">+5</button></div>
+  return `<div class="timer-adjust-row"><button class="btn secondary icon" data-action="timer-minus" aria-label="Мінус 5 секунд">−5</button><div class="timer ${game.timer.remaining <= 10 ? 'danger' : ''}">${formatTimer(game.timer.remaining)}</div><button class="btn secondary icon" data-action="timer-plus" aria-label="Плюс 5 секунд">+5</button></div>
     <div class="primary-game-actions"><button class="btn primary game-lead-action" data-action="timer-toggle">${game.timer.running ? 'Пауза' : 'Старт'}</button><button class="btn secondary" data-action="timer-reset">Скинути</button><button class="btn primary ${prominentNext}" data-action="${nextAction}">${nextLabel}</button></div>`;
 }
 
@@ -1555,7 +1560,7 @@ function targetsHtml(selected, { action = 'night-target', selectedMany = [] } = 
 
 function compactTimerControls() {
   const game = app.game;
-  return `<div class="compact-timer"><div class="timer ${game.timer.remaining <= 10 ? 'danger' : ''}">${formatTimer(game.timer.remaining)}</div><div class="compact-timer-actions"><button class="btn secondary" data-action="timer-minus" aria-label="Мінус 5 секунд">−5</button><button class="btn primary" data-action="timer-toggle">${game.timer.running ? 'Пауза' : 'Старт'}</button><button class="btn secondary" data-action="timer-plus" aria-label="Плюс 5 секунд">+5</button><button class="btn secondary" data-action="timer-reset">Скинути</button></div></div>`;
+  return `<div class="compact-timer"><div class="timer-adjust-row"><button class="btn secondary icon" data-action="timer-minus" aria-label="Мінус 5 секунд">−5</button><div class="timer ${game.timer.remaining <= 10 ? 'danger' : ''}">${formatTimer(game.timer.remaining)}</div><button class="btn secondary icon" data-action="timer-plus" aria-label="Плюс 5 секунд">+5</button></div><div class="compact-timer-actions"><button class="btn primary" data-action="timer-toggle">${game.timer.running ? 'Пауза' : 'Старт'}</button><button class="btn secondary" data-action="timer-reset">Скинути</button></div></div>`;
 }
 
 function nightTargetPanel(roleKey, title, text, selected, actions, steps = '', cue = '') {
@@ -1590,8 +1595,9 @@ function nightCheckPanel(kind) {
 function moderatorSideHtml() {
   const game = app.game;
   const black = game.seats.filter(seat => teamOf(seat) === 'black');
-  return `<section class="card card-pad"><div class="section-title section-heading">${titleHelp('h3', 'Панель ведучого', 'Ця панель містить приватну інформацію. Ролі початково приховані від випадкового погляду.')}<button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати' : 'Ролі'}</button></div>${game.showSecrets ? `<div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}<div class="divider"></div><div class="actions"><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button><button class="btn small secondary" data-action="copy-protocol">Копіювати протокол</button><button class="btn small secondary" data-action="open-observer">Оглядач</button></div></section>
-    <section class="card card-pad"><div class="section-title section-heading"><div><h3>Протокол</h3><p>${game.history.length} подій</p></div></div><div class="quick-log">${game.history.slice(0, 25).map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('') || statePanel('empty', 'Подій ще немає', '', '', true)}</div></section>
+  const moderatorControls = `<div class="actions moderator-actions"><button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати ролі' : 'Ролі'}</button><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button></div>${game.showSecrets ? `<div class="divider"></div><div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}`;
+  return `${collapsiblePanel('moderatorPanel', 'Панель ведучого', 'Ця панель містить приватну інформацію. Ролі початково приховані від випадкового погляду.', moderatorControls, 'moderator-panel')}
+    <section class="card card-pad moderator-protocol-panel"><div class="section-title section-heading"><div><h3>Протокол</h3><p>${game.history.length} подій</p></div></div><div class="quick-log">${game.history.slice(0, 25).map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('') || statePanel('empty', 'Подій ще немає', '', '', true)}</div></section>
     <div class="game-end-actions"><button class="btn danger" data-action="end-game-manual">Завершити гру</button></div>`;
 }
 

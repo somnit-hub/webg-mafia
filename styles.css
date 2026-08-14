@@ -893,7 +893,9 @@ img { display: block; max-width: 100%; }
 .game-seat.dead { border-color: var(--subtle); color: var(--muted); background: color-mix(in srgb, var(--surface-2) 82%, #737373 18%); box-shadow: inset 0 3px var(--subtle); opacity: .68; filter: grayscale(1) saturate(0); }
 .game-seat .seat-top { width: 100%; display: flex; align-items: center; justify-content: space-between; }
 .game-seat .num { min-width: 28px; height: 28px; border: 1px solid currentColor; border-radius: 50%; display: grid; place-items: center; color: var(--gold); background: rgb(0 0 0 / 18%); font-size: 21px; font-weight: 950; line-height: 1; }
-.game-seat .fault-mini { color: var(--danger); font-size: 9px; letter-spacing: -1px; }
+.game-seat .fault-mini { min-width: 26px; display: flex; align-items: center; justify-content: center; gap: 2px; color: var(--danger); }
+.game-seat .fault-dot { width: 5px; height: 5px; flex: 0 0 5px; border: 1px solid currentColor; border-radius: 50%; display: block; background: transparent; opacity: .72; }
+.game-seat .fault-dot.active { background: currentColor; box-shadow: 0 0 0 1px rgb(0 0 0 / 22%); opacity: 1; }
 .game-seat .avatar { width: 30px; height: 30px; flex-basis: 30px; margin: -2px auto 2px; border-width: 1px; font-size: 10px; }
 .game-seat .seat-name { width: 100%; overflow: hidden; font-size: 9px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .game-seat .seat-tag { min-height: 12px; margin-top: 2px; color: var(--muted); font-size: 8px; }
@@ -905,7 +907,9 @@ img { display: block; max-width: 100%; }
 .speaker-row h2 { margin: 2px 0 0; font-size: 18px; }
 .timer { color: var(--text); font-size: clamp(56px, 17vw, 92px); font-weight: 180; font-variant-numeric: tabular-nums; letter-spacing: -.06em; line-height: .95; text-align: center; }
 .timer.danger { color: var(--danger); }
-.timer-controls { display: grid; grid-template-columns: 44px 44px; justify-content: center; gap: 7px; margin-top: 8px; }
+.timer-adjust-row { width: min(620px, 100%); margin: 0 auto; display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 8px; }
+.timer-adjust-row .timer { min-width: 0; }
+.timer-adjust-row > .btn { width: 48px; min-width: 48px; min-height: 48px; padding: 0; }
 .primary-game-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }
 .game-side { display: grid; gap: 10px; }
 .quick-log { max-height: 180px; overflow: auto; }
@@ -920,11 +924,11 @@ img { display: block; max-width: 100%; }
 .phase-panel p { max-width: 620px; margin: 0 0 14px; color: var(--muted); line-height: 1.45; }
 .phase-enter { animation: game-phase-enter .24s ease-out both; }
 .phase-stepper { width: min(620px, 100%); margin: 0 0 12px; padding: 0; display: grid; grid-template-columns: repeat(var(--phase-step-count, 5), minmax(0, 1fr)); list-style: none; }
-.phase-stepper li { position: relative; min-width: 0; display: grid; justify-items: center; gap: 4px; color: var(--subtle); font-size: 8px; line-height: 1.05; text-align: center; }
+.phase-stepper li { position: relative; min-width: 0; display: grid; justify-items: center; gap: 5px; color: var(--muted); font-size: 10px; line-height: 1.2; text-align: center; }
 .phase-stepper li::before { content: ''; position: absolute; z-index: 0; top: 10px; right: 50%; left: -50%; height: 2px; background: var(--line); }
 .phase-stepper li:first-child::before { display: none; }
 .phase-stepper span { position: relative; z-index: 1; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 50%; display: grid; place-items: center; color: var(--muted); background: var(--surface-2); font-family: var(--font-numeric); font-size: 10px; font-weight: 900; }
-.phase-stepper b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phase-stepper b { max-width: 100%; padding: 0 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .phase-stepper li.done::before, .phase-stepper li.current::before { background: var(--gold); }
 .phase-stepper li.done span { border-color: var(--gold); color: var(--surface); background: var(--gold); }
 .phase-stepper li.current { color: var(--text); }
@@ -932,9 +936,9 @@ img { display: block; max-width: 100%; }
 .moderator-cue { width: min(620px, 100%); margin: 0 0 10px; padding: 9px 11px; border-left: 3px solid var(--gold); display: grid; gap: 2px; color: var(--text); background: color-mix(in srgb, var(--gold) 8%, var(--surface-2)); text-align: left; }
 .moderator-cue span { color: var(--gold); font-size: 9px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
 .moderator-cue b { font-size: 13px; line-height: 1.3; }
-.compact-timer { width: min(620px, 100%); display: grid; grid-template-columns: minmax(96px, .62fr) minmax(210px, 1.38fr); align-items: center; gap: 8px; margin: 0 0 8px; }
+.compact-timer { width: min(620px, 100%); display: grid; gap: 6px; margin: 0 0 8px; }
 .compact-timer .timer { font-size: clamp(42px, 12vw, 64px); }
-.compact-timer-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+.compact-timer-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
 .compact-timer-actions .btn { min-width: 0; min-height: 44px; padding: 6px 4px; font-size: 13px; }
 .night-action-panel { justify-content: flex-start; min-height: 0; }
 .night-action-panel .phase-signal { margin-bottom: 3px; }
@@ -1229,7 +1233,7 @@ img { display: block; max-width: 100%; }
   .phase-copy h1 { font-size: 16px; }
   .phase-copy p { font-size: 11px; }
   .phase-stats { font-size: 12px; }
-  .game-seat .fault-mini { font-size: 10px; }
+  .game-seat .fault-mini { gap: 2px; }
   .game-seat .seat-name { font-size: 10.5px; }
   .game-seat .seat-tag { font-size: 9px; }
   .speaker-row h2 { font-size: 19px; }
@@ -1328,7 +1332,8 @@ img { display: block; max-width: 100%; }
   .game-workspace { gap: 7px; }
   .phase-strip { min-height: 48px; }
   .control-card { padding: 10px; }
-  .game-side { display: none; }
+  .game-side { display: grid; }
+  .moderator-protocol-panel { display: none; }
   .avatar-editor { grid-template-columns: 1fr; justify-items: center; text-align: center; }
   .avatar-source-actions { justify-content: center; }
   .page-head { align-items: stretch; flex-direction: column; }
@@ -1643,7 +1648,7 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   letter-spacing: -.025em;
 }
 .stat-card b, .timer, .seat-no, .reveal-seat, .vote-count { font-weight: 700; }
-.timer-controls .btn, .primary-game-actions .btn { min-height: 48px; }
+.timer-adjust-row .btn, .primary-game-actions .btn { min-height: 48px; }
 .btn.game-lead-action { min-height: 60px; padding: 13px 18px; border-radius: 15px; font-size: 18px; font-weight: 900; line-height: 1.15; }
 .target, .vote-card, .nom-chip { border-radius: 5px; }
 .target.selected { border-color: var(--gold); background: var(--surface-2); box-shadow: inset 0 -3px var(--gold); }
@@ -1770,28 +1775,31 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .phase-strip { min-height: 48px; padding: 8px 9px; }
   .table-card { padding: 6px; }
   .seat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
-  .game-seat { min-height: 58px; padding: 4px 5px; display: grid; grid-template-columns: 32px 30px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; align-items: center; column-gap: 5px; text-align: left; }
-  .game-seat .seat-top { width: auto; grid-column: 1; grid-row: 1 / -1; display: grid; justify-items: center; gap: 2px; }
-  .game-seat .num { min-width: 30px; height: 30px; }
-  .game-seat .fault-mini { font-size: 8px; letter-spacing: -1.5px; }
-  .game-seat .avatar { width: 30px; height: 30px; flex-basis: 30px; grid-column: 2; grid-row: 1 / -1; margin: 0; }
-  .game-seat .seat-name { grid-column: 3; grid-row: 1; font-size: 10px; text-align: left; }
-  .game-seat .seat-tag { grid-column: 3; grid-row: 2; min-height: 10px; margin: 0; font-size: 8px; text-align: left; }
+  .game-seat { min-height: 64px; padding: 4px 5px; display: grid; grid-template-columns: 34px 40px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; align-items: center; column-gap: 5px; text-align: left; }
+  .game-seat .seat-top { width: 34px; grid-column: 1; grid-row: 1 / -1; display: grid; justify-items: center; gap: 3px; }
+  .game-seat .num { min-width: 32px; height: 32px; font-size: 22px; }
+  .game-seat .fault-mini { min-width: 30px; gap: 2px; }
+  .game-seat .fault-dot { width: 6px; height: 6px; flex-basis: 6px; border-width: 1.5px; }
+  .game-seat .avatar { width: 40px; height: 40px; flex-basis: 40px; grid-column: 2; grid-row: 1 / -1; margin: 0; }
+  .game-seat .seat-name { grid-column: 3; grid-row: 1; font-size: 11.5px; font-weight: 850; text-align: left; }
+  .game-seat .seat-tag { grid-column: 3; grid-row: 2; min-height: 11px; margin: 0; font-size: 9px; font-weight: 750; text-align: left; }
   .control-card { padding: 10px; }
   .timer { font-size: clamp(62px, 19vw, 82px); }
-  .timer-controls { margin-top: 5px; }
+  .timer-adjust-row { grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 5px; }
+  .timer-adjust-row > .btn { width: 44px; min-width: 44px; }
   .primary-game-actions { gap: 5px; margin-top: 5px; }
   .primary-game-actions .btn { min-width: 0; padding-right: 7px; padding-left: 7px; font-size: 15px; }
   .primary-game-actions .game-lead-action { font-size: 18px; }
-  .game-side { display: none; }
+  .game-side { display: grid; }
+  .moderator-protocol-panel { display: none; }
   .game-focus-phase .phase-strip { position: sticky; z-index: 2; top: calc(var(--top-h) + 2px); }
   .game-focus-phase .phase-panel, .game-focus-phase .control-card { min-height: 0; }
   .night-result-panel { min-height: 345px; }
   .phase-stepper { margin-bottom: 8px; }
-  .phase-stepper b { font-size: 7px; }
+  .phase-stepper b { font-size: 10px; }
   .moderator-cue { margin-bottom: 7px; padding: 7px 9px; }
   .moderator-cue b { font-size: 12px; }
-  .compact-timer { grid-template-columns: 92px minmax(0, 1fr); gap: 5px; }
+  .compact-timer { gap: 5px; }
   .compact-timer-actions { gap: 3px; }
   .compact-timer-actions .btn { padding: 4px 2px; font-size: 11px; }
   .night-action-panel { padding: 9px; }

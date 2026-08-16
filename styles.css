@@ -506,7 +506,12 @@ img { display: block; max-width: 100%; }
 .button-random-icon { width: 20px; height: 20px; flex: 0 0 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 .button-dice-icon circle { fill: currentColor; stroke: none; }
 .setup-random-action span { min-width: 0; }
-.setup-seating-actions { display: flex; align-items: stretch; gap: 8px; }
+.panel-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) 50px;
+  align-items: stretch;
+}
+.setup-seating-actions { display: contents; }
 .setup-clear-seating-action {
   width: 50px;
   height: 50px;
@@ -536,7 +541,7 @@ img { display: block; max-width: 100%; }
 .setup-deal-caption .help { width: 18px; height: 18px; flex-basis: 18px; font-size: 10px; }
 .setup-deal-action .select { min-width: 0; min-height: 25px; border: 0; border-radius: 0; padding: 0 22px 0 0; background-color: transparent; box-shadow: none; font-size: 14px; font-weight: 800; cursor: pointer; }
 .setup-deal-action:focus-within { border-color: var(--focus-line); box-shadow: 0 0 0 3px var(--focus-ring); }
-.panel-actions .setup-random-action { height: 50px; min-height: 50px; align-self: stretch; }
+.panel-actions .setup-random-action { width: 100%; min-width: 0; height: 50px; min-height: 50px; align-self: stretch; }
 .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .stat-card { padding: 15px; }
 .stat-card b { display: block; margin-bottom: 3px; font-size: 27px; font-variant-numeric: tabular-nums; }

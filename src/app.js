@@ -63,7 +63,7 @@ import {
 import {
   connectPreparedTelegramProfile, normalizeTelegramUsername,
   prepareTelegramProfileConnection, telegramManualProfile
-} from './telegram-profile.js';
+} from './telegram-profile.js?v=2';
 
 const ROLE_DECK = [
   { key: 'sheriff', label: 'Шериф', team: 'red', symbol: '★', description: 'Щоночі перевіряє одного гравця та дізнається колір його команди.' },

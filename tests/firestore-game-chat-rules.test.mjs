@@ -92,6 +92,9 @@ const liveGame = {
 };
 await request(livePath, { method: 'PATCH', data: liveGame });
 
+assert.equal((await request(chatPath, { uid: 'host_uid' })).status, 404);
+assert.equal((await request(chatPath, { uid: 'viewer_uid' })).status, 403);
+
 const activeChat = {
   id: gameId, gameId, communityId: 'enjoy', ownerUid: 'host_uid', hostName: 'Host', participantUids: ['host_uid'],
   gameTitle: 'Live game', venue: 'Enjoy', status: 'active', startedAt: '2026-08-16T18:00:00.000Z', endedAt: '', schemaVersion: 2, createdAt: now

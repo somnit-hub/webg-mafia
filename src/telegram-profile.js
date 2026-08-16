@@ -1,5 +1,5 @@
 const TELEGRAM_PROFILE_ENDPOINT = 'https://enjoy-mafia-orders.webg-mafia.workers.dev/telegram-profile';
-const TELEGRAM_LOGIN_SDK = 'https://oauth.telegram.org/js/telegram-login.js?5';
+const TELEGRAM_LOGIN_SDK = 'https://oauth.telegram.org/js/telegram-login.js?6';
 
 let sdkPromise = null;
 
@@ -25,6 +25,7 @@ export function telegramLoginAuth(login, options, callback, { page = globalThis 
   if (!login?.auth) throw new Error('Telegram Login не завантажився');
   const originalOpen = page?.open;
   const pageOrigin = String(page?.location?.origin || '').trim();
+  const pagePathname = String(page?.location?.pathname || '/').trim();
   if (typeof originalOpen !== 'function' || !/^https?:\/\//i.test(pageOrigin)) {
     return login.auth(options, callback);
   }
@@ -34,7 +35,10 @@ export function telegramLoginAuth(login, options, callback, { page = globalThis 
     try {
       const requestUrl = new URL(String(url), pageOrigin);
       if (requestUrl.origin === 'https://oauth.telegram.org' && requestUrl.pathname === '/auth') {
+        const redirectUrl = new URL(pageOrigin);
+        redirectUrl.pathname = pagePathname || '/';
         requestUrl.searchParams.set('origin', pageOrigin);
+        requestUrl.searchParams.set('redirect_uri', redirectUrl.toString());
         nextUrl = requestUrl.toString();
       }
     } catch {

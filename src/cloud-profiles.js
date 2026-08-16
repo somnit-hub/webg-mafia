@@ -73,6 +73,13 @@ export function resolveOwnProfilePhotoDataURL(localAvatar, remotePhotoDataURL) {
   return sharedAvatar(remotePhotoDataURL) || sharedAvatar(localAvatar);
 }
 
+export function ownProfileSyncAction(localProfile, remoteProfile) {
+  if (!remoteProfile) return 'push';
+  const hasPendingLocalChanges = localProfile?.profileSyncState === 'pending';
+  const localIsNewer = String(localProfile?.updatedAt || '') > String(remoteProfile?.profileUpdatedAt || '');
+  return hasPendingLocalChanges && localIsNewer ? 'push' : 'pull';
+}
+
 function sharedAvatarPreset(value) {
   const preset = clean(value, 80);
   return MANUAL_AVATAR_PRESETS.has(preset) ? preset : '';
@@ -244,7 +251,7 @@ async function writeOwnProfile(user, profile, existingCreatedAt = null) {
   }, { merge: true });
 }
 
-export async function reconcileOwnCommunityProfile(user, profile, { hasLocalProfile = false } = {}) {
+export async function reconcileOwnCommunityProfile(user, profile) {
   const { database, sdk } = await loadDatabase();
   const reference = profilePath(sdk, database, user.uid);
   const snapshot = await sdk.getDoc(reference);
@@ -254,8 +261,7 @@ export async function reconcileOwnCommunityProfile(user, profile, { hasLocalProf
   }
 
   const remote = memberFromSnapshot(snapshot);
-  const localIsNewer = hasLocalProfile && String(profile.updatedAt || '') > String(remote.profileUpdatedAt || '');
-  if (localIsNewer) {
+  if (ownProfileSyncAction(profile, remote) === 'push') {
     await writeOwnProfile(user, profile, snapshot.data().createdAt);
     return { ...createOwnCommunityProfileFields(user, profile), uid: user.uid };
   }

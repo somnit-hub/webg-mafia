@@ -3673,6 +3673,9 @@ async function savePlayer(form) {
 async function loadHostProfile() {
   const stored = await getSetting('hostProfile', null);
   const timestamp = nowIso();
+  const profileSyncState = stored?.profileSyncState === 'pending'
+    ? 'pending'
+    : stored?.profileSyncState === 'synced' ? 'synced' : stored ? 'cached' : 'bootstrap';
   app.hostProfile = {
     uid: app.authUser.uid,
     email: app.authUser.email,
@@ -3691,13 +3694,13 @@ async function loadHostProfile() {
     telegramLinkedAt: stored?.telegramVerified === true ? String(stored?.telegramLinkedAt || '') : '',
     discoverable: stored?.discoverable !== false,
     createdAt: stored?.createdAt || timestamp,
-    updatedAt: stored?.updatedAt || timestamp
+    updatedAt: stored?.updatedAt || timestamp,
+    profileSyncState
   };
   app.profilePhotoSync = { status: app.hostProfile.avatar ? 'pending' : 'idle' };
-  if (!stored || stored.email !== app.authUser.email || stored.googleName !== app.authUser.googleName || stored.googlePhotoURL !== app.authUser.googlePhotoURL) {
+  if (!stored || stored.email !== app.authUser.email || stored.googleName !== app.authUser.googleName || stored.googlePhotoURL !== app.authUser.googlePhotoURL || stored.profileSyncState !== profileSyncState) {
     await setSetting('hostProfile', app.hostProfile);
   }
-  return Boolean(stored);
 }
 
 function cloudDirectoryError(error) {
@@ -3765,15 +3768,17 @@ function startProfilePresence() {
   }, PROFILE_PRESENCE_HEARTBEAT_MS);
 }
 
-async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
+async function connectCloudDirectory() {
   if (!app.authUser || LOCAL_AUTH_TEST) return;
   if (cloudDirectoryPromise) return cloudDirectoryPromise;
   app.cloudDirectory = { status: 'loading', error: '', fromCache: false };
   if (app.hostProfile?.avatar) app.profilePhotoSync = { status: 'syncing' };
   renderPassiveCloudUpdate();
   cloudDirectoryPromise = (async () => {
-    const remote = await reconcileOwnCommunityProfile(app.authUser, app.hostProfile, { hasLocalProfile });
-    if (remote && (!hasLocalProfile || String(remote.profileUpdatedAt || '') > String(app.hostProfile.updatedAt || ''))) {
+    const profileUpdatedAtBeforeSync = app.hostProfile?.updatedAt || '';
+    const remote = await reconcileOwnCommunityProfile(app.authUser, app.hostProfile);
+    const profileChangedDuringSync = (app.hostProfile?.updatedAt || '') !== profileUpdatedAtBeforeSync;
+    if (remote && !profileChangedDuringSync) {
       app.hostProfile = {
         ...app.hostProfile,
         displayName: remote.displayName || app.hostProfile.displayName,
@@ -3788,7 +3793,8 @@ async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
         telegramVerified: remote.telegramVerified === true,
         telegramLinkedAt: remote.telegramLinkedAt || '',
         discoverable: remote.discoverable !== false,
-        updatedAt: remote.profileUpdatedAt || app.hostProfile.updatedAt
+        updatedAt: remote.profileUpdatedAt || app.hostProfile.updatedAt,
+        profileSyncState: 'synced'
       };
       await setSetting('hostProfile', app.hostProfile);
     }
@@ -4602,7 +4608,8 @@ async function saveHostProfile(form) {
       ? app.modal.profileDraft.avatar
       : app.hostProfile.avatar || '',
     discoverable: data.get('discoverable') === 'on',
-    updatedAt: nowIso()
+    updatedAt: nowIso(),
+    profileSyncState: 'pending'
   };
   await setSetting('hostProfile', app.hostProfile);
   app.profilePhotoSync = { status: app.hostProfile.avatar ? 'syncing' : 'idle' };
@@ -4614,6 +4621,10 @@ async function saveHostProfile(form) {
       cloudSaved = false;
       app.cloudDirectory = { status: 'error', error: cloudDirectoryError(error), fromCache: false };
     }
+  }
+  if (cloudSaved) {
+    app.hostProfile = { ...app.hostProfile, profileSyncState: 'synced' };
+    await setSetting('hostProfile', app.hostProfile);
   }
   app.profilePhotoSync = {
     status: app.hostProfile.avatar ? (cloudSaved ? 'synced' : 'error') : 'idle'
@@ -4927,7 +4938,7 @@ async function handleAction(action, element, sourceEvent) {
     await requestBluetoothDevice();
   } else if (action === 'cloud-refresh') {
     stopCommunityProfiles();
-    await connectCloudDirectory({ hasLocalProfile: true });
+    await connectCloudDirectory();
   } else if (action === 'cloud-games-refresh') {
     app.gameFeedbackSummaries = {};
     const published = await publishLocalActiveGamesNow();
@@ -5001,9 +5012,13 @@ async function handleAction(action, element, sourceEvent) {
     try {
       await acceptPlayerLink(app.authUser, offer.id);
       if (!app.hostProfile.nickname && offer.nickname) {
-        app.hostProfile = { ...app.hostProfile, nickname: offer.nickname, updatedAt: nowIso() };
+        app.hostProfile = { ...app.hostProfile, nickname: offer.nickname, updatedAt: nowIso(), profileSyncState: 'pending' };
         await setSetting('hostProfile', app.hostProfile);
-        try { await saveOwnCommunityProfile(app.authUser, app.hostProfile); } catch { /* The link itself is already confirmed. */ }
+        try {
+          await saveOwnCommunityProfile(app.authUser, app.hostProfile);
+          app.hostProfile = { ...app.hostProfile, profileSyncState: 'synced' };
+          await setSetting('hostProfile', app.hostProfile);
+        } catch { /* The pending profile will retry when the directory reconnects. */ }
       }
       app.playerLinkOffers.shift();
       app.playerLinkBusy = false;
@@ -5805,11 +5820,11 @@ async function activateAuthenticatedUser(user) {
     app.authBusy = false;
     useDatabaseForUser(user.uid);
     await openDatabase();
-    const hasLocalProfile = await loadAppData();
+    await loadAppData();
     await checkLegacyMigration();
     render();
     await Promise.all([
-      connectCloudDirectory({ hasLocalProfile }),
+      connectCloudDirectory(),
       connectCloudArchive(),
       connectGameChats(),
       connectVenueDirectory(),
@@ -5899,7 +5914,6 @@ function clearAuthenticatedState() {
 }
 
 async function loadAppData() {
-  const hasLocalProfile = Boolean(await getSetting('hostProfile', null));
   app.players = [];
   app.localPlayers = [];
   app.localGames = [];
@@ -5933,7 +5947,6 @@ async function loadAppData() {
   if (route.id) app.game = await getOne('games', route.id) || app.game;
   if (!app.game) app.game = activeGames()[0] || null;
   if (app.game) app.game = normalizeGameState(app.game, DEFAULT_SETTINGS, { closeReveal: true });
-  return hasLocalProfile;
 }
 
 async function onRouteChange() {
@@ -6067,7 +6080,7 @@ window.addEventListener('appinstalled', () => {
 window.matchMedia?.('(display-mode: standalone)').addEventListener?.('change', () => render());
 window.addEventListener('online', () => {
   toast('Інтернет-з’єднання відновлено');
-  if (app.authUser && app.cloudDirectory.status === 'error') connectCloudDirectory({ hasLocalProfile: true });
+  if (app.authUser && app.cloudDirectory.status === 'error') connectCloudDirectory();
   if (app.authUser && ['error', 'offline'].includes(app.cloudArchive.status)) reconnectCloudArchive();
   if (app.authUser && app.gameChatsState.status === 'error') reconnectGameChats();
   if (app.authUser && ['error', 'offline'].includes(app.venueDirectory.status)) connectVenueDirectory();
@@ -6115,7 +6128,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=189', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=190', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

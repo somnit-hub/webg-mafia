@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  createOwnCommunityProfileFields, profileLastSeenMillis, profileWasRecentlyActive,
+  createOwnCommunityProfileFields, ownProfileSyncAction, profileLastSeenMillis, profileWasRecentlyActive,
   resolveOwnProfilePhotoDataURL
 } from '../src/cloud-profiles.js';
 
@@ -69,5 +69,30 @@ assert.equal(profileLastSeenMillis({ seconds: now / 1000, nanoseconds: 0 }), now
 assert.equal(profileWasRecentlyActive(now - 120000, now), true);
 assert.equal(profileWasRecentlyActive(now - 180000, now), false);
 assert.equal(profileWasRecentlyActive(0, now), false);
+
+const remoteProfile = {
+  nickname: 'Cloud Nickname',
+  profileUpdatedAt: '2026-08-15T12:00:00.000Z'
+};
+assert.equal(ownProfileSyncAction({
+  nickname: '',
+  profileSyncState: 'bootstrap',
+  updatedAt: '2026-08-16T12:00:00.000Z'
+}, remoteProfile), 'pull');
+assert.equal(ownProfileSyncAction({
+  nickname: '',
+  updatedAt: '2026-08-16T12:00:00.000Z'
+}, remoteProfile), 'pull');
+assert.equal(ownProfileSyncAction({
+  nickname: 'Offline edit',
+  profileSyncState: 'pending',
+  updatedAt: '2026-08-16T12:00:00.000Z'
+}, remoteProfile), 'push');
+assert.equal(ownProfileSyncAction({
+  nickname: 'Stale offline edit',
+  profileSyncState: 'pending',
+  updatedAt: '2026-08-14T12:00:00.000Z'
+}, remoteProfile), 'pull');
+assert.equal(ownProfileSyncAction({ profileSyncState: 'bootstrap' }, null), 'push');
 
 console.log('Member profile avatar model passed.');

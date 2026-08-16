@@ -42,7 +42,7 @@ import { pickFunnyGuestNames } from './guest-names.js';
 import { LANGUAGES, applyLanguage, languageLocale, localizeDom, normalizeLanguage } from './i18n.js';
 import { DEFAULT_ORDER_MENU, loadOrderMenu, sendTelegramOrder } from './order-service.js';
 import { pwaInstallMode } from './pwa.js';
-import { sortDirectoryPlayers } from './player-directory.js';
+import { selectHostTransferCandidates, sortDirectoryPlayers } from './player-directory.js';
 import {
   GAME_EMOTIONS, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
@@ -531,20 +531,8 @@ function pendingIncomingHostTransfer() {
 function outgoingHostTransfer(gameId = app.game?.id) {
   return app.hostTransfers.outgoing.find(transfer => transfer.gameId === gameId && transfer.status === 'pending') || null;
 }
-function hostTransferCandidates(game = app.game) {
-  const candidates = new Map();
-  (game?.seats || []).forEach(seat => {
-    const player = seat.profileId ? playerById(seat.profileId) : null;
-    const cloudUid = seat.cloudUid || player?.cloudUid || '';
-    if (!cloudUid || cloudUid === app.authUser?.uid || candidates.has(cloudUid)) return;
-    candidates.set(cloudUid, {
-      uid: cloudUid,
-      name: preferredPlayerName(player) || seat.name,
-      seatNumber: seat.number,
-      avatar: player?.avatar || player?.avatarPreset || seat.avatar || ''
-    });
-  });
-  return [...candidates.values()].sort((left, right) => left.seatNumber - right.seatNumber);
+function hostTransferCandidates(search = '') {
+  return selectHostTransferCandidates(app.players, app.authUser?.uid || '', search);
 }
 function seatByNo(number) { return app.game?.seats.find(seat => seat.number === Number(number)); }
 function aliveSeats() { return app.game?.seats.filter(seat => seat.status === 'alive') || []; }
@@ -2058,11 +2046,14 @@ function hostTransferModalHtml() {
       <div class="modal-actions"><button class="btn danger" type="button" data-action="cancel-host-transfer" ${app.hostTransfers.busy ? 'disabled' : ''}>Скасувати передачу</button><button class="btn secondary" type="button" data-action="close-modal">Закрити</button></div>
     </div></div>`;
   }
-  const candidates = hostTransferCandidates();
+  const search = String(app.modal.search || '');
+  const allCandidates = hostTransferCandidates();
+  const candidates = search ? hostTransferCandidates(search) : allCandidates;
   return `<div class="modal-backdrop host-transfer-backdrop" data-action="close-modal"><div class="card modal host-transfer-modal" role="dialog" aria-modal="true" aria-labelledby="host-transfer-title" tabindex="-1">
     <div class="game-dialog-head"><div><span class="eyebrow">Панель ведучого</span><h2 id="host-transfer-title">Передати ведення</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div>
-    <p class="game-dialog-copy">Оберіть авторизованого учасника за столом. Він має підтвердити запит на своєму пристрої.</p>
-    ${candidates.length ? `<div class="host-transfer-candidates">${candidates.map(candidate => `<button class="host-transfer-candidate" type="button" data-action="request-host-transfer" data-uid="${esc(candidate.uid)}"><span class="host-transfer-seat">${candidate.seatNumber}</span>${avatar({ name: candidate.name, avatar: candidate.avatar }, 'small')}<span><b>${esc(candidate.name)}</b><small>Авторизований учасник</small></span><span class="host-transfer-chevron" aria-hidden="true">›</span></button>`).join('')}</div>` : statePanel('empty', 'Немає доступного нового ведучого', 'Передати ведення можна учаснику за столом, який увійшов через Google.')}
+    <p class="game-dialog-copy">Оберіть будь-якого авторизованого користувача. Участь у поточній грі не обов’язкова; користувач має підтвердити запит на своєму пристрої.</p>
+    <div class="host-transfer-search"><input class="input" type="search" data-input="host-transfer-search" value="${esc(search)}" placeholder="Пошук за ім’ям, ніком або клубом" aria-label="Пошук користувача" autocomplete="off"></div>
+    ${candidates.length ? `<div class="host-transfer-candidates">${candidates.map(candidate => `<button class="host-transfer-candidate" type="button" data-action="request-host-transfer" data-uid="${esc(candidate.uid)}">${avatar({ name: candidate.name, avatar: candidate.avatar }, 'small')}<span><b>${esc(candidate.name)}</b><small>${esc(candidate.nickname && candidate.displayName ? candidate.displayName : candidate.club || 'Авторизований користувач')}</small></span><span class="host-transfer-chevron" aria-hidden="true">›</span></button>`).join('')}</div>` : allCandidates.length ? statePanel('empty', 'Нікого не знайдено', 'Спробуйте змінити пошуковий запит.') : statePanel('empty', 'Немає доступного нового ведучого', 'У каталозі немає іншого авторизованого користувача.')}
     <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Закрити</button></div>
   </div></div>`;
 }
@@ -3931,13 +3922,13 @@ async function handleAction(action, element, sourceEvent) {
     app.modal = null; render();
   } else if (action === 'open-host-transfer') {
     if (!app.game || app.game.status !== 'active' || !canManageGame(app.game)) return toast('Передача доступна лише поточному ведучому');
-    app.modal = { type: outgoingHostTransfer(app.game.id) ? 'host-transfer-waiting' : 'host-transfer-select' };
+    app.modal = { type: outgoingHostTransfer(app.game.id) ? 'host-transfer-waiting' : 'host-transfer-select', search: '' };
     render();
   } else if (action === 'request-host-transfer') {
     if (!app.game || !canManageGame(app.game) || app.hostTransfers.busy) return;
     if (LOCAL_AUTH_TEST) return toast('Для передачі потрібні два авторизовані пристрої');
     const recipient = hostTransferCandidates().find(candidate => candidate.uid === element.dataset.uid);
-    if (!recipient) return toast('Цей учасник недоступний для передачі');
+    if (!recipient) return toast('Цей користувач недоступний для передачі');
     app.hostTransfers.busy = true;
     render();
     try {
@@ -4306,6 +4297,13 @@ async function handleInput(element) {
     const search = $('[data-input="player-search"]');
     search?.focus();
     search?.setSelectionRange(app.search.length, app.search.length);
+  } else if (element.dataset.input === 'host-transfer-search') {
+    if (app.modal?.type !== 'host-transfer-select') return;
+    app.modal.search = element.value;
+    render();
+    const search = $('[data-input="host-transfer-search"]');
+    search?.focus();
+    search?.setSelectionRange(app.modal.search.length, app.modal.search.length);
   } else if (element.dataset.draft) {
     app.draft[element.dataset.draft] = element.value;
     if (element.dataset.draft === 'title') app.draft.autoTitle = false;
@@ -4615,7 +4613,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=161', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=162', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

@@ -1197,6 +1197,26 @@ const moderatorPanelExpanded = await evaluate(`({
   controls: [...document.querySelectorAll('.moderator-panel .moderator-actions .btn')].map(button => button.textContent.trim()),
   finishGameVisible: Boolean(document.querySelector('.moderator-panel .moderator-finish-game')) && document.querySelector('.moderator-panel .moderator-finish-game')?.getBoundingClientRect().height >= 44
 })`);
+await click('[data-action="open-host-transfer"]');
+const hostTransferInitial = await evaluate(`({
+  search: Boolean(document.querySelector('[data-input="host-transfer-search"]')),
+  candidates: document.querySelectorAll('.host-transfer-candidate').length,
+  names: [...document.querySelectorAll('.host-transfer-candidate b')].map(item => item.textContent.trim()),
+  seatNumbersAbsent: !document.querySelector('.host-transfer-seat'),
+  anyUserCopy: document.querySelector('.host-transfer-modal .game-dialog-copy')?.textContent.includes('Участь у поточній грі не обов’язкова')
+})`);
+await evaluate(`(() => {
+  const input = document.querySelector('[data-input="host-transfer-search"]');
+  input.value = 'Гравець 2';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+})()`);
+await wait(100);
+const hostTransferFiltered = await evaluate(`({
+  value: document.querySelector('[data-input="host-transfer-search"]')?.value,
+  focused: document.activeElement === document.querySelector('[data-input="host-transfer-search"]'),
+  names: [...document.querySelectorAll('.host-transfer-candidate b')].map(item => item.textContent.trim())
+})`);
+await click('.host-transfer-modal [data-action="close-modal"]');
 await click('[data-action="game-settings"]');
 const gameSettingsModalFrame = await inspectModalFrame();
 const gameSettingsAppearance = await evaluate(`({
@@ -1623,7 +1643,7 @@ const chromeByTab = { home: homeChrome, players: playersChrome, setup: setupChro
 const unifiedModalFrames = { mediaModalFrame, orderModalFrame, hostProfileModalFrame, accountDeleteModalFrame, playerModalFrame, setupMoveModalFrame, setupAvatarModalFrame, gameSettingsModalFrame, seatModalFrame, confirmModalFrame, winnerModalFrame, protocolModalFrame, personalStatsModalFrame };
 const languageSupport = { languageOptions, englishLanguage, frenchLanguage, italianLanguage, restoredUkrainianLanguage };
 const gameCardSystem = { roleReadyLayout, roleOpenLayout, gameSettingsAppearance, confirmModalAppearance, winnerModalAppearance, zeroNightSheriff, zeroNightFreeSeating, bestMoveLayout, bestMoveFarewell, afterBestMove };
-const result = { authenticatedHost, enjoyBrand, initialActiveGames, homeActiveGamesCollapsed, homeActiveGamesExpanded, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, mediaPanel, preparedMedia, orderPanel, orderCategory, orderBack, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersExpanded, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupTimersMobileLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, playerStatsShortcut, personalStats, personalFeedback, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, runningTimerStability, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameCompactHeader, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
+const result = { authenticatedHost, enjoyBrand, initialActiveGames, homeActiveGamesCollapsed, homeActiveGamesExpanded, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, mediaPanel, preparedMedia, orderPanel, orderCategory, orderBack, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersExpanded, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupTimersMobileLayout, setupGameExpanded, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, playerStatsShortcut, personalStats, personalFeedback, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, hostTransferInitial, hostTransferFiltered, runningTimerStability, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameCompactHeader, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
 console.log(JSON.stringify(result, null, 2));
 
 if (process.env.SMOKE_SCREENSHOT) {
@@ -1639,6 +1659,7 @@ function verify(condition, label) {
 verify(firstDay.hash === '#game' && firstDay.seats === 10 && firstDay.phase === 'День 1' && firstDay.timer === '01:00' && firstDay.bottomNav && firstDay.navItems === 5 && firstDay.activeLabel === 'Активна гра' && firstDay.navHeight <= 52 && firstDay.iconOnly && firstDay.scrollWidth <= firstDay.viewport, 'first day timer, layout and compact game navigation');
 verify(roleReadyLayout.moderatorVisible && roleReadyLayout.moderatorCollapsed && roleReadyLayout.moderatorAfterRole && roleReadyLayout.roleCardOrder === '1' && roleReadyLayout.moderatorOrder === '2', 'host panel is explicitly ordered below the role-dealing card and safely collapsed as soon as role dealing starts');
 verify(firstDay.moderatorPanelVisible && firstDay.moderatorPanelCollapsed && firstDay.moderatorUnusedActionsAbsent && firstDay.finishGameInsideCollapsedPanel && firstDay.mobileProtocolHidden && moderatorPanelExpanded.expanded && moderatorPanelExpanded.contentVisible && moderatorPanelExpanded.finishGameVisible && JSON.stringify(moderatorPanelExpanded.controls) === JSON.stringify(['Ролі', '↶ Скасувати', '⚙ Таймери', 'Передати ведення']), 'mobile host panel is collapsed by default and contains host transfer and the protected finish-game action');
+verify(hostTransferInitial.search && hostTransferInitial.candidates === 2 && hostTransferInitial.names.includes('Гравець 1') && hostTransferInitial.names.includes('Гравець 2') && hostTransferInitial.seatNumbersAbsent && hostTransferInitial.anyUserCopy && hostTransferFiltered.value === 'Гравець 2' && hostTransferFiltered.focused && JSON.stringify(hostTransferFiltered.names) === JSON.stringify(['Гравець 2']), 'host transfer lists all authorized profiles and filters them with a focused search field');
 verify(runningTimerStability.rootReplacements === 0 && /^\d{2}:\d{2}$/.test(runningTimerStability.timer || ''), 'running timer updates without replacing the mobile game screen');
 verify(runningTimerAdjustment.afterMinusFive === Math.max(0, runningTimerAdjustment.beforeMinusFive - 5) && runningTimerAdjustment.afterMinusTick <= runningTimerAdjustment.afterMinusFive && runningTimerAdjustment.afterMinusTick >= runningTimerAdjustment.afterMinusFive - 2 && runningTimerAdjustment.afterPlusFive === runningTimerAdjustment.afterMinusTick + 5, 'running timer +/- 5 seconds');
 verify(timerNavigation.away === '#players' && timerNavigation.returned === '#game' && timerNavigation.stopped && timerNavigation.navRestored, 'timer pauses and persists when leaving active game');

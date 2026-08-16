@@ -1036,10 +1036,11 @@ img { display: block; max-width: 100%; }
   font-size: 1.55rem;
   font-weight: 900;
 }
-.host-transfer-candidates { display: grid; gap: 7px; margin-top: 14px; }
+.host-transfer-search { margin-top: 4px; }
+.host-transfer-candidates { display: grid; gap: 7px; max-height: min(48dvh, 430px); margin-top: 12px; overflow-y: auto; overscroll-behavior: contain; }
 .host-transfer-candidate {
   display: grid;
-  grid-template-columns: 38px 42px minmax(0, 1fr) 22px;
+  grid-template-columns: 42px minmax(0, 1fr) 22px;
   align-items: center;
   gap: 10px;
   min-height: 60px;
@@ -1056,16 +1057,6 @@ img { display: block; max-width: 100%; }
 .host-transfer-candidate b,
 .host-transfer-candidate small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .host-transfer-candidate small { margin-top: 2px; color: var(--muted); }
-.host-transfer-seat {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 1px solid var(--gold);
-  border-radius: 50%;
-  color: var(--gold);
-  font-weight: 900;
-}
 .host-transfer-chevron { color: var(--gold); font-size: 1.8rem; font-weight: 900; }
 .host-transfer-button { min-width: 148px; }
 .player-avatar-modal { width: min(760px, 100%); overflow: hidden; }

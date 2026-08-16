@@ -217,6 +217,8 @@ img { display: block; max-width: 100%; }
 .header-media-btn svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .header-media-btn.play-btn svg { fill: currentColor; stroke: currentColor; }
 .header-media-btn.active { border-color: var(--gold); color: #1d1408; background: var(--gold); }
+.header-media-btn.pause-btn.pause-active { border-color: var(--primary-line); color: var(--on-primary); background: var(--primary-bg); }
+.header-media-btn.pause-btn.pause-active:hover, .header-media-btn.pause-btn.pause-active:focus-visible { border-color: var(--danger); filter: brightness(1.08); }
 .header-media-btn.connected { border-color: var(--blue); color: var(--blue); }
 .icon-btn.cancel-game-btn { border-color: var(--primary-line); color: var(--on-primary); background: var(--primary-bg); }
 .icon-btn.cancel-game-btn:hover { border-color: var(--danger); filter: brightness(1.12); }
@@ -839,6 +841,7 @@ img { display: block; max-width: 100%; }
 .setup-music-warning { color: var(--gold); }
 .setup-music-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .setup-music-actions .btn { flex: 1 1 130px; }
+.setup-music-actions .setup-music-pause-action { width: 46px; min-width: 46px; flex: 0 0 46px; padding: 0; }
 .setup-music-actions svg { width: 17px; height: 17px; fill: currentColor; }
 .setup-music-file-button { cursor: pointer; }
 .setup-music-note { margin: 0; }

@@ -768,7 +768,7 @@ async function previewSetupMusic(cue) {
   automaticMusicPaused = false;
   automaticMusicBlockedCue = '';
   automaticMusicPlayPendingCue = '';
-  loadMusicTrack({ ...track, loop: false });
+  loadMusicTrack({ ...track, cue, loop: false });
   await playMusic();
 }
 
@@ -958,7 +958,7 @@ function randomActionIcon(kind) {
 }
 
 function clearSeatingIcon() {
-  return '<svg class="button-clear-seating-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5"/></svg>';
+  return '<svg class="button-clear-seating-icon button-broom-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m20.5 3.5-9.8 9.8"/><path d="m9 11.5 3.5 3.5-3.2 5.5H3.5L9 11.5Z"/><path d="m7.5 14-3.2 5.3m5.3-3.1-2.5 4.3"/></svg>';
 }
 
 function externalAppIcon(name) {
@@ -1034,7 +1034,7 @@ function headerHtml() {
       <button class="icon-btn order-btn" type="button" data-action="open-order-panel" aria-label="Замовити напій" title="Замовити напій" aria-haspopup="dialog">${headerControlIcon('order')}</button>
       <div class="header-media-controls" role="group" aria-label="Bluetooth і музика">
         <button class="icon-btn header-media-btn play-btn ${app.media.playing ? 'active' : ''}" data-action="media-play" aria-label="Відтворити музику" title="Відтворити музику" ${!hasTrack || app.media.playing ? 'disabled' : ''}>${headerControlIcon('play')}</button>
-        <button class="icon-btn header-media-btn pause-btn" data-action="media-pause" aria-label="Призупинити музику" title="Призупинити музику" ${!hasTrack || !app.media.playing ? 'disabled' : ''}>${headerControlIcon('pause')}</button>
+        <button class="icon-btn header-media-btn pause-btn ${app.media.playing ? 'pause-active' : ''}" data-action="media-pause" aria-label="Призупинити музику" title="Призупинити музику" ${!hasTrack || !app.media.playing ? 'disabled' : ''}>${headerControlIcon('pause')}</button>
       </div>
       <div class="header-profile-actions">
         ${cancelGameButton}
@@ -1402,10 +1402,11 @@ function setupMusicCueHtml(cue, settings) {
   const customLabel = custom ? `Власний файл · ${custom.name}` : 'Власний файл із пристрою';
   const customMissing = choice === customValue && !custom;
   const inputId = `setup-music-file-${cue.id}`;
+  const previewPlaying = app.media.playing && app.media.cue === cue.id;
   return `<article class="setup-music-cue" data-music-cue-card="${cue.id}">
     <div class="setup-music-cue-copy"><b>${esc(cue.label)}</b><small>${esc(cue.description)}</small></div>
     <div class="field"><label for="setup-music-choice-${cue.id}">Мелодія</label><select id="setup-music-choice-${cue.id}" class="select" data-input="setup-music-choice" data-music-cue="${cue.id}">${options}<option value="${customValue}" ${choice === customValue ? 'selected' : ''}>${esc(customLabel)}</option></select></div>
-    <div class="setup-music-actions"><button class="btn small secondary" type="button" data-action="preview-setup-music" data-music-cue="${cue.id}">${headerControlIcon('play')}<span>Прослухати</span></button><label class="btn small secondary setup-music-file-button" for="${inputId}">Файл з пристрою</label></div>
+    <div class="setup-music-actions"><button class="btn small secondary" type="button" data-action="preview-setup-music" data-music-cue="${cue.id}">${headerControlIcon('play')}<span>Прослухати</span></button><button class="btn small secondary setup-music-pause-action" type="button" data-action="pause-setup-music" data-music-cue="${cue.id}" aria-label="Призупинити музику" title="Призупинити музику" ${previewPlaying ? '' : 'disabled'}>${headerControlIcon('pause')}</button><label class="btn small secondary setup-music-file-button" for="${inputId}">Файл з пристрою</label></div>
     <input id="${inputId}" class="visually-hidden" type="file" accept="audio/*" data-input="setup-music-file" data-music-cue="${cue.id}">
     ${customMissing ? '<small class="setup-music-warning">Після перезавантаження виберіть файл повторно. До цього гратиме вбудована мелодія.</small>' : custom ? `<small class="setup-music-local">${esc(custom.name)} · лише на цьому пристрої</small>` : ''}
   </article>`;
@@ -4530,6 +4531,8 @@ async function handleAction(action, element, sourceEvent) {
     render();
   } else if (action === 'preview-setup-music') {
     await previewSetupMusic(element.dataset.musicCue);
+  } else if (action === 'pause-setup-music') {
+    if (app.media.playing && app.media.cue === element.dataset.musicCue) pauseMusic();
   } else if (action === 'toggle-panel') {
     const panel = element.dataset.panel;
     if (Object.hasOwn(app.panelExpanded, panel)) {
@@ -5207,7 +5210,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=170', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=173', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

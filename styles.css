@@ -1902,19 +1902,23 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   border-left: 3px solid var(--red);
   border-radius: 2px 16px 2px 2px;
   padding: 24px 22px 23px;
+  color: #f6eee2;
   background:
-    linear-gradient(116deg, transparent 0 72%, var(--hero-mark) 72% 72.8%, transparent 72.8%),
-    linear-gradient(26deg, transparent 0 82%, var(--hero-mark) 82% 83%, transparent 83%),
+    linear-gradient(90deg, rgb(9 8 7 / 96%) 0%, rgb(9 8 7 / 88%) 34%, rgb(9 8 7 / 50%) 58%, rgb(9 8 7 / 16%) 100%),
+    linear-gradient(116deg, transparent 0 72%, rgb(216 170 88 / 9%) 72% 72.8%, transparent 72.8%),
+    linear-gradient(26deg, transparent 0 82%, rgb(216 170 88 / 9%) 82% 83%, transparent 83%),
+    url("./assets/overview-mafia-table.jpg") 70% 50% / cover no-repeat,
     var(--hero-bg);
 }
-.hero::after { content: "10"; right: 5px; bottom: -45px; color: var(--hero-mark); font: 700 210px/.8 var(--font-display); }
+.hero::after { content: "10"; right: 5px; bottom: -45px; color: rgb(216 170 88 / 7%); font: 700 210px/.8 var(--font-display); }
 .hero-masthead { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .hero h1 { max-width: 590px; margin: 18px 0 13px; display: flex; align-items: center; flex-wrap: wrap; column-gap: .15em; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
-.hero h1 span { color: var(--hero-accent); font-style: italic; font-weight: 500; }
-.hero-cup { width: .72em; height: .72em; flex: 0 0 .72em; color: var(--gold); fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: square; stroke-linejoin: miter; transform: rotate(-3deg); }
-.enjoy-kicker { margin: 0; }
+.hero h1 span { color: #e26969; font-style: italic; font-weight: 500; }
+.hero-cup { width: .72em; height: .72em; flex: 0 0 .72em; color: #e0b45f; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: square; stroke-linejoin: miter; transform: rotate(-3deg); }
+.hero .enjoy-kicker { margin: 0; color: #c8bcad; }
 .enjoy-wordmark { font-family: var(--font-ui); letter-spacing: .24em; }
 .hero .actions { margin-top: 22px; }
+.hero .btn.secondary { border-color: rgb(216 170 88 / 35%); color: #f6eee2; background: rgb(24 20 17 / 82%); }
 
 .stat-grid { gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--line); }
 .stat-grid > .stat-card { min-width: 0; border: 0; border-radius: 0; background: var(--card-bg); box-shadow: none; }
@@ -2037,7 +2041,7 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .actions > .btn { flex: 1 1 140px; min-width: 0; }
   .actions > .btn:only-child { width: 100%; flex-basis: 100%; }
 
-  .hero { padding: 16px 14px 15px; }
+  .hero { padding: 16px 14px 15px; background-position: center, center, center, 73% 50%; }
   .hero-masthead { align-items: flex-start; }
   .enjoy-kicker { display: grid; gap: 5px; font-size: 9px; }
   .enjoy-wordmark { font-size: 17px; }

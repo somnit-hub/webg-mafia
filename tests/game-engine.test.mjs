@@ -149,6 +149,23 @@ test('persisted game recovery closes role and check results and removes dead tar
   assert.equal(normalized.settings.bestMove, 20);
 });
 
+test('persisted rating penalties and disqualification flags normalize independently', () => {
+  const state = game();
+  state.seats[0].ratingPenalty = -0.3;
+  state.seats[0].disqualified = true;
+  state.seats[1].ratingPenalty = -1;
+  state.seats[1].disqualified = false;
+  state.seats[1].eliminatedReason = '4-й фол';
+  state.seats[2].eliminatedReason = '4-й фол';
+
+  const normalized = normalizeGameState(state);
+  assert.equal(normalized.seats[0].ratingPenalty, -0.3);
+  assert.equal(normalized.seats[0].disqualified, true);
+  assert.equal(normalized.seats[1].ratingPenalty, 0);
+  assert.equal(normalized.seats[1].disqualified, false);
+  assert.equal(normalized.seats[2].disqualified, true);
+});
+
 test('persisted Best Move keeps selected players after they leave the table', () => {
   const state = game({ phase: 'day' });
   state.bestMove = { seat: 5, selected: [1, 2, 3] };

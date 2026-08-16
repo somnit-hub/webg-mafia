@@ -899,15 +899,15 @@ Object.assign(COPY.fr, {
 
 Object.assign(COPY.it, {
   'Рейтинг гравців': 'Classifica giocatori', 'балів': 'punti', 'Методика FIIM/MWT ↗': 'Metodo FIIM/MWT ↗',
-  'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; −0,8 за дискваліфікацію через 4-й фол. КР — сума балів останніх 100 ігор, поділена на 100.': 'Parte automatica del sistema FIIM/MWT: 1,3 punti per una vittoria, 0,3 per una sconfitta, 0 per un pareggio; +0,5/+0,7 per una miglior mossa 2/3 o 3/3; −0,8 per la squalifica al quarto fallo. CR è la somma dei punti delle ultime 100 partite divisa per 100.'
+  'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; штраф −0,3/−0,5 за негативний вплив на гру; −0,8 за окремо позначену дискваліфікацію незалежно від причини. Фінальний бал — сума всіх цих складових. КР — сума балів останніх 100 ігор, поділена на 100.': 'Parte automatica del sistema FIIM/MWT: 1,3 punti per una vittoria, 0,3 per una sconfitta, 0 per un pareggio; +0,5/+0,7 per una miglior mossa 2/3 o 3/3; penalità −0,3/−0,5 per un impatto negativo sulla partita; −0,8 per una squalifica segnalata separatamente, indipendentemente dal motivo. Il punteggio finale è la somma di tutti questi elementi. CR è la somma dei punti delle ultime 100 partite divisa per 100.'
 });
 Object.assign(COPY.en, {
   'Рейтинг гравців': 'Player ranking', 'балів': 'points', 'Методика FIIM/MWT ↗': 'FIIM/MWT method ↗',
-  'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; −0,8 за дискваліфікацію через 4-й фол. КР — сума балів останніх 100 ігор, поділена на 100.': 'Automated part of the FIIM/MWT system: 1.3 points for a win, 0.3 for a loss, 0 for a draw; +0.5/+0.7 for a 2/3 or 3/3 Best Move; −0.8 for disqualification on the fourth foul. PC is the sum of points from the last 100 games divided by 100.'
+  'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; штраф −0,3/−0,5 за негативний вплив на гру; −0,8 за окремо позначену дискваліфікацію незалежно від причини. Фінальний бал — сума всіх цих складових. КР — сума балів останніх 100 ігор, поділена на 100.': 'Automated part of the FIIM/MWT system: 1.3 points for a win, 0.3 for a loss, 0 for a draw; +0.5/+0.7 for a 2/3 or 3/3 Best Move; −0.3/−0.5 for a negative impact on the game; −0.8 for a separately marked disqualification regardless of reason. The final score is the sum of all these parts. PC is the sum of points from the last 100 games divided by 100.'
 });
 Object.assign(COPY.fr, {
   'Рейтинг гравців': 'Classement des joueurs', 'балів': 'points', 'Методика FIIM/MWT ↗': 'Méthode FIIM/MWT ↗',
-  'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; −0,8 за дискваліфікацію через 4-й фол. КР — сума балів останніх 100 ігор, поділена на 100.': 'Partie automatique du système FIIM/MWT : 1,3 point pour une victoire, 0,3 pour une défaite, 0 pour un nul ; +0,5/+0,7 pour un meilleur coup 2/3 ou 3/3 ; −0,8 pour une disqualification au quatrième avertissement. CR est la somme des points des 100 dernières parties divisée par 100.'
+  'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; штраф −0,3/−0,5 за негативний вплив на гру; −0,8 за окремо позначену дискваліфікацію незалежно від причини. Фінальний бал — сума всіх цих складових. КР — сума балів останніх 100 ігор, поділена на 100.': 'Partie automatique du système FIIM/MWT : 1,3 point pour une victoire, 0,3 pour une défaite, 0 pour un nul ; +0,5/+0,7 pour un meilleur coup 2/3 ou 3/3 ; pénalité de −0,3/−0,5 pour un impact négatif sur la partie ; −0,8 pour une disqualification marquée séparément, quelle qu’en soit la raison. Le score final est la somme de tous ces éléments. CR est la somme des points des 100 dernières parties divisée par 100.'
 });
 
 Object.assign(COPY.it, {
@@ -925,7 +925,7 @@ Object.assign(COPY.it, {
   'Динаміка за 6 місяців': 'Andamento su 6 mesi', 'кількість завершених ігор': 'partite concluse',
   'Місця, розклад і дисципліна': 'Luoghi, orari e disciplina', 'найактивніший день тижня': 'giorno più attivo',
   'найчастіший час старту': 'fascia di inizio più frequente', 'місць / клубів': 'luoghi / club',
-  'фолів у середньому за гру': 'falli medi per partita', 'дискваліфікацій за 4-й фол': 'squalifiche al quarto fallo',
+  'фолів у середньому за гру': 'falli medi per partita', 'позначених дискваліфікацій': 'squalifiche segnalate',
   'Результати за місцями': 'Risultati per luogo', 'перші 5 за кількістю ігор': 'primi 5 per numero di partite'
 });
 Object.assign(COPY.en, {
@@ -943,7 +943,7 @@ Object.assign(COPY.en, {
   'Динаміка за 6 місяців': 'Six-month trend', 'кількість завершених ігор': 'completed games',
   'Місця, розклад і дисципліна': 'Venues, schedule and discipline', 'найактивніший день тижня': 'most active weekday',
   'найчастіший час старту': 'most common start window', 'місць / клубів': 'venues / clubs',
-  'фолів у середньому за гру': 'average fouls per game', 'дискваліфікацій за 4-й фол': 'fourth-foul disqualifications',
+  'фолів у середньому за гру': 'average fouls per game', 'позначених дискваліфікацій': 'marked disqualifications',
   'Результати за місцями': 'Results by venue', 'перші 5 за кількістю ігор': 'top 5 by game count'
 });
 Object.assign(COPY.fr, {
@@ -961,27 +961,46 @@ Object.assign(COPY.fr, {
   'Динаміка за 6 місяців': 'Tendance sur 6 mois', 'кількість завершених ігор': 'parties terminées',
   'Місця, розклад і дисципліна': 'Lieux, horaires et discipline', 'найактивніший день тижня': 'jour le plus actif',
   'найчастіший час старту': 'plage de départ la plus fréquente', 'місць / клубів': 'lieux / clubs',
-  'фолів у середньому за гру': 'fautes moyennes par partie', 'дискваліфікацій за 4-й фол': 'disqualifications à la quatrième faute',
+  'фолів у середньому за гру': 'fautes moyennes par partie', 'позначених дискваліфікацій': 'disqualifications signalées',
   'Результати за місцями': 'Résultats par lieu', 'перші 5 за кількістю ігор': 'top 5 par nombre de parties'
 });
 
 Object.assign(COPY.en, {
   'Календар ігор': 'Game calendar', 'Попередній місяць': 'Previous month', 'Наступний місяць': 'Next month',
-  'Поточна версія: PWA v194.': 'Current version: PWA v194.',
+  'Поточна версія: PWA v195.': 'Current version: PWA v195.',
   'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'The app shell, styles, icons, and built-in music are cached for a fast start.',
   'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'The Google session is stored on this device. Profiles and shared archives synchronize after sign-in, while local data helps the app keep working during a brief network outage.'
 });
 Object.assign(COPY.fr, {
   'Календар ігор': 'Calendrier des parties', 'Попередній місяць': 'Mois précédent', 'Наступний місяць': 'Mois suivant',
-  'Поточна версія: PWA v194.': 'Version actuelle : PWA v194.',
+  'Поточна версія: PWA v195.': 'Version actuelle : PWA v195.',
   'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'La structure de l’application, les styles, les icônes et la musique intégrée sont mis en cache pour un démarrage rapide.',
   'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'La session Google est conservée sur cet appareil. Les profils et les archives partagées se synchronisent après la connexion, tandis que les données locales permettent de continuer lors d’une brève coupure réseau.'
 });
 Object.assign(COPY.it, {
   'Календар ігор': 'Calendario delle partite', 'Попередній місяць': 'Mese precedente', 'Наступний місяць': 'Mese successivo',
-  'Поточна версія: PWA v194.': 'Versione attuale: PWA v194.',
+  'Поточна версія: PWA v195.': 'Versione attuale: PWA v195.',
   'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'La struttura dell’app, gli stili, le icone e la musica integrata vengono memorizzati nella cache per un avvio rapido.',
   'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'La sessione Google viene conservata su questo dispositivo. I profili e gli archivi condivisi si sincronizzano dopo l’accesso, mentre i dati locali consentono di continuare durante una breve interruzione della rete.'
+});
+
+Object.assign(COPY.en, {
+  'Система балів FIIM/MWT': 'FIIM/MWT scoring system', 'Рейтингові коригування FIIM/MWT': 'FIIM/MWT rating adjustments',
+  'Рейтингові коригування': 'Rating adjustments', 'Без штрафу': 'No penalty', 'Штраф': 'Penalty', 'Дискваліфікація': 'Disqualification',
+  'Фінальні бали гравців': 'Players’ final scores', 'Фінальний бал': 'Final score', 'Результат': 'Result', 'Кращий хід': 'Best Move',
+  'Бал за гру': 'Game score', 'рейтингових балів': 'rating points', 'Змінити': 'Edit', 'Оберіть штраф за негативний вплив на гру.': 'Choose a penalty for negatively affecting the game.'
+});
+Object.assign(COPY.fr, {
+  'Система балів FIIM/MWT': 'Système de points FIIM/MWT', 'Рейтингові коригування FIIM/MWT': 'Ajustements du classement FIIM/MWT',
+  'Рейтингові коригування': 'Ajustements du classement', 'Без штрафу': 'Sans pénalité', 'Штраф': 'Pénalité', 'Дискваліфікація': 'Disqualification',
+  'Фінальні бали гравців': 'Scores finaux des joueurs', 'Фінальний бал': 'Score final', 'Результат': 'Résultat', 'Кращий хід': 'Meilleur coup',
+  'Бал за гру': 'Score de la partie', 'рейтингових балів': 'points de classement', 'Змінити': 'Modifier', 'Оберіть штраф за негативний вплив на гру.': 'Choisissez une pénalité pour un impact négatif sur la partie.'
+});
+Object.assign(COPY.it, {
+  'Система балів FIIM/MWT': 'Sistema di punteggio FIIM/MWT', 'Рейтингові коригування FIIM/MWT': 'Correzioni della classifica FIIM/MWT',
+  'Рейтингові коригування': 'Correzioni della classifica', 'Без штрафу': 'Nessuna penalità', 'Штраф': 'Penalità', 'Дискваліфікація': 'Squalifica',
+  'Фінальні бали гравців': 'Punteggi finali dei giocatori', 'Фінальний бал': 'Punteggio finale', 'Результат': 'Risultato', 'Кращий хід': 'Miglior mossa',
+  'Бал за гру': 'Punteggio partita', 'рейтингових балів': 'punti classifica', 'Змінити': 'Modifica', 'Оберіть штраф за негативний вплив на гру.': 'Scegli una penalità per un impatto negativo sulla partita.'
 });
 
 const PATTERNS = {

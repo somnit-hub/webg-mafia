@@ -2,6 +2,7 @@ import { getCommunityFirestore } from './cloud-profiles.js';
 import { ACTIVE_GAME_PHASES } from './game-engine.js';
 import { getFirebaseIdToken } from './auth.js';
 import { activeAuthorizedPlayerUids, authorizedGameParticipantUids } from './game-chat.js';
+import { normalizedRatingPenalty, seatIsDisqualified } from './player-ranking.js';
 
 const COMMUNITY_ID = 'enjoy';
 const ACTIVE_PHASES = new Set(ACTIVE_GAME_PHASES);
@@ -100,7 +101,9 @@ function sharedSeat(seat) {
     role: ['citizen', 'sheriff', 'mafia', 'don'].includes(seat.role) ? seat.role : 'citizen',
     status: seat.status === 'dead' ? 'dead' : 'alive',
     faults: integer(seat.faults, 0, 4),
-    eliminatedReason: clean(seat.eliminatedReason, 160)
+    eliminatedReason: clean(seat.eliminatedReason, 160),
+    ratingPenalty: normalizedRatingPenalty(seat.ratingPenalty),
+    disqualified: seatIsDisqualified(seat)
   };
 }
 

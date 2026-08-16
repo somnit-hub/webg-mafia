@@ -11,9 +11,16 @@ export const FIIM_RATING_RULES = Object.freeze({
   draw: 0,
   bestMoveTwo: 0.5,
   bestMoveThree: 0.7,
+  actionPenaltyLow: -0.3,
+  actionPenaltyHigh: -0.5,
   disqualification: -0.8,
   performanceWindow: 100
 });
+
+const RATING_PENALTIES = new Set([
+  FIIM_RATING_RULES.actionPenaltyLow,
+  FIIM_RATING_RULES.actionPenaltyHigh
+]);
 
 function rounded(value, precision = 1) {
   const scale = 10 ** precision;
@@ -24,16 +31,6 @@ function playerKey(seat = {}) {
   const profileId = String(seat.profileId || '').trim();
   if (profileId) return profileId;
   return `guest:${String(seat.name || '').trim().toLocaleLowerCase('uk')}`;
-}
-
-export function canonicalRankingGames(games = [], sharedGames = []) {
-  const sharedFinishedById = new Map((Array.isArray(sharedGames) ? sharedGames : [])
-    .filter(game => game?.id && game.status === 'finished')
-    .map(game => [String(game.id), game]));
-  return (Array.isArray(games) ? games : []).map(game => {
-    if (game?.status !== 'finished' || !game.id) return game;
-    return sharedFinishedById.get(String(game.id)) || game;
-  });
 }
 
 function structuredBestMove(game = {}) {
@@ -63,28 +60,40 @@ export function bestMoveScore(game = {}, seat = {}) {
   return { hits, bonus };
 }
 
+export function normalizedRatingPenalty(value) {
+  const penalty = Number(value);
+  return RATING_PENALTIES.has(penalty) ? penalty : 0;
+}
+
+export function seatIsDisqualified(seat = {}) {
+  if (Object.hasOwn(seat, 'disqualified')) return seat.disqualified === true;
+  return /^4-й фол$/iu.test(String(seat.eliminatedReason || '').trim());
+}
+
 export function mafiaGamePoints(game = {}, seat = {}) {
   if (game.status !== 'finished' || !['red', 'black', 'draw'].includes(game.winner)) {
-    return { points: 0, base: 0, bestMoveBonus: 0, disqualificationPenalty: 0 };
+    return { points: 0, base: 0, bestMoveBonus: 0, actionPenalty: 0, disqualificationPenalty: 0 };
   }
   const team = ROLE_TEAMS[seat.role];
-  if (!team) return { points: 0, base: 0, bestMoveBonus: 0, disqualificationPenalty: 0 };
+  if (!team) return { points: 0, base: 0, bestMoveBonus: 0, actionPenalty: 0, disqualificationPenalty: 0 };
   const base = game.winner === 'draw'
     ? FIIM_RATING_RULES.draw
     : game.winner === team ? FIIM_RATING_RULES.win : FIIM_RATING_RULES.loss;
   const bestMoveBonus = bestMoveScore(game, seat).bonus;
-  const disqualificationPenalty = /^4-й фол$/iu.test(String(seat.eliminatedReason || '').trim())
+  const actionPenalty = normalizedRatingPenalty(seat.ratingPenalty);
+  const disqualificationPenalty = seatIsDisqualified(seat)
     ? FIIM_RATING_RULES.disqualification
     : 0;
   return {
-    points: rounded(base + bestMoveBonus + disqualificationPenalty),
+    points: rounded(base + bestMoveBonus + actionPenalty + disqualificationPenalty),
     base,
     bestMoveBonus,
+    actionPenalty,
     disqualificationPenalty
   };
 }
 
-export function mafiaPlayerRankings(games = [], playerResolver = () => null) {
+export function mafiaPlayerRankings(games = [], playerResolver = () => null, { excludeUnknownProfiles = false } = {}) {
   const rows = new Map();
   games
     .filter(game => game?.status === 'finished' && ['red', 'black', 'draw'].includes(game.winner))
@@ -92,6 +101,7 @@ export function mafiaPlayerRankings(games = [], playerResolver = () => null) {
       const key = playerKey(seat);
       if (key === 'guest:') return;
       const known = seat.profileId ? playerResolver(seat.profileId) : null;
+      if (excludeUnknownProfiles && seat.profileId && !known) return;
       const row = rows.get(key) || {
         key,
         player: known || { id: key, name: seat.name, avatar: seat.avatar || '' },

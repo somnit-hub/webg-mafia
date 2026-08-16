@@ -26,7 +26,9 @@ function finishedGame() {
       role: index === 0 ? 'sheriff' : index < 3 ? 'mafia' : 'citizen',
       status: 'alive',
       faults: 0,
-      eliminatedReason: ''
+      eliminatedReason: '',
+      ratingPenalty: index === 0 ? -0.5 : 0,
+      disqualified: index === 0
     })),
     history: [{
       at: '2026-08-11T17:30:00.000Z',
@@ -53,6 +55,8 @@ test('shared archive publishes only the finished sanitized protocol', () => {
   assert.equal(document.history[0].text, 'Шериф перевіряє №2: чорний.');
   assert.equal('secret' in document.history[0], false);
   assert.equal(document.seats.some(seat => 'avatar' in seat), false);
+  assert.equal(document.seats[0].ratingPenalty, -0.5);
+  assert.equal(document.seats[0].disqualified, true);
   assert.equal('notes' in document, false);
   assert.equal('night' in document, false);
   assert.equal('settings' in document, false);

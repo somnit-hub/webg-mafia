@@ -46,7 +46,7 @@ import { selectHostTransferCandidates, sortDirectoryPlayers } from './player-dir
 import {
   GAME_EMOTIONS, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
-import { canonicalRankingGames, mafiaPlayerRankings } from './player-ranking.js';
+import { FIIM_RATING_RULES, mafiaGamePoints, mafiaPlayerRankings } from './player-ranking.js';
 import { buildGameStatistics, filterGamesByPeriod, gameActivityComparison } from './game-statistics.js';
 import { buildGameCalendarMonth, currentGameCalendarMonth, shiftGameCalendarMonth } from './game-calendar.js';
 import {
@@ -106,7 +106,8 @@ const ANIMAL_AVATAR_LABELS = Object.freeze({
 
 const RULES_LINKS = Object.freeze({
   ukrainian: 'https://www.imafia.org/game-rules',
-  international: 'https://fiim.world/fiim-rules'
+  international: 'https://fiim.world/fiim-rules',
+  scoring: 'https://fiim.world/scoring'
 });
 
 const ORDER_CATEGORIES = Object.freeze([
@@ -150,7 +151,7 @@ const BUILTIN_ENJOY_VENUE = Object.freeze({
 
 const THEMES = ['dark', 'light', 'cafe'];
 const THEME_COLORS = { dark: '#0d0c0b', light: '#e9e2d6', cafe: '#1a100b' };
-const PWA_VERSION = 194;
+const PWA_VERSION = 195;
 const ANDROID_BLUETOOTH_SETTINGS_URL = 'intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end';
 const CLIENT_PLATFORM = /Android/i.test(navigator.userAgent)
   ? 'android'
@@ -1620,6 +1621,14 @@ function setupMusicHtml() {
   </div>`;
 }
 
+function ratingRulesHtml() {
+  return `<div class="rating-rules-card"><h3>Рейтингові коригування FIIM/MWT</h3><ul><li><b>Штраф −0,3 або −0,5</b> ведучий обирає за дію, що негативно вплинула на хід гри.</li><li><b>Дискваліфікація −0,8</b> позначається окремим прапорцем і не залежить від причини вибуття.</li><li><b>Фінальний бал</b> — сума бала за результат, бонусу за «Кращий хід», штрафу та дискваліфікації.</li></ul><p>Прапорець дискваліфікації автоматично вмикається після четвертого фолу, але ведучий може змінити його окремо.</p></div>`;
+}
+
+function rulesLinksHtml() {
+  return `<div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a><a class="btn secondary" href="${RULES_LINKS.scoring}" target="_blank" rel="noopener noreferrer">Система балів FIIM/MWT</a></div>`;
+}
+
 function setupView() {
   if (!app.draft) app.draft = createDraft();
   const lineup = lineupStatus(app.nextGameQueue);
@@ -1652,7 +1661,7 @@ function setupView() {
     </div>
     ${collapsiblePanel('setupMusic', 'Музика гри', 'Автоматизація фонової музики під час роздачі ролей, нульової ночі, нічних дій та оголошення результату.', setupMusicHtml(), 'setup-music-panel', `<span class="badge ${app.draft.settings.music.enabled ? 'green' : ''}">${app.draft.settings.music.enabled ? 'Увімкнено' : 'Вимкнено'}</span>`)}
     ${collapsiblePanel('setupSeating', 'Розсадка', seatingHelp, `<div class="actions panel-actions"><div class="setup-deal-action"><div class="setup-deal-caption"><span>Спосіб роздачі ролей</span>${helpIcon('За обраною цифрою: гравці по черзі жестом показують число в межах карт, що залишилися, а суддя відкриває відповідну карту. Якщо число завелике — гравець обирає повторно; остання карта видається автоматично.', 'Пояснення: Спосіб роздачі ролей')}</div><select class="select" data-draft-setting="dealMode" aria-label="Спосіб роздачі ролей"><option value="number" ${app.draft.settings.dealMode !== 'automatic' ? 'selected' : ''}>За обраною цифрою</option><option value="automatic" ${app.draft.settings.dealMode === 'automatic' ? 'selected' : ''}>Автоматично</option></select></div><div class="setup-seating-actions"><button class="btn small secondary setup-random-action" data-action="shuffle-seats">${randomActionIcon('shuffle')}<span>Перемішати місця</span></button><button class="icon-btn setup-clear-seating-action" type="button" data-action="clear-setup-seats" aria-label="Очистити розсадку" title="Очистити розсадку">${clearSeatingIcon()}</button></div></div><div class="seat-setup">${app.draft.seats.map(setupSeat).join('')}</div><div class="actions panel-footer-actions"><button class="btn secondary" data-action="new-player">+ Новий профіль</button><button class="btn danger" data-action="start-game">Роздати ролі</button></div>`, 'setup-seating-panel')}
-    ${collapsiblePanel('setupRules', 'Правила спортивної «Мафії»', 'Регламент, жести ведучого та турнірні процедури. Перед турніром звіряйте редакцію з регламентом організатора.', `<div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div>`, 'setup-rules-panel')}
+    ${collapsiblePanel('setupRules', 'Правила спортивної «Мафії»', 'Регламент, жести ведучого, рейтинг і турнірні процедури. Перед турніром звіряйте редакцію з регламентом організатора.', `${ratingRulesHtml()}${rulesLinksHtml()}`, 'setup-rules-panel')}
     <div class="setup-fab-group" role="group" aria-label="Дії нової гри"><button class="mobile-fab primary-fab" type="button" data-action="new-player" aria-label="Додати гравця" title="Додати гравця">${addPlayerIcon()}</button><button class="mobile-fab danger-fab" type="button" data-action="start-game" aria-label="Роздати ролі" title="Роздати ролі">${dealRolesIcon()}</button></div>
   </main>`;
 }
@@ -1680,7 +1689,11 @@ function draftSeatLabel(seat) {
 }
 
 function sharedLeaderboard(games) {
-  return mafiaPlayerRankings(canonicalRankingGames(games, app.cloudGames), playerById);
+  return mafiaPlayerRankings(
+    games,
+    playerById,
+    { excludeUnknownProfiles: true }
+  );
 }
 
 function statisticsPeriodPicker() {
@@ -1770,7 +1783,7 @@ function statsView() {
     ${statisticsMetric(statisticsStartWindowLabel(statistics.cadence.peakStartWindow), 'найчастіший час старту')}
     ${statisticsMetric(aggregate.uniqueVenues, 'місць / клубів')}
     ${statisticsMetric(aggregate.averageFaults, 'фолів у середньому за гру')}
-    ${statisticsMetric(aggregate.disqualifications, 'дискваліфікацій за 4-й фол')}
+    ${statisticsMetric(aggregate.disqualifications, 'позначених дискваліфікацій')}
   </div><div class="stats-subheading"><b>Результати за місцями</b><span>перші 5 за кількістю ігор</span></div>${statistics.venues.length ? `<div class="list stats-venue-list">${statistics.venues.slice(0, 5).map(venue => `<div class="list-row"><div class="list-main"><b>${esc(venue.name)}</b><span>${venue.games} ігор · ${formatStatisticsDuration(venue.averageSeconds)} у середньому${venue.draws ? ` · нічиї: ${venue.draws}` : ''}</span></div><div class="stats-venue-results"><span class="badge red">Місто ${venue.redWinRate}%</span><span class="badge">Мафія ${venue.blackWinRate}%</span></div></div>`).join('')}</div>` : statePanel('empty', 'Місця ще не вказували', 'Оберіть місце або клуб у налаштуваннях нової гри.', '', true)}`;
   return `<main class="page tab-page">
     ${pageHeader('Статистика', 'Результати, темп, фази, активність, місця та рейтинг завершених ігор усіх ведучих.', '<button class="btn small secondary" data-action="cloud-games-refresh">Оновити</button>')}
@@ -1794,7 +1807,7 @@ function statsView() {
     ${collapsiblePanel('statsVenues', 'Місця, розклад і дисципліна', 'Зріз за клубами, типовим часом старту та зафіксованими фолами у вибраному періоді.', venuesPanel)}
     <div class="grid two stats-panels">
       ${collapsiblePanel('statsRoles', 'Результативність ролей', 'Показано частку перемог команди гравця для кожної ролі.', `<div class="bar-chart">${roles.map(role => `<div class="bar-row"><span>${esc(role.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${role.rate}%"></div></div><span class="bar-value">${role.rate}%</span></div>`).join('')}</div>`)}
-      ${collapsiblePanel('statsPlayers', 'Рейтинг гравців', 'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; −0,8 за дискваліфікацію через 4-й фол. КР — сума балів останніх 100 ігор, поділена на 100.', leaderboard.length ? `<div class="list player-ranking-list">${leaderboard.map(row => `<div class="list-row player-ranking-row"><div class="player-ranking-person"><b class="ranking-place" aria-label="Ранг ${row.rank}">#${row.rank}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог · КР ${formatRatingCoefficient(row.coefficient)}</span></div></div><div class="ranking-score"><b>${formatRatingPoints(row.points)}</b><span>балів</span></div></div>`).join('')}</div><a class="ranking-method-link" href="https://fiim.world/scoring" target="_blank" rel="noopener noreferrer">Методика FIIM/MWT ↗</a>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.'))}
+      ${collapsiblePanel('statsPlayers', 'Рейтинг гравців', 'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; штраф −0,3/−0,5 за негативний вплив на гру; −0,8 за окремо позначену дискваліфікацію незалежно від причини. Фінальний бал — сума всіх цих складових. КР — сума балів останніх 100 ігор, поділена на 100.', leaderboard.length ? `<div class="list player-ranking-list">${leaderboard.map(row => `<div class="list-row player-ranking-row"><div class="player-ranking-person"><b class="ranking-place" aria-label="Ранг ${row.rank}">#${row.rank}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог · КР ${formatRatingCoefficient(row.coefficient)}</span></div></div><div class="ranking-score"><b>${formatRatingPoints(row.points)}</b><span>балів</span></div></div>`).join('')}</div><a class="ranking-method-link" href="${RULES_LINKS.scoring}" target="_blank" rel="noopener noreferrer">Методика FIIM/MWT ↗</a>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.'))}
     </div>
     ${collapsiblePanel('statsArchiveGames', 'Спільний архів ігор', 'Протоколи, чати та анонімні оцінки синхронізуються між пристроями. Архів також враховує вибраний період; розподіл відповідей відкривається після трьох оцінок.', games.length ? `<div class="list archive-games-list">${games.map(game => `<article class="archive-game-entry">${gameRow(game)}${archiveGameFeedbackHtml(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${discussionButtonForGame(game, 'small secondary')}${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div></article>`).join('')}</div>` : statePanel('empty', 'За цей період ігор немає', 'Оберіть довший період або завершіть нову гру.'))}
   </main>`;
@@ -1871,7 +1884,7 @@ function settingsView() {
       <div class="section-title section-heading">${titleHelp('h2', 'Резервна копія Google Drive', `Остання синхронізація: ${lastSync}. Окремий дозвіл drive.appdata надається лише після команди підключення; застосунок не бачить звичайні файли користувача.`)}<span class="badge ${drive.connected ? 'green' : ''}">${drive.connected ? 'Підключено' : 'Не підключено'}</span></div>
       <div class="actions drive-actions">${drive.connected ? '<button class="btn primary" data-action="cloud-push">Зберегти у Drive</button><button class="btn secondary" data-action="cloud-pull">Відновити з Drive</button><button class="btn secondary" data-action="drive-disconnect">Відключити Drive</button>' : '<button class="btn primary" data-action="drive-connect">Увімкнути резервну копію</button>'}</div>
     </section>
-    <section class="card card-pad"><div class="section-title section-heading rules-title">${titleHelp('h2', 'Правила спортивної «Мафії»', 'Тут доступні регламент, жести ведучого та турнірні процедури. Основне посилання веде на актуальні правила iMafia українською; перед турніром звіряйте редакцію з регламентом організатора.')}</div><div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div></section>
+    <section class="card card-pad"><div class="section-title section-heading rules-title">${titleHelp('h2', 'Правила спортивної «Мафії»', 'Тут доступні регламент, жести ведучого, методика рейтингу та турнірні процедури. Перед турніром звіряйте редакцію з регламентом організатора.')}</div>${ratingRulesHtml()}${rulesLinksHtml()}</section>
     ${collapsiblePanel(
       'settingsAbout',
       'Про застосунок',
@@ -2212,6 +2225,43 @@ function nominationChipsObserver() {
   return app.game.nominations.length ? `<div class="nom-list">${app.game.nominations.map(number => `<span class="badge red">№${number} ${esc(seatByNo(number)?.name)}</span>`).join('')}</div>` : '<span class="muted">Немає кандидатів</span>';
 }
 
+function formatSignedRatingPoints(value = 0) {
+  const points = Number(value) || 0;
+  if (!points) return '0';
+  return `${points > 0 ? '+' : '−'}${formatRatingPoints(Math.abs(points))}`;
+}
+
+function ratingBreakdownHtml(score) {
+  const items = [
+    `<span>Результат <b>${formatSignedRatingPoints(score.base)}</b></span>`,
+    score.bestMoveBonus ? `<span>Кращий хід <b>${formatSignedRatingPoints(score.bestMoveBonus)}</b></span>` : '',
+    score.actionPenalty ? `<span>Штраф <b>${formatSignedRatingPoints(score.actionPenalty)}</b></span>` : '',
+    score.disqualificationPenalty ? `<span>Дискваліфікація <b>${formatSignedRatingPoints(score.disqualificationPenalty)}</b></span>` : ''
+  ].filter(Boolean);
+  return items.join('');
+}
+
+function ratingAdjustmentsHtml(seat, { showFinal = false } = {}) {
+  const selectedPenalty = Number(seat.ratingPenalty) || 0;
+  const disqualified = seat.disqualified === true;
+  const score = showFinal ? mafiaGamePoints(app.game, seat) : null;
+  const penaltyChoices = [
+    { value: 0, label: 'Без штрафу' },
+    { value: FIIM_RATING_RULES.actionPenaltyLow, label: '−0,3' },
+    { value: FIIM_RATING_RULES.actionPenaltyHigh, label: '−0,5' }
+  ];
+  return `<section class="rating-adjustments" aria-label="Рейтингові коригування"><div class="rating-adjustments-head"><div><b>Рейтингові коригування</b><small>Оберіть штраф за негативний вплив на гру.</small></div>${showFinal ? `<span class="rating-adjustments-final"><small>Фінальний бал</small><strong>${formatRatingPoints(score.points)}</strong></span>` : ''}</div><div class="rating-penalty-options" role="group" aria-label="Штрафні бали">${penaltyChoices.map(choice => `<button class="rating-penalty-choice ${selectedPenalty === choice.value ? 'selected' : ''}" type="button" data-action="set-rating-penalty" data-seat="${seat.number}" data-penalty="${choice.value}" aria-pressed="${selectedPenalty === choice.value}">${choice.label}</button>`).join('')}</div><label class="toggle-row rating-disqualification-toggle"><span><b>Дискваліфікація</b><small>Окремий прапорець незалежно від причини вибуття · −0,8 бала.</small></span><input type="checkbox" data-action="toggle-disqualification" data-seat="${seat.number}" ${disqualified ? 'checked' : ''} aria-label="Дискваліфікація гравця №${seat.number}"></label></section>`;
+}
+
+function gameScoresHtml(game, { editable = false, embedded = false } = {}) {
+  if (game?.status !== 'finished' || !['red', 'black', 'draw'].includes(game.winner)) return '';
+  const rows = (game.seats || []).map(seat => {
+    const score = mafiaGamePoints(game, seat);
+    return `<article class="game-score-row"><div class="game-score-player"><span class="game-score-seat">№${seat.number}</span><div><b>${esc(seat.name)}</b><small>${esc(roleLabel(seat.role))}</small></div></div><div class="game-score-breakdown">${ratingBreakdownHtml(score)}</div><div class="game-score-final"><span>Фінальний бал</span><b>${formatRatingPoints(score.points)}</b></div>${editable ? `<button class="btn small secondary game-score-edit" type="button" data-action="seat-menu" data-seat="${seat.number}">Змінити</button>` : ''}</article>`;
+  }).join('');
+  return `<section class="${embedded ? 'game-score-panel embedded' : 'card card-pad game-score-panel'}"><div class="section-title section-heading"><div><span class="eyebrow">Рейтинг гри</span><h2>Фінальні бали гравців</h2><p>Результат, «Кращий хід» і дисциплінарні коригування показані окремо.</p></div></div><div class="game-score-list">${rows}</div></section>`;
+}
+
 function winnerView(observer = false) {
   const red = app.game.winner === 'red';
   const draw = app.game.winner === 'draw';
@@ -2223,7 +2273,7 @@ function winnerView(observer = false) {
       ? `<div class="actions winner-actions" style="justify-content:center">${discuss}<button class="btn secondary" data-nav="home">На головну</button></div>`
       : ''
     : `<div class="actions winner-actions" style="justify-content:center">${app.undo.length ? '<button class="btn secondary" data-action="undo">↶ Скасувати результат</button>' : ''}<button class="btn secondary" data-action="copy-protocol">Копіювати протокол</button>${discuss}<button class="btn primary" data-action="rematch">Реванш</button><button class="btn secondary" data-nav="home">На головну</button></div>`;
-  return `<main class="page"><section class="card winner">${draw ? '<div class="winner-draw-mark" aria-hidden="true">＝</div>' : roleSignal(red ? 'citizen' : 'mafia', 'winner-signal', title)}<div class="eyebrow">Фінал гри</div><h1>${title}</h1><p class="muted">${detail}</p>${actions}</section></main>`;
+  return `<main class="page winner-page"><section class="card winner">${draw ? '<div class="winner-draw-mark" aria-hidden="true">＝</div>' : roleSignal(red ? 'citizen' : 'mafia', 'winner-signal', title)}<div class="eyebrow">Фінал гри</div><h1>${title}</h1><p class="muted">${detail}</p>${actions}</section>${gameScoresHtml(app.game, { editable: !observer && canManageGame(app.game) })}</main>`;
 }
 
 function playerModalHtml() {
@@ -2335,17 +2385,19 @@ function playerStatsModalHtml() {
   const player = playerId === `google_${app.authUser?.uid || ''}` ? ownProfilePlayer() : playerById(playerId);
   if (!player) return `<div class="modal-backdrop" data-action="close-modal"><div class="card modal player-stats-modal" role="dialog" aria-modal="true"><div class="section-title"><h2>Профіль не знайдено</h2><button class="icon-btn" data-action="close-modal" aria-label="Закрити">×</button></div></div></div>`;
   const stats = personalPlayerStats(finishedGames(), player.id);
+  const scoredHistory = stats.history.map(item => ({ ...item, score: mafiaGamePoints(item.game, item.seat) }));
+  const ratingTotal = Math.round((scoredHistory.reduce((sum, item) => sum + item.score.points, 0) + Number.EPSILON) * 10) / 10;
   const canRate = Boolean(player.cloudUid && player.cloudUid === app.authUser?.uid);
   const backAction = app.modal.returnModal ? 'back-to-profile' : 'close-modal';
-  const history = stats.history.length
-    ? `<div class="personal-game-list">${stats.history.map(({ game, seat, won }) => {
+  const history = scoredHistory.length
+    ? `<div class="personal-game-list">${scoredHistory.map(({ game, seat, won, score }) => {
       const result = game.winner === 'draw' ? 'Нічия' : won ? 'Перемога' : 'Поразка';
-      return `<article class="personal-game-card"><div class="personal-game-head"><div><h3>${esc(game.title)}</h3><p>${formatDate(game.endedAt || game.updatedAt, true)} · місце ${seat.number} · ${esc(roleLabel(seat.role))}</p></div><span class="badge ${won ? 'green' : game.winner === 'draw' ? 'gold' : 'red'}">${result}</span></div>${canRate ? gameFeedbackControls(game, app.gameFeedback[game.id]) : ''}<button class="btn small secondary personal-protocol-button" type="button" data-action="view-protocol" data-id="${esc(game.id)}">Протокол</button></article>`;
+      return `<article class="personal-game-card"><div class="personal-game-head"><div><h3>${esc(game.title)}</h3><p>${formatDate(game.endedAt || game.updatedAt, true)} · місце ${seat.number} · ${esc(roleLabel(seat.role))}</p></div><div class="personal-game-result"><span class="badge ${won ? 'green' : game.winner === 'draw' ? 'gold' : 'red'}">${result}</span><span class="personal-game-points"><small>Бал за гру</small><b>${formatRatingPoints(score.points)}</b></span></div></div><div class="personal-game-score-breakdown" aria-label="Розрахунок бала за гру">${ratingBreakdownHtml(score)}</div>${canRate ? gameFeedbackControls(game, app.gameFeedback[game.id]) : ''}<button class="btn small secondary personal-protocol-button" type="button" data-action="view-protocol" data-id="${esc(game.id)}">Протокол</button></article>`;
     }).join('')}</div>`
     : statePanel('empty', 'Ігор у профілі ще немає', 'Історія з’явиться, коли цей профіль буде додано до завершеної гри.');
   return `<div class="modal-backdrop player-stats-backdrop" data-action="close-modal"><div class="card modal player-stats-modal" role="dialog" aria-modal="true" aria-labelledby="player-stats-title" tabindex="-1">
     <div class="section-title section-heading"><div class="player-stats-title">${avatar(player, 'large')}<div><span class="eyebrow">Персональна статистика</span><h2 id="player-stats-title">${esc(preferredPlayerName(player))}</h2></div></div><button class="icon-btn" type="button" data-action="${backAction}" aria-label="${app.modal.returnModal ? 'Повернутися до профілю' : 'Закрити'}">${app.modal.returnModal ? backChevronIcon() : '×'}</button></div>
-    <section class="stat-grid personal-stat-grid"><article class="stat-card"><b>${stats.games}</b><span>ігор</span></article><article class="stat-card"><b>${stats.wins}</b><span>перемог</span></article><article class="stat-card"><b>${stats.winRate}%</b><span>результативність</span></article><article class="stat-card"><b>${esc(stats.favoriteRole ? roleLabel(stats.favoriteRole) : '—')}</b><span>часта роль</span></article></section>
+    <section class="stat-grid personal-stat-grid"><article class="stat-card"><b>${stats.games}</b><span>ігор</span></article><article class="stat-card"><b>${stats.wins}</b><span>перемог</span></article><article class="stat-card"><b>${stats.winRate}%</b><span>результативність</span></article><article class="stat-card personal-role-stat"><b>${esc(stats.favoriteRole ? roleLabel(stats.favoriteRole) : '—')}</b><span>часта роль</span></article><article class="stat-card personal-rating-stat"><b>${formatRatingPoints(ratingTotal)}</b><span>рейтингових балів</span></article></section>
     ${canRate ? `<p class="privacy-note feedback-privacy-note">Ваш вибір бачите тільки ви. Іншим учасникам доступне лише спільне зведення після трьох оцінок.</p>` : ''}
     <div class="personal-history-title"><h3>Історія ігор</h3><span>${stats.games}</span></div>
     ${history}
@@ -2375,6 +2427,7 @@ function playerLinkOfferModalHtml() {
 function seatModalHtml() {
   const seat = seatByNo(app.modal.seat);
   const role = roleOf(seat);
+  const finished = app.game.status === 'finished';
   const canNominate = nominationIsAllowed(app.game, seat.number, currentSpeaker()?.number);
   return `<div class="modal-backdrop" data-action="close-modal"><div class="card modal game-modal seat-control-modal ${seat.status === 'alive' ? 'seat-alive-modal' : 'seat-dead-modal'}" aria-modal="true" role="dialog" aria-label="Керування гравцем на місці ${seat.number}">
     <button class="icon-btn modal-close" type="button" data-action="close-modal" aria-label="Закрити">×</button>
@@ -2382,14 +2435,15 @@ function seatModalHtml() {
     <div class="divider"></div>
     <div class="list"><div class="list-row"><span class="muted">Фоли</span><b>${seat.faults} / 4</b></div>${app.game.showSecrets ? `<div class="list-row"><span class="muted">Роль</span><b>${role?.symbol} ${role?.label}</b></div>` : ''}${seat.eliminatedReason ? `<div class="list-row"><span class="muted">Причина вибуття</span><b>${esc(seat.eliminatedReason)}</b></div>` : ''}</div>
     <div class="divider"></div>
-    <div class="seat-action-grid"><button class="btn" data-action="add-fault" data-seat="${seat.number}" ${seat.status === 'alive' && seat.faults < 4 ? '' : 'disabled'}>+ Фол</button><button class="btn" data-action="remove-fault" data-seat="${seat.number}" ${seat.faults ? '' : 'disabled'}>− Фол</button><button class="btn primary" data-action="nominate" data-seat="${seat.number}" ${canNominate ? '' : 'disabled'}>Виставити</button>${seat.status === 'alive' ? `<button class="btn danger" data-action="manual-eliminate" data-seat="${seat.number}">Вивести</button>` : '<button class="btn" data-action="restore-seat">Повернути</button>'}</div>
+    ${ratingAdjustmentsHtml(seat, { showFinal: finished })}
+    ${finished ? '' : `<div class="divider"></div><div class="seat-action-grid"><button class="btn" data-action="add-fault" data-seat="${seat.number}" ${seat.status === 'alive' && seat.faults < 4 ? '' : 'disabled'}>+ Фол</button><button class="btn" data-action="remove-fault" data-seat="${seat.number}" ${seat.faults ? '' : 'disabled'}>− Фол</button><button class="btn primary" data-action="nominate" data-seat="${seat.number}" ${canNominate ? '' : 'disabled'}>Виставити</button>${seat.status === 'alive' ? `<button class="btn danger" data-action="manual-eliminate" data-seat="${seat.number}">Вивести</button>` : '<button class="btn" data-action="restore-seat">Повернути</button>'}</div>`}
     <div class="modal-actions"><button class="btn primary" data-action="close-modal">Готово</button></div>
   </div></div>`;
 }
 
 function protocolModalHtml() {
   const game = gameById(app.modal.gameId) || app.game;
-  return `<div class="modal-backdrop protocol-backdrop" data-action="close-modal"><div class="card modal game-modal protocol-modal" aria-modal="true" role="dialog" tabindex="-1"><div class="section-title section-heading game-dialog-head"><div><span class="eyebrow">Історія подій</span><h2>Протокол гри</h2><p>${esc(game.title)} · ${formatDate(game.startedAt, true)}</p></div><button class="icon-btn" data-action="close-modal" aria-label="Закрити">×</button></div><div class="quick-log protocol-log">${game.history.slice().reverse().map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('')}</div><div class="modal-actions"><button class="btn secondary" data-action="copy-protocol" data-id="${game.id}">Копіювати</button><button class="btn primary" data-action="close-modal">Закрити</button></div></div></div>`;
+  return `<div class="modal-backdrop protocol-backdrop" data-action="close-modal"><div class="card modal game-modal protocol-modal" aria-modal="true" role="dialog" tabindex="-1"><div class="section-title section-heading game-dialog-head"><div><span class="eyebrow">Історія подій</span><h2>Протокол гри</h2><p>${esc(game.title)} · ${formatDate(game.startedAt, true)}</p></div><button class="icon-btn" data-action="close-modal" aria-label="Закрити">×</button></div>${gameScoresHtml(game, { embedded: true })}<div class="quick-log protocol-log">${game.history.slice().reverse().map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('')}</div><div class="modal-actions"><button class="btn secondary" data-action="copy-protocol" data-id="${game.id}">Копіювати</button><button class="btn primary" data-action="close-modal">Закрити</button></div></div></div>`;
 }
 
 function confirmModalHtml() {
@@ -2957,7 +3011,8 @@ function createGameFromDraft() {
       avatar: profile?.avatar || profile?.avatarPreset || fallbackAvatars.get(setupAvatarKey(draftSeat, profile)) || ANIMAL_AVATARS[index % ANIMAL_AVATARS.length],
       role: dealMode === 'automatic' ? roles[index] : null,
       status: 'alive', faults: 0, nominatedBy: null, noVote: false,
-      restrictionDay: null, shortSpeechDay: null, eliminatedReason: ''
+      restrictionDay: null, shortSpeechDay: null, eliminatedReason: '',
+      ratingPenalty: 0, disqualified: false
     };
   });
   const startedAt = new Date();
@@ -2986,7 +3041,11 @@ function createGameFromDraft() {
 function publicGame(game) {
   if (!game) return null;
   const clean = clone(game);
-  clean.seats.forEach(seat => { delete seat.role; delete seat.profileId; delete seat.cloudUid; });
+  clean.seats.forEach(seat => {
+    if (clean.status !== 'finished') delete seat.role;
+    delete seat.profileId;
+    delete seat.cloudUid;
+  });
   delete clean.roleDeal;
   clean.history = clean.history.filter(event => !event.secret);
   clean.night = { step: clean.night.step, target: clean.night.step >= 4 ? clean.night.target : null };
@@ -3143,6 +3202,21 @@ function stopTimer() {
   app.timerHandle = null;
   app.wakeLock?.release?.().catch(() => {});
   app.wakeLock = null;
+}
+
+async function persistRatingAdjustment(message) {
+  addLog(message);
+  await saveGame();
+  let syncError = null;
+  if (app.game.status === 'finished') {
+    try { await publishFinishedGame(app.game); }
+    catch (error) {
+      syncError = error;
+      app.cloudArchive = { status: 'error', error: cloudArchiveError(error), fromCache: false };
+    }
+  }
+  render();
+  toast(syncError ? 'Зміни збережено на пристрої · синхронізацію буде повторено' : 'Рейтингове коригування збережено');
 }
 
 function requestGameWakeLock() {
@@ -4776,7 +4850,14 @@ function protocolText(game = app.game) {
     `Початок: ${formatDate(game.startedAt, true)}`,
     `Переможець: ${winner}`,
     '',
-    ...game.seats.map(seat => `№${seat.number} ${seat.name} — ${roleOf(seat)?.label || '—'} — ${seat.status === 'alive' ? 'за столом' : `вибув (${seat.eliminatedReason || '—'})`}`),
+    ...game.seats.map(seat => {
+      const score = mafiaGamePoints(game, seat);
+      const adjustments = [
+        score.actionPenalty ? `штраф ${formatSignedRatingPoints(score.actionPenalty)}` : '',
+        score.disqualificationPenalty ? `дискваліфікація ${formatSignedRatingPoints(score.disqualificationPenalty)}` : ''
+      ].filter(Boolean);
+      return `№${seat.number} ${seat.name} — ${roleOf(seat)?.label || '—'} — ${seat.status === 'alive' ? 'за столом' : `вибув (${seat.eliminatedReason || '—'})`} — фінальний бал ${formatRatingPoints(score.points)}${adjustments.length ? ` (${adjustments.join(', ')})` : ''}`;
+    }),
     '', 'ПОДІЇ:',
     ...game.history.slice().reverse().map(event => `${event.time} — ${event.text}`)
   ].join('\n');
@@ -4825,6 +4906,7 @@ const GUARDED_GAME_ACTIONS = new Set([
   'next-tie-speaker', 'finish-all-tie', 'finish-last-word', 'finish-best-move', 'skip-best-move',
   'night-next', 'night-miss', 'night-shot-done', 'night-check-done', 'night-skip-check', 'wake-city',
   'add-fault', 'remove-fault', 'nominate', 'remove-nomination', 'manual-eliminate', 'restore-seat',
+  'set-rating-penalty', 'toggle-disqualification',
   'undo', 'finish-red', 'finish-black', 'finish-draw'
 ]);
 
@@ -5596,13 +5678,29 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'next-speaker') await nextSpeaker();
   else if (action === 'back-to-speeches') { app.game.subphase = 'speeches'; app.game.speakerIndex = Math.max(0, app.game.speakerOrder.length - 1); setTimer(timerBase(), 'speech'); await saveGame(); render(); }
   else if (action === 'seat-menu') { app.modal = { type: 'seat', seat: number }; render(); }
+  else if (action === 'set-rating-penalty') {
+    if (!canManageGame(app.game)) return toast('Рейтинг може коригувати лише ведучий гри');
+    const seat = seatByNo(number);
+    const penalty = Number(element.dataset.penalty);
+    if (!seat || ![0, FIIM_RATING_RULES.actionPenaltyLow, FIIM_RATING_RULES.actionPenaltyHigh].includes(penalty)) return;
+    if ((Number(seat.ratingPenalty) || 0) === penalty) return;
+    seat.ratingPenalty = penalty;
+    await persistRatingAdjustment(`Рейтинговий штраф №${number}: ${penalty ? formatSignedRatingPoints(penalty) : 'скасовано'}.`);
+  }
+  else if (action === 'toggle-disqualification') {
+    if (!canManageGame(app.game)) return toast('Дискваліфікацію може позначити лише ведучий гри');
+    const seat = seatByNo(number);
+    if (!seat) return;
+    seat.disqualified = !seat.disqualified;
+    await persistRatingAdjustment(`Дискваліфікацію №${number} ${seat.disqualified ? 'позначено' : 'скасовано'}.`);
+  }
   else if (action === 'add-fault') {
     const seat = seatByNo(number); pushUndo(); seat.faults = Math.min(4, seat.faults + 1); addLog(`№${number} отримує ${seat.faults}-й фол.`);
     const speaking = app.game.phase === 'day' && app.game.subphase === 'speeches' && currentSpeaker()?.number === number;
     if (app.game.settings.penaltyMode === 'club' && seat.faults === 2) seat.shortSpeechDay = app.game.day + (speaking ? 1 : 0);
     if (app.game.settings.penaltyMode === 'club' && seat.faults === 3) seat.noVote = true;
     if (app.game.settings.penaltyMode === 'tournament' && seat.faults === 3) seat.restrictionDay = app.game.day + (speaking ? 1 : 0);
-    if (seat.faults === 4) { eliminateSeatOnly(number, '4-й фол'); app.modal = null; await checkVictory(); }
+    if (seat.faults === 4) { seat.disqualified = true; eliminateSeatOnly(number, '4-й фол'); app.modal = null; await checkVictory(); }
     await saveGame(); vibrate(); render();
   } else if (action === 'remove-fault') {
     const seat = seatByNo(number); pushUndo(); seat.faults = Math.max(0, seat.faults - 1); if (seat.faults < 3) { seat.noVote = false; seat.restrictionDay = null; } if (seat.faults < 2) seat.shortSpeechDay = null; addLog(`Фол №${number} скориговано: ${seat.faults}.`); await saveGame(); render();

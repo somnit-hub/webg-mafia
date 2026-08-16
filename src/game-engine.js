@@ -1,4 +1,5 @@
 import { normalizeGameMusicSettings } from './game-music.js';
+import { normalizedRatingPenalty, seatIsDisqualified } from './player-ranking.js';
 
 export const ACTIVE_GAME_PHASES = Object.freeze([
   'reveal', 'zeroNight', 'day', 'vote', 'tieSpeech', 'tieVote',
@@ -148,7 +149,9 @@ export function normalizeGameState(value, defaultSettings = {}, { closeReveal = 
     faults: integer(seat.faults, 0, 4),
     noVote: Boolean(seat.noVote),
     nominatedBy: Number.isInteger(Number(seat.nominatedBy)) ? Number(seat.nominatedBy) : null,
-    eliminatedReason: String(seat.eliminatedReason || '')
+    eliminatedReason: String(seat.eliminatedReason || ''),
+    ratingPenalty: normalizedRatingPenalty(seat.ratingPenalty),
+    disqualified: seatIsDisqualified(seat)
   })) : [];
   const allSeatsAlreadyHaveRoles = game.seats.length > 0 && game.seats.every(seat => ROLE_KEYS.has(seat.role));
   game.settings.dealMode = storedRoleDealMode || savedDealMode || (game.phase === 'reveal' && allSeatsAlreadyHaveRoles ? 'automatic' : 'number');

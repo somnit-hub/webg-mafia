@@ -184,7 +184,7 @@ export function buildGameStatistics(games, { now = Date.now(), monthCount = 6 } 
   const identities = new Set(source.flatMap(game => Array.isArray(game?.seats) ? game.seats.map(playerIdentity) : []).filter(Boolean));
   const faults = source.flatMap(game => Array.isArray(game?.seats) ? game.seats.map(seat => Number(seat?.faults) || 0) : []);
   const disqualifications = source.flatMap(game => Array.isArray(game?.seats) ? game.seats : [])
-    .filter(seat => /4(?:-й)?\s*фол/i.test(String(seat?.eliminatedReason || ''))).length;
+    .filter(seatIsDisqualified).length;
 
   const phaseSamples = { setup: [], day: [], night: [] };
   source.forEach(game => {
@@ -241,3 +241,4 @@ export function buildGameStatistics(games, { now = Date.now(), monthCount = 6 } 
     venues: venueRows(source)
   };
 }
+import { seatIsDisqualified } from './player-ranking.js';

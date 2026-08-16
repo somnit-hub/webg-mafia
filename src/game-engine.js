@@ -1,3 +1,5 @@
+import { normalizeGameMusicSettings } from './game-music.js';
+
 export const ACTIVE_GAME_PHASES = Object.freeze([
   'reveal', 'zeroNight', 'day', 'vote', 'tieSpeech', 'tieVote',
   'allTie', 'lastWord', 'bestMove', 'night'
@@ -120,6 +122,7 @@ export function normalizeGameState(value, defaultSettings = {}, { closeReveal = 
   const savedDealMode = ['number', 'automatic'].includes(value.settings?.dealMode) ? value.settings.dealMode : null;
   const storedRoleDealMode = value.roleDeal?.mode === 'number' ? 'number' : null;
   game.settings = { ...defaultSettings, ...(game.settings || {}) };
+  game.settings.music = normalizeGameMusicSettings(game.settings.music);
   game.status = game.status === 'finished' ? 'finished' : 'active';
   game.phase = game.status === 'finished'
     ? 'finished'

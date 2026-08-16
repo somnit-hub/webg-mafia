@@ -46,6 +46,14 @@ import { selectHostTransferCandidates, sortDirectoryPlayers } from './player-dir
 import {
   GAME_EMOTIONS, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
+import {
+  createCommunityVenueFields, saveCommunityVenue, subscribeCommunityVenues, stopCommunityVenues
+} from './cloud-venues.js';
+import { filterVenues, gameTitleForVenue, googleMapsVenueSuggestion } from './venue-directory.js';
+import {
+  BUILTIN_GAME_TRACKS, DEFAULT_GAME_MUSIC, GAME_MUSIC_CUES, builtinGameTrack,
+  customMusicChoice, musicCueForGame, normalizeGameMusicSettings
+} from './game-music.js';
 
 const ROLE_DECK = [
   { key: 'sheriff', label: 'Шериф', team: 'red', symbol: '★', description: 'Щоночі перевіряє одного гравця та дізнається колір його команди.' },
@@ -109,10 +117,21 @@ const DEFAULT_SETTINGS = {
   firstDaySingleNoVote: true,
   lastGetsRemainder: true,
   dealMode: 'number',
-  penaltyMode: 'tournament'
+  penaltyMode: 'tournament',
+  music: DEFAULT_GAME_MUSIC
 };
 
 const FOUL_SYSTEM_HELP = 'Турнірна: 3 фоли — без промови, 4-й фол — гравець залишає стіл. Клубна: 2 фоли — промова 30 секунд, 3 фоли — без права голосу, 4-й фол — гравець залишає стіл.';
+
+const BUILTIN_ENJOY_VENUE = Object.freeze({
+  id: 'builtin_enjoy',
+  name: ENJOY_CAFE.name,
+  googleMapsUrl: ENJOY_CAFE.mapsUrl,
+  address: ENJOY_CAFE.address,
+  phone: '',
+  website: ENJOY_CAFE.instagramUrl,
+  builtin: true
+});
 
 const THEMES = ['dark', 'light', 'cafe'];
 const THEME_COLORS = { dark: '#0d0c0b', light: '#e9e2d6', cafe: '#1a100b' };
@@ -141,7 +160,7 @@ let app = {
   cloudGames: [],
   deletedGameIds: [],
   games: [],
-  settings: { ...DEFAULT_SETTINGS },
+  settings: { ...DEFAULT_SETTINGS, music: normalizeGameMusicSettings(DEFAULT_SETTINGS.music) },
   draft: null,
   game: null,
   modal: null,
@@ -162,13 +181,16 @@ let app = {
   hostProfile: null,
   cloudDirectory: { status: 'idle', error: '', fromCache: false },
   cloudArchive: { status: 'idle', error: '', fromCache: false },
+  venues: [],
+  venueDirectory: { status: 'idle', error: '', fromCache: false },
+  venueBusy: false,
   ownedPlayerLinks: [],
   playerLinkOffers: [],
   playerLinkBusy: false,
   legacyMigration: null,
   authBusy: false,
   accountDeleteBusy: false,
-  media: { trackName: '', playing: false, error: '' },
+  media: { trackName: '', playing: false, error: '', sourceKey: '', automatic: false, cue: '' },
   order: { busy: false, status: 'idle', error: '', lastItem: '', category: '', selectedItem: '', selectedOptions: [] },
   orderMenu: DEFAULT_ORDER_MENU,
   profilePhotoSync: { status: 'idle' },
@@ -189,6 +211,7 @@ let app = {
     moderatorPanel: false,
     setupGame: false,
     setupTimers: false,
+    setupMusic: false,
     setupRules: false,
     setupSeating: true,
     statsActiveGames: false,
@@ -201,6 +224,7 @@ let activationPromise = null;
 let activationUid = null;
 let cloudDirectoryPromise = null;
 let cloudArchivePromise = null;
+let venueDirectoryPromise = null;
 let cloudArchiveMigrationStarted = false;
 let activeGamePublishPromise = null;
 let activeGamePublishRetryHandle = null;
@@ -558,7 +582,14 @@ function vibrate(pattern = 20) {
 let timerAudioContext = null;
 const musicAudio = new Audio();
 musicAudio.preload = 'metadata';
-let musicObjectUrl = '';
+let manualMusicObjectUrl = '';
+const setupMusicFiles = new Map();
+let automaticMusicCue = '';
+let automaticMusicPaused = false;
+let automaticMusicBlockedCue = '';
+let automaticMusicPlayPendingCue = '';
+let automaticMusicSyncQueued = false;
+let missingCustomMusicNotice = '';
 
 function getTimerAudioContext() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -620,50 +651,186 @@ function updateMusicMetadata() {
   } catch { /* Metadata is an enhancement. */ }
 }
 
-async function playMusic() {
+async function playMusic({ automatic = false } = {}) {
   if (!app.media.trackName || !musicAudio.src) return toast('Спочатку оберіть аудіофайл');
+  const sourceKey = app.media.sourceKey;
+  const cue = app.media.cue;
   try {
     app.media.error = '';
     await musicAudio.play();
   } catch (error) {
+    if (app.media.sourceKey !== sourceKey) return;
     app.media.playing = false;
     app.media.error = 'Браузер не зміг відтворити цей аудіофайл.';
+    if (automatic && cue) automaticMusicBlockedCue = cue;
     setMediaSessionState('paused');
     render();
-    toast(error?.message || app.media.error);
+    toast(automatic ? 'Торкніться Play, щоб дозволити автоматичну музику' : (error?.message || app.media.error));
   }
 }
 
-function pauseMusic() {
+function pauseMusic({ manual = true } = {}) {
   if (!app.media.trackName) return;
+  if (manual && app.media.automatic) automaticMusicPaused = true;
   musicAudio.pause();
 }
 
-function clearMusicTrack() {
-  musicAudio.pause();
+function clearMusicTrack({ revokeManual = true } = {}) {
+  pauseMusic({ manual: false });
   musicAudio.removeAttribute('src');
   musicAudio.load();
-  if (musicObjectUrl) URL.revokeObjectURL(musicObjectUrl);
-  musicObjectUrl = '';
-  app.media = { trackName: '', playing: false, error: '' };
+  musicAudio.loop = false;
+  if (revokeManual && manualMusicObjectUrl) URL.revokeObjectURL(manualMusicObjectUrl);
+  if (revokeManual) manualMusicObjectUrl = '';
+  app.media = { trackName: '', playing: false, error: '', sourceKey: '', automatic: false, cue: '' };
   setMediaSessionState('none');
+}
+
+function loadMusicTrack({ key, name, src, automatic = false, cue = '', loop = false }) {
+  if (!key || !src) return false;
+  if (app.media.sourceKey === key && musicAudio.src) {
+    app.media.automatic = automatic;
+    app.media.cue = cue;
+    app.media.error = '';
+    musicAudio.loop = loop;
+    updateMusicMetadata();
+    return true;
+  }
+  clearMusicTrack();
+  musicAudio.src = src;
+  musicAudio.loop = loop;
+  app.media = { trackName: name || 'Аудіофайл', playing: false, error: '', sourceKey: key, automatic, cue };
+  updateMusicMetadata();
+  return true;
 }
 
 function selectMusicFile(file) {
   clearMusicTrack();
-  musicObjectUrl = URL.createObjectURL(file);
-  musicAudio.src = musicObjectUrl;
-  app.media.trackName = file.name || 'Локальний аудіофайл';
-  updateMusicMetadata();
+  const objectUrl = URL.createObjectURL(file);
+  loadMusicTrack({
+    key: `manual:${file.name || 'audio'}:${file.size || 0}:${file.lastModified || 0}`,
+    name: file.name || 'Локальний аудіофайл',
+    src: objectUrl
+  });
+  manualMusicObjectUrl = objectUrl;
   render();
   toast('Музику підготовлено');
 }
 
+function setupMusicFile(cue, file) {
+  const customChoice = customMusicChoice(cue);
+  if (!customChoice || !file) return;
+  const previous = setupMusicFiles.get(cue);
+  if (previous && app.media.sourceKey === previous.key) clearMusicTrack();
+  if (previous?.url) URL.revokeObjectURL(previous.url);
+  const entry = {
+    key: `setup:${cue}:${file.name || 'audio'}:${file.size || 0}:${file.lastModified || 0}`,
+    name: file.name || 'Власний аудіофайл',
+    url: URL.createObjectURL(file)
+  };
+  setupMusicFiles.set(cue, entry);
+  app.draft.settings.music = normalizeGameMusicSettings(app.draft.settings.music);
+  app.draft.settings.music[cue] = customChoice;
+  missingCustomMusicNotice = '';
+  render();
+  toast(`Файл для «${GAME_MUSIC_CUES.find(item => item.id === cue)?.label || 'сцени'}» обрано`);
+}
+
+function clearSetupMusicFiles() {
+  for (const entry of setupMusicFiles.values()) {
+    if (app.media.sourceKey === entry.key) clearMusicTrack();
+    URL.revokeObjectURL(entry.url);
+  }
+  setupMusicFiles.clear();
+}
+
+function configuredMusicTrack(cue, choice) {
+  if (choice === customMusicChoice(cue)) {
+    const custom = setupMusicFiles.get(cue);
+    if (custom) return { key: custom.key, name: custom.name, src: custom.url };
+  }
+  const fallbackId = choice === customMusicChoice(cue) ? DEFAULT_GAME_MUSIC[cue] : choice;
+  const builtin = builtinGameTrack(fallbackId) || builtinGameTrack(DEFAULT_GAME_MUSIC[cue]);
+  return builtin ? { key: `builtin:${builtin.id}`, name: builtin.label, src: builtin.src } : null;
+}
+
+async function previewSetupMusic(cue) {
+  if (!app.draft) return;
+  const settings = normalizeGameMusicSettings(app.draft.settings.music);
+  const choice = settings[cue];
+  if (choice === customMusicChoice(cue) && !setupMusicFiles.has(cue)) {
+    document.querySelector(`[data-input="setup-music-file"][data-music-cue="${cue}"]`)?.click();
+    return;
+  }
+  const track = configuredMusicTrack(cue, choice);
+  if (!track) return toast('Не вдалося підготувати цю мелодію');
+  automaticMusicCue = '';
+  automaticMusicPaused = false;
+  automaticMusicBlockedCue = '';
+  automaticMusicPlayPendingCue = '';
+  loadMusicTrack({ ...track, loop: false });
+  await playMusic();
+}
+
+async function syncAutomaticMusic() {
+  const settings = normalizeGameMusicSettings(app.game?.settings?.music);
+  const canPlayAutomatically = Boolean(
+    app.authUser && app.game?.status === 'active' && !app.game.publicOnly
+    && canManageGame(app.game) && settings.enabled
+  );
+  const cue = canPlayAutomatically ? musicCueForGame(app.game) : null;
+  if (!cue) {
+    automaticMusicCue = '';
+    automaticMusicPaused = false;
+    automaticMusicBlockedCue = '';
+    automaticMusicPlayPendingCue = '';
+    missingCustomMusicNotice = '';
+    if (app.media.automatic) clearMusicTrack();
+    return;
+  }
+
+  if (cue !== automaticMusicCue) {
+    automaticMusicCue = cue;
+    automaticMusicPaused = false;
+    automaticMusicBlockedCue = '';
+    automaticMusicPlayPendingCue = '';
+  }
+  const choice = settings[cue];
+  if (choice === customMusicChoice(cue) && !setupMusicFiles.has(cue)) {
+    const noticeKey = `${app.game.id}:${cue}`;
+    if (missingCustomMusicNotice !== noticeKey) {
+      missingCustomMusicNotice = noticeKey;
+      toast('Власний файл недоступний після перезавантаження · грає вбудована мелодія');
+    }
+  }
+  const track = configuredMusicTrack(cue, choice);
+  if (!track) return;
+  if (app.media.sourceKey !== track.key || !app.media.automatic || app.media.cue !== cue) {
+    loadMusicTrack({ ...track, automatic: true, cue, loop: true });
+  }
+  if (!automaticMusicPaused && automaticMusicBlockedCue !== cue && automaticMusicPlayPendingCue !== cue && !app.media.playing) {
+    automaticMusicPlayPendingCue = cue;
+    try { await playMusic({ automatic: true }); }
+    finally {
+      if (automaticMusicPlayPendingCue === cue) automaticMusicPlayPendingCue = '';
+    }
+  }
+}
+
+function queueAutomaticMusicSync() {
+  if (automaticMusicSyncQueued) return;
+  automaticMusicSyncQueued = true;
+  queueMicrotask(() => {
+    automaticMusicSyncQueued = false;
+    void syncAutomaticMusic();
+  });
+}
+
 function configureMediaSession() {
   if (!('mediaSession' in navigator)) return;
-  try { navigator.mediaSession.setActionHandler('play', () => { void playMusic(); }); } catch { /* Not supported. */ }
-  try { navigator.mediaSession.setActionHandler('pause', pauseMusic); } catch { /* Not supported. */ }
-  try { navigator.mediaSession.setActionHandler('stop', pauseMusic); } catch { /* Not supported. */ }
+  try { navigator.mediaSession.setActionHandler('play', () => { automaticMusicPaused = false; automaticMusicBlockedCue = ''; void playMusic({ automatic: app.media.automatic }); }); } catch { /* Not supported. */ }
+  try { navigator.mediaSession.setActionHandler('pause', () => pauseMusic()); } catch { /* Not supported. */ }
+  try { navigator.mediaSession.setActionHandler('stop', () => pauseMusic()); } catch { /* Not supported. */ }
 }
 
 async function refreshBluetoothState() {
@@ -988,7 +1155,7 @@ function homeView() {
       <article class="card stat-card"><b>${stats.games}</b><span>завершених ігор</span></article>
       <article class="card stat-card"><b>${app.players.length}</b><span>гравців у базі</span></article>
       <article class="card stat-card"><b>${stats.redWinRate}%</b><span>перемог міста</span></article>
-      <article class="card stat-card"><b>${formatDuration(stats.totalSeconds)}</b><span>за ігровим столом</span></article>
+      <article class="card stat-card"><b>${formatDuration(stats.averageSeconds)}</b><span>середній час гри</span></article>
     </section>
     ${collapsiblePanel(
       'homeRecentGames',
@@ -1131,10 +1298,77 @@ function playerAvatarModalHtml() {
   </div></div>`;
 }
 
-function defaultGameTitle(date = new Date()) {
-  const gameDate = new Intl.DateTimeFormat('uk-UA', { day: '2-digit', month: '2-digit' }).format(date);
-  const gameTime = new Intl.DateTimeFormat('uk-UA', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
-  return `Мафія в Enjoy · ${gameDate} · ${gameTime}`;
+function availableVenues() {
+  const seen = new Set();
+  const venues = [BUILTIN_ENJOY_VENUE, ...app.venues].filter(venue => {
+    const name = String(venue?.name || '').trim().toLocaleLowerCase('uk');
+    const address = String(venue?.address || '').trim().toLocaleLowerCase('uk');
+    const key = `${name}|${address}`;
+    if (!name || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return filterVenues(venues);
+}
+
+function defaultGameTitle(date = new Date(), venueName = BUILTIN_ENJOY_VENUE.name) {
+  return gameTitleForVenue(venueName, date);
+}
+
+function setDraftVenue(venue) {
+  if (!app.draft) return;
+  const name = String(venue?.name || '').trim();
+  app.draft.venueId = String(venue?.id || '');
+  app.draft.venue = name;
+  app.draft.venueSearch = name;
+  app.draft.venuePickerOpen = false;
+  if (app.draft.autoTitle !== false) app.draft.title = defaultGameTitle(new Date(), name);
+}
+
+function focusVenueSearch() {
+  requestAnimationFrame(() => {
+    const search = $('[data-input="venue-search"]');
+    search?.focus();
+    search?.setSelectionRange(search.value.length, search.value.length);
+  });
+}
+
+function venuePickerHtml() {
+  const query = String(app.draft.venueSearch ?? app.draft.venue ?? '');
+  const venues = filterVenues(availableVenues(), query);
+  const exact = availableVenues().some(venue => venue.name.toLocaleLowerCase('uk') === query.trim().toLocaleLowerCase('uk'));
+  const open = Boolean(app.draft.venuePickerOpen);
+  const options = venues.map(venue => `<button class="venue-option" type="button" role="option" data-action="select-game-venue" data-id="${esc(venue.id)}" aria-selected="${app.draft.venueId === venue.id}"><span><b>${esc(venue.name)}</b>${venue.address ? `<small>${esc(venue.address)}</small>` : ''}</span><span aria-hidden="true">›</span></button>`).join('');
+  const custom = query.trim() && !exact
+    ? `<button class="venue-option venue-option-custom" type="button" role="option" data-action="use-custom-game-venue"><span><b>Використати «${esc(query.trim())}»</b><small>Лише для цієї гри, без збереження в каталозі</small></span><span aria-hidden="true">+</span></button>`
+    : '';
+  const directoryStatus = app.venueDirectory.status === 'error'
+    ? `<small class="venue-directory-status error">${esc(app.venueDirectory.error)}</small>`
+    : '';
+  return `<div class="field venue-field"><label for="game-venue">Місце / клуб</label><div class="venue-picker"><div class="venue-picker-row"><input id="game-venue" class="input" type="search" data-input="venue-search" value="${esc(query)}" maxlength="60" placeholder="Пошук місця або клубу" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="venue-options" aria-expanded="${open}"><button class="btn small secondary venue-add-button" type="button" data-action="open-venue-create">+ Додати</button></div>${open ? `<div id="venue-options" class="venue-options" role="listbox">${options}${custom}${!options && !custom ? '<p class="venue-empty">Місць не знайдено</p>' : ''}</div>` : ''}</div>${directoryStatus}</div>`;
+}
+
+function focusProfileClubSearch() {
+  requestAnimationFrame(() => {
+    const search = $('[data-input="profile-club-search"]');
+    search?.focus();
+    search?.setSelectionRange(search.value.length, search.value.length);
+  });
+}
+
+function profileClubPickerHtml(profile) {
+  const query = String(app.modal?.profileDraft?.clubSearch ?? profile.club ?? '');
+  const venues = filterVenues(availableVenues(), query);
+  const exact = availableVenues().some(venue => venue.name.toLocaleLowerCase('uk') === query.trim().toLocaleLowerCase('uk'));
+  const open = Boolean(app.modal?.profileDraft?.clubPickerOpen);
+  const options = venues.map(venue => `<button class="venue-option" type="button" role="option" data-action="select-profile-club" data-id="${esc(venue.id)}" aria-selected="${String(profile.club || '').trim().toLocaleLowerCase('uk') === venue.name.toLocaleLowerCase('uk')}"><span><b>${esc(venue.name)}</b>${venue.address ? `<small>${esc(venue.address)}</small>` : ''}</span><span aria-hidden="true">›</span></button>`).join('');
+  const custom = query.trim() && !exact
+    ? `<button class="venue-option venue-option-custom" type="button" role="option" data-action="use-custom-profile-club"><span><b>Використати «${esc(query.trim())}»</b><small>Зберегти назву лише у профілі</small></span><span aria-hidden="true">+</span></button>`
+    : '';
+  const directoryStatus = app.venueDirectory.status === 'error'
+    ? `<small class="venue-directory-status error">${esc(app.venueDirectory.error)}</small>`
+    : '';
+  return `<div class="field venue-field profile-club-field"><label for="host-club">Клуб або організація</label><div class="venue-picker"><div class="venue-picker-row"><input id="host-club" class="input" type="search" name="club" data-input="profile-club-search" value="${esc(query)}" maxlength="60" placeholder="Пошук місця або клубу" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="profile-club-options" aria-expanded="${open}"><button class="btn small secondary venue-add-button" type="button" data-action="open-profile-club-create">+ Додати</button></div>${open ? `<div id="profile-club-options" class="venue-options" role="listbox">${options}${custom}${!options && !custom ? '<p class="venue-empty">Місць не знайдено</p>' : ''}</div>` : ''}</div>${directoryStatus}</div>`;
 }
 
 function createDraft() {
@@ -1143,10 +1377,41 @@ function createDraft() {
     : app.players.length >= TABLE_SIZE ? shuffled(app.players).slice(0, TABLE_SIZE) : [];
   return {
     title: defaultGameTitle(), autoTitle: true,
-    venue: ENJOY_CAFE.venue, notes: '',
-    settings: { ...app.settings },
+    venue: BUILTIN_ENJOY_VENUE.name,
+    venueId: BUILTIN_ENJOY_VENUE.id,
+    venueSearch: BUILTIN_ENJOY_VENUE.name,
+    venuePickerOpen: false,
+    notes: '',
+    settings: { ...app.settings, music: normalizeGameMusicSettings(app.settings.music) },
     seats: draftSeatsForPlayers(selectedPlayers)
   };
+}
+
+function setupMusicCueHtml(cue, settings) {
+  const choice = settings[cue.id];
+  const custom = setupMusicFiles.get(cue.id);
+  const customValue = customMusicChoice(cue.id);
+  const options = BUILTIN_GAME_TRACKS.map(track => `<option value="${track.id}" ${choice === track.id ? 'selected' : ''}>${esc(track.label)}</option>`).join('');
+  const customLabel = custom ? `Власний файл · ${custom.name}` : 'Власний файл із пристрою';
+  const customMissing = choice === customValue && !custom;
+  const inputId = `setup-music-file-${cue.id}`;
+  return `<article class="setup-music-cue" data-music-cue-card="${cue.id}">
+    <div class="setup-music-cue-copy"><b>${esc(cue.label)}</b><small>${esc(cue.description)}</small></div>
+    <div class="field"><label for="setup-music-choice-${cue.id}">Мелодія</label><select id="setup-music-choice-${cue.id}" class="select" data-input="setup-music-choice" data-music-cue="${cue.id}">${options}<option value="${customValue}" ${choice === customValue ? 'selected' : ''}>${esc(customLabel)}</option></select></div>
+    <div class="setup-music-actions"><button class="btn small secondary" type="button" data-action="preview-setup-music" data-music-cue="${cue.id}">${headerControlIcon('play')}<span>Прослухати</span></button><label class="btn small secondary setup-music-file-button" for="${inputId}">Файл з пристрою</label></div>
+    <input id="${inputId}" class="visually-hidden" type="file" accept="audio/*" data-input="setup-music-file" data-music-cue="${cue.id}">
+    ${customMissing ? '<small class="setup-music-warning">Після перезавантаження виберіть файл повторно. До цього гратиме вбудована мелодія.</small>' : custom ? `<small class="setup-music-local">${esc(custom.name)} · лише на цьому пристрої</small>` : ''}
+  </article>`;
+}
+
+function setupMusicHtml() {
+  const settings = normalizeGameMusicSettings(app.draft.settings.music);
+  app.draft.settings.music = settings;
+  return `<div class="setup-music-stack">
+    <div class="toggle-row setup-music-toggle"><span><b>Автоматична музика</b><small>Вмикає потрібну мелодію на відповідному етапі гри та вимикає її вдень.</small></span><button class="switch ${settings.enabled ? 'on' : ''}" type="button" data-action="toggle-draft-music" role="switch" aria-checked="${settings.enabled}" aria-label="Автоматична музика"></button></div>
+    <div class="setup-music-grid">${GAME_MUSIC_CUES.map(cue => setupMusicCueHtml(cue, settings)).join('')}</div>
+    <p class="privacy-note setup-music-note">Власні файли не завантажуються в мережу й доступні до закриття вкладки. Після перезавантаження застосунок тимчасово використає вбудовану мелодію, доки ви знову не оберете файл.</p>
+  </div>`;
 }
 
 function setupView() {
@@ -1161,7 +1426,7 @@ function setupView() {
     <div class="setup-grid">
       ${collapsiblePanel('setupGame', 'Гра', 'Назва гри потрапить до спільного архіву після завершення.', `<div class="stack">
         <div class="field"><label for="game-title">Назва</label><input id="game-title" class="input" data-draft="title" value="${esc(app.draft.title)}" maxlength="80"></div>
-        <div class="field"><label for="game-venue">Місце / клуб</label><input id="game-venue" class="input" data-draft="venue" value="${esc(app.draft.venue)}" maxlength="100" placeholder="Необов’язково"></div>
+        ${venuePickerHtml()}
         <div class="field"><label for="game-notes">Нотатка ведучого</label><textarea id="game-notes" class="textarea" data-draft="notes" maxlength="500" placeholder="Турнір, номер столу, особливі умови…">${esc(app.draft.notes)}</textarea></div>
       </div>`)}
       ${collapsiblePanel('setupTimers', 'Правила й таймери', 'Ці значення можна змінити й під час гри.', `
@@ -1179,6 +1444,7 @@ function setupView() {
         <div class="field"><label>${help('Система фолів', FOUL_SYSTEM_HELP)}</label><select class="select" data-draft-setting="penaltyMode"><option value="tournament" ${app.draft.settings.penaltyMode === 'tournament' ? 'selected' : ''}>Турнірна</option><option value="club" ${app.draft.settings.penaltyMode === 'club' ? 'selected' : ''}>Клубна</option></select></div>
       `)}
     </div>
+    ${collapsiblePanel('setupMusic', 'Музика гри', 'Автоматизація фонової музики під час роздачі ролей, нульової ночі, нічних дій та оголошення результату.', setupMusicHtml(), 'setup-music-panel', `<span class="badge ${app.draft.settings.music.enabled ? 'green' : ''}">${app.draft.settings.music.enabled ? 'Увімкнено' : 'Вимкнено'}</span>`)}
     ${collapsiblePanel('setupSeating', 'Розсадка', seatingHelp, `<div class="actions panel-actions"><div class="setup-deal-action"><div class="setup-deal-caption"><span>Спосіб роздачі ролей</span>${helpIcon('За обраною цифрою: гравці по черзі жестом показують число в межах карт, що залишилися, а суддя відкриває відповідну карту. Якщо число завелике — гравець обирає повторно; остання карта видається автоматично.', 'Пояснення: Спосіб роздачі ролей')}</div><select class="select" data-draft-setting="dealMode" aria-label="Спосіб роздачі ролей"><option value="number" ${app.draft.settings.dealMode !== 'automatic' ? 'selected' : ''}>За обраною цифрою</option><option value="automatic" ${app.draft.settings.dealMode === 'automatic' ? 'selected' : ''}>Автоматично</option></select></div><button class="btn small secondary setup-random-action" data-action="shuffle-seats">${randomActionIcon('shuffle')}<span>Перемішати місця</span></button></div><div class="seat-setup">${app.draft.seats.map(setupSeat).join('')}</div><div class="actions panel-footer-actions"><button class="btn secondary" data-action="new-player">+ Новий профіль</button><button class="btn danger" data-action="start-game">Роздати ролі</button></div>`, 'setup-seating-panel')}
     ${collapsiblePanel('setupRules', 'Правила спортивної «Мафії»', 'Регламент, жести ведучого та турнірні процедури. Перед турніром звіряйте редакцію з регламентом організатора.', `<div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div>`, 'setup-rules-panel')}
     <div class="setup-fab-group" role="group" aria-label="Дії нової гри"><button class="mobile-fab primary-fab" type="button" data-action="new-player" aria-label="Додати гравця" title="Додати гравця">${addPlayerIcon()}</button><button class="mobile-fab danger-fab" type="button" data-action="start-game" aria-label="Роздати ролі" title="Роздати ролі">${dealRolesIcon()}</button></div>
@@ -1210,10 +1476,11 @@ function draftSeatLabel(seat) {
 function aggregateStats() {
   const games = finishedGames();
   const totalSeconds = games.reduce((sum, game) => sum + (game.durationSeconds || 0), 0);
+  const averageSeconds = games.length ? Math.round(totalSeconds / games.length) : 0;
   const redWins = games.filter(game => game.winner === 'red').length;
   const blackWins = games.filter(game => game.winner === 'black').length;
   const redWinRate = games.length ? Math.round(redWins / games.length * 100) : 0;
-  return { games: games.length, totalSeconds, redWinRate, blackWinRate: games.length ? Math.round(blackWins / games.length * 100) : 0 };
+  return { games: games.length, totalSeconds, averageSeconds, redWinRate, blackWinRate: games.length ? Math.round(blackWins / games.length * 100) : 0 };
 }
 
 function sharedLeaderboard(games) {
@@ -1688,7 +1955,7 @@ function hostProfileModalHtml() {
     <div class="stack">
       <div class="field"><label for="host-display-name">Ім’я для відображення *</label><input id="host-display-name" class="input" name="displayName" value="${esc(profile.displayName || app.authUser?.googleName || '')}" maxlength="60" required></div>
       <div class="field"><label for="host-nickname">Нікнейм</label><input id="host-nickname" class="input" name="nickname" value="${esc(profile.nickname || '')}" maxlength="40"></div>
-      <div class="field"><label for="host-club">Клуб або організація</label><input id="host-club" class="input" name="club" value="${esc(profile.club || '')}" maxlength="100"></div>
+      ${profileClubPickerHtml(profile)}
       <div class="field"><label for="host-description">Про себе</label><textarea id="host-description" class="textarea" name="description" maxlength="600" placeholder="Досвід ведення, улюблена кава…">${esc(profile.description || '')}</textarea></div>
       <label class="toggle-row profile-visibility"><span>${help('Показувати мене в каталозі Enjoy', 'Ім’я, нік, клуб, опис і вибраний аватар бачитимуть лише авторизовані користувачі.')}</span><input type="checkbox" name="discoverable" ${profile.discoverable !== false ? 'checked' : ''}></label>
       <div class="field"><span class="field-label">${help('Мова застосунку', 'Оберіть мову інтерфейсу. Налаштування зберігається на цьому пристрої.')}</span>${languagePickerHtml()}</div>
@@ -2058,6 +2325,25 @@ function hostTransferModalHtml() {
   </div></div>`;
 }
 
+function venueModalHtml() {
+  const venue = app.modal?.venue || {};
+  const status = app.modal?.googleStatus
+    ? `<p class="venue-google-status ${app.modal.googleStatusTone === 'error' ? 'error' : ''}" role="status">${esc(app.modal.googleStatus)}</p>`
+    : '<p class="venue-google-status">Повне посилання Google Maps може підставити назву або адресу, якщо вони містяться в самому посиланні.</p>';
+  return `<div class="modal-backdrop" data-action="close-modal"><form class="card modal venue-modal" data-form="venue" role="dialog" aria-modal="true" aria-labelledby="venue-modal-title">
+    <div class="section-title section-heading"><div><span class="eyebrow">Спільний каталог</span><h2 id="venue-modal-title">Нове місце / клуб</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити" ${app.venueBusy ? 'disabled' : ''}>×</button></div>
+    <p>Після збереження місце зможуть знайти й обрати всі авторизовані користувачі.</p>
+    <div class="stack venue-form-fields">
+      <div class="field"><label for="venue-name">Назва *</label><input id="venue-name" class="input" name="name" data-venue-field="name" value="${esc(venue.name)}" maxlength="60" required autocomplete="organization"></div>
+      <div class="field"><label for="venue-google-url">Google Maps</label><div class="venue-map-row"><input id="venue-google-url" class="input" type="url" name="googleMapsUrl" data-venue-field="googleMapsUrl" data-input="venue-google-maps-url" value="${esc(venue.googleMapsUrl)}" maxlength="2048" placeholder="https://maps.app.goo.gl/…" inputmode="url"><button class="btn small secondary" type="button" data-action="fill-venue-from-google">Підставити</button></div>${status}</div>
+      <div class="field"><label for="venue-address">Адреса</label><input id="venue-address" class="input" name="address" data-venue-field="address" value="${esc(venue.address)}" maxlength="300" autocomplete="street-address" placeholder="Можна ввести вручну"></div>
+      <div class="field"><label for="venue-phone">Телефон</label><input id="venue-phone" class="input" type="tel" name="phone" data-venue-field="phone" value="${esc(venue.phone)}" maxlength="40" autocomplete="tel" placeholder="+380…"></div>
+      <div class="field"><label for="venue-website">Сайт</label><input id="venue-website" class="input" type="url" name="website" data-venue-field="website" value="${esc(venue.website)}" maxlength="2048" inputmode="url" placeholder="https://…"></div>
+    </div>
+    <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal" ${app.venueBusy ? 'disabled' : ''}>Скасувати</button><button class="btn primary" type="submit" ${app.venueBusy ? 'disabled' : ''}>${app.venueBusy ? 'Зберігаємо…' : 'Зберегти місце'}</button></div>
+  </form></div>`;
+}
+
 function modalHtml() {
   if (!app.modal) return '';
   if (app.modal.type === 'player') return playerModalHtml();
@@ -2075,6 +2361,7 @@ function modalHtml() {
   if (app.modal.type === 'delete-account') return deleteAccountModalHtml();
   if (app.modal.type === 'media') return mediaModalHtml();
   if (app.modal.type === 'order') return orderModalHtml();
+  if (app.modal.type === 'venue') return venueModalHtml();
   if (app.modal.type === 'ios-install') return iosInstallModalHtml();
   if (app.modal.type.startsWith('host-transfer')) return hostTransferModalHtml();
   if (app.modal.type === 'winner') return `<div class="modal-backdrop"><div class="card modal game-modal decision-modal" role="dialog" aria-modal="true"><div class="game-dialog-head"><div><span class="eyebrow">Завершення гри</span>${titleHelp('h2', 'Результат гри', 'Ручне завершення потрібне для нестандартної ситуації, нічиєї або рішення судді.')}</div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div><p class="game-dialog-copy">Оберіть результат. Він одразу потрапить до протоколу та статистики.</p><div class="winner-choice-grid"><button class="btn primary winner-choice" data-action="finish-red"><span>●</span><strong>Мирне місто</strong><small>Червона команда</small></button><button class="btn danger winner-choice" data-action="finish-black"><span>◆</span><strong>Мафія</strong><small>Чорна команда</small></button><button class="btn secondary winner-choice winner-draw-choice" data-action="finish-draw"><span>＝</span><strong>Нічия</strong><small>Без переможця</small></button></div><div class="modal-actions"><button class="btn secondary" data-action="close-modal">Скасувати</button></div></div></div>`;
@@ -2128,6 +2415,7 @@ function render() {
   appRoot.setAttribute('aria-busy', 'false');
   syncObserverTimer();
   if (['game', 'reveal'].includes(app.route)) requestAnimationFrame(requestGameWakeLock);
+  queueAutomaticMusicSync();
 }
 
 function showTooltip(button) {
@@ -2187,14 +2475,14 @@ function createGameFromDraft() {
   const startedAt = new Date();
   const timestamp = startedAt.toISOString();
   const title = app.draft.autoTitle !== false
-    ? defaultGameTitle(startedAt)
+    ? defaultGameTitle(startedAt, app.draft.venue)
     : app.draft.title.trim() || 'Гра в Мафію';
   return {
     id: uid('game'), title, venue: app.draft.venue.trim(), notes: app.draft.notes.trim(),
     ownerUid: app.authUser?.uid || '', hostName: String(app.hostProfile?.nickname || '').trim() || app.hostProfile?.displayName || app.authUser?.googleName || 'Ведучий',
     createdAt: timestamp, startedAt: timestamp, updatedAt: timestamp, endedAt: null,
     status: 'active', phase: 'reveal', subphase: '', day: 1, winner: null, durationSeconds: 0,
-    settings: { ...app.draft.settings, dealMode }, seats, revealIndex: 0, revealOpen: false,
+    settings: { ...app.draft.settings, dealMode, music: normalizeGameMusicSettings(app.draft.settings.music) }, seats, revealIndex: 0, revealOpen: false,
     ...(dealMode === 'number' ? { roleDeal: createNumberRoleDeal(roleKeys) } : {}),
     zeroNight: { step: 0 },
     speakerIndex: 0, speakerOrder: seats.map(seat => seat.number), nominations: [],
@@ -2941,6 +3229,42 @@ function cloudDirectoryError(error) {
   return 'Не вдалося синхронізувати каталог Enjoy.';
 }
 
+function venueDirectoryError(error) {
+  if (error?.code === 'permission-denied') return 'Немає доступу до каталогу місць. Перевірте Google-вхід.';
+  if (!navigator.onLine || error?.code === 'unavailable') return 'Немає мережі: нові місця тимчасово недоступні.';
+  return 'Не вдалося синхронізувати каталог місць.';
+}
+
+async function connectVenueDirectory() {
+  if (!app.authUser) return;
+  if (LOCAL_AUTH_TEST) {
+    app.venueDirectory = { status: 'online', error: '', fromCache: false };
+    return;
+  }
+  if (venueDirectoryPromise) return venueDirectoryPromise;
+  app.venueDirectory = { status: 'loading', error: '', fromCache: false };
+  renderPassiveCloudUpdate();
+  venueDirectoryPromise = subscribeCommunityVenues((venues, metadata) => {
+    app.venues = venues;
+    app.venueDirectory = {
+      status: metadata.fromCache && !navigator.onLine ? 'offline' : 'online',
+      error: '',
+      fromCache: metadata.fromCache
+    };
+    renderPassiveCloudUpdate();
+  }, error => {
+    venueDirectoryPromise = null;
+    app.venueDirectory = { status: 'error', error: venueDirectoryError(error), fromCache: false };
+    renderPassiveCloudUpdate();
+  });
+  try { await venueDirectoryPromise; }
+  catch (error) {
+    venueDirectoryPromise = null;
+    app.venueDirectory = { status: 'error', error: venueDirectoryError(error), fromCache: false };
+    renderPassiveCloudUpdate();
+  }
+}
+
 function stopProfilePresence() {
   clearInterval(profilePresenceHandle);
   profilePresenceHandle = null;
@@ -3593,6 +3917,76 @@ async function saveHostProfile(form) {
   toast(cloudSaved ? 'Профіль Enjoy синхронізовано' : 'Збережено локально; хмарна синхронізація не вдалася');
 }
 
+function applyGoogleMapsSuggestion() {
+  if (app.modal?.type !== 'venue') return;
+  const venue = app.modal.venue || {};
+  const suggestion = googleMapsVenueSuggestion(venue.googleMapsUrl);
+  if (!suggestion.valid) {
+    app.modal.googleStatus = venue.googleMapsUrl
+      ? 'Перевірте посилання: потрібна HTTPS-адреса Google Maps.'
+      : 'Спочатку вставте посилання Google Maps.';
+    app.modal.googleStatusTone = 'error';
+    render();
+    return;
+  }
+  app.modal.venue = {
+    ...venue,
+    googleMapsUrl: suggestion.url,
+    name: venue.name || suggestion.name,
+    address: venue.address || suggestion.address
+  };
+  app.modal.googleStatusTone = '';
+  if (suggestion.name || suggestion.address) {
+    app.modal.googleStatus = 'Дані з посилання підставлено. Перевірте їх перед збереженням.';
+  } else if (suggestion.short) {
+    app.modal.googleStatus = 'Коротке посилання збережеться, але адресу з нього без Google Places API прочитати неможливо — введіть її вручну.';
+  } else {
+    app.modal.googleStatus = 'Посилання збережеться. Назва й адреса в ньому не закодовані, тому введіть їх вручну.';
+  }
+  render();
+}
+
+async function saveVenueForm(form) {
+  if (app.venueBusy || app.modal?.type !== 'venue') return;
+  const returnModal = app.modal.returnModal ? clone(app.modal.returnModal) : null;
+  const data = new FormData(form);
+  const venue = {
+    name: data.get('name'),
+    googleMapsUrl: data.get('googleMapsUrl'),
+    address: data.get('address'),
+    phone: data.get('phone'),
+    website: data.get('website')
+  };
+  app.venueBusy = true;
+  app.modal.venue = venue;
+  render();
+  try {
+    const saved = LOCAL_AUTH_TEST
+      ? createCommunityVenueFields(app.authUser, app.hostProfile, venue, uid('venue'))
+      : await saveCommunityVenue(app.authUser, app.hostProfile, venue);
+    app.venues = [saved, ...app.venues.filter(item => item.id !== saved.id)];
+    app.venueBusy = false;
+    if (returnModal?.type === 'host-profile') {
+      app.modal = returnModal;
+      app.modal.profileDraft = {
+        ...(app.modal.profileDraft || {}),
+        club: saved.name,
+        clubSearch: saved.name,
+        clubPickerOpen: false
+      };
+    } else {
+      app.modal = null;
+      setDraftVenue(saved);
+    }
+    render();
+    toast(`Місце «${saved.name}» додано`);
+  } catch (error) {
+    app.venueBusy = false;
+    render();
+    toast(error?.message || 'Не вдалося зберегти місце');
+  }
+}
+
 function protocolText(game = app.game) {
   if (!game) return '';
   const winner = game.winner === 'red' ? 'Мирне місто' : game.winner === 'black' ? 'Чорна команда' : game.winner === 'draw' ? 'Нічия' : 'не визначено';
@@ -3769,13 +4163,17 @@ async function handleAction(action, element, sourceEvent) {
     if (app.modal?.type === 'media') app.modal.view = 'bluetooth';
     render();
   } else if (action === 'media-play') {
-    await playMusic();
+    automaticMusicPaused = false;
+    automaticMusicBlockedCue = '';
+    await playMusic({ automatic: app.media.automatic });
   } else if (action === 'media-pause') {
     pauseMusic();
   } else if (action === 'media-clear') {
-    clearMusicTrack();
+    const wasAutomatic = app.media.automatic;
+    if (wasAutomatic) pauseMusic();
+    else clearMusicTrack();
     render();
-    toast('Аудіофайл прибрано');
+    toast(wasAutomatic ? 'Музику призупинено до наступної сцени' : 'Аудіофайл прибрано');
   } else if (action === 'bluetooth-request') {
     if (app.modal?.type === 'media') app.modal.view = 'bluetooth';
     await requestBluetoothDevice();
@@ -3859,6 +4257,67 @@ async function handleAction(action, element, sourceEvent) {
     if (!app.draft) app.draft = createDraft();
     else fillDraftSeatsFromQueue();
     navigate('setup');
+  } else if (action === 'select-game-venue') {
+    const venue = availableVenues().find(item => item.id === element.dataset.id);
+    if (!venue) return toast('Місце не знайдено');
+    setDraftVenue(venue);
+    render();
+  } else if (action === 'use-custom-game-venue') {
+    const name = String(app.draft?.venueSearch || '').trim();
+    if (!name) return;
+    setDraftVenue({ id: '', name });
+    render();
+  } else if (action === 'open-venue-create') {
+    const query = String(app.draft?.venueSearch || '').trim();
+    const exact = availableVenues().some(venue => venue.name.toLocaleLowerCase('uk') === query.toLocaleLowerCase('uk'));
+    app.modal = {
+      type: 'venue',
+      venue: { name: exact ? '' : query, googleMapsUrl: '', address: '', phone: '', website: '' },
+      googleStatus: '',
+      googleStatusTone: ''
+    };
+    render();
+  } else if (action === 'select-profile-club') {
+    if (app.modal?.type !== 'host-profile') return;
+    const venue = availableVenues().find(item => item.id === element.dataset.id);
+    if (!venue) return toast('Місце не знайдено');
+    captureHostProfileDraft();
+    app.modal.profileDraft = {
+      ...(app.modal.profileDraft || {}),
+      club: venue.name,
+      clubSearch: venue.name,
+      clubPickerOpen: false
+    };
+    render();
+  } else if (action === 'use-custom-profile-club') {
+    if (app.modal?.type !== 'host-profile') return;
+    captureHostProfileDraft();
+    const name = String(app.modal.profileDraft?.clubSearch || app.modal.profileDraft?.club || '').trim();
+    if (!name) return;
+    app.modal.profileDraft = {
+      ...(app.modal.profileDraft || {}),
+      club: name,
+      clubSearch: name,
+      clubPickerOpen: false
+    };
+    render();
+  } else if (action === 'open-profile-club-create') {
+    if (app.modal?.type !== 'host-profile') return;
+    captureHostProfileDraft();
+    const query = String(app.modal.profileDraft?.clubSearch || app.modal.profileDraft?.club || '').trim();
+    const exact = availableVenues().some(venue => venue.name.toLocaleLowerCase('uk') === query.toLocaleLowerCase('uk'));
+    const returnModal = clone(app.modal);
+    returnModal.profileDraft = { ...(returnModal.profileDraft || {}), clubPickerOpen: false };
+    app.modal = {
+      type: 'venue',
+      venue: { name: exact ? '' : query, googleMapsUrl: '', address: '', phone: '', website: '' },
+      googleStatus: '',
+      googleStatusTone: '',
+      returnModal
+    };
+    render();
+  } else if (action === 'fill-venue-from-google') {
+    applyGoogleMapsSuggestion();
   } else if (action === 'new-player') {
     app.modal = { type: 'player', player: { name: '', nickname: '', contact: '', notes: '', avatar: '' } }; render();
   } else if (action === 'edit-player') {
@@ -3919,7 +4378,10 @@ async function handleAction(action, element, sourceEvent) {
     app.modal = null; await refreshData(); render(); toast('Видалено');
   } else if (action === 'close-modal') {
     if (element.classList.contains('modal-backdrop') && element !== sourceEvent?.target) return;
-    app.modal = null; render();
+    if (app.modal?.type === 'venue' && app.venueBusy) return;
+    const returnModal = app.modal?.type === 'venue' ? app.modal.returnModal : null;
+    app.modal = returnModal || null;
+    render();
   } else if (action === 'open-host-transfer') {
     if (!app.game || app.game.status !== 'active' || !canManageGame(app.game)) return toast('Передача доступна лише поточному ведучому');
     app.modal = { type: outgoingHostTransfer(app.game.id) ? 'host-transfer-waiting' : 'host-transfer-select', search: '' };
@@ -4028,6 +4490,13 @@ async function handleAction(action, element, sourceEvent) {
     }
   } else if (action === 'game-settings') {
     app.modal = { type: 'game-settings' }; render();
+  } else if (action === 'toggle-draft-music') {
+    if (!app.draft) return;
+    app.draft.settings.music = normalizeGameMusicSettings(app.draft.settings.music);
+    app.draft.settings.music.enabled = !app.draft.settings.music.enabled;
+    render();
+  } else if (action === 'preview-setup-music') {
+    await previewSetupMusic(element.dataset.musicCue);
   } else if (action === 'toggle-panel') {
     const panel = element.dataset.panel;
     if (Object.hasOwn(app.panelExpanded, panel)) {
@@ -4083,8 +4552,9 @@ async function handleAction(action, element, sourceEvent) {
     const selected = app.draft.seats.map(seat => seat.profileId).filter(Boolean);
     if (new Set(selected).size !== selected.length) return toast('Один профіль не можна посадити двічі');
     const devicePreferences = { theme: app.settings.theme, sound: app.settings.sound, haptics: app.settings.haptics };
-    app.game = createGameFromDraft(); app.settings = { ...app.game.settings, ...devicePreferences }; app.undo = [];
+    app.game = createGameFromDraft(); app.settings = { ...app.game.settings, music: normalizeGameMusicSettings(app.game.settings.music), ...devicePreferences }; app.undo = [];
     app.panelExpanded.moderatorPanel = false;
+    void syncAutomaticMusic();
     await setSetting('appSettings', app.settings); await saveGame();
     const gameId = app.game.id;
     app.nextGameQueue = consumeSeatedPlayers(app.nextGameQueue, app.game.seats);
@@ -4256,7 +4726,17 @@ async function handleAction(action, element, sourceEvent) {
     await finishGame(action === 'finish-red' ? 'red' : action === 'finish-black' ? 'black' : 'draw');
   }
   else if (action === 'rematch') {
-    const previous = app.game; app.draft = createDraft(); app.draft.title = `${previous.title} · реванш`; app.draft.autoTitle = false; app.draft.venue = previous.venue; app.draft.seats = previous.seats.map(seat => ({ number: seat.number, profileId: seat.profileId || '', name: seat.name, autoGuestName: false })); navigate('setup');
+    const previous = app.game;
+    const previousVenue = availableVenues().find(venue => venue.name.toLocaleLowerCase('uk') === String(previous.venue || '').trim().toLocaleLowerCase('uk'));
+    app.draft = createDraft();
+    app.draft.title = `${previous.title} · реванш`;
+    app.draft.autoTitle = false;
+    app.draft.venue = previous.venue;
+    app.draft.venueId = previousVenue?.id || '';
+    app.draft.venueSearch = previous.venue;
+    app.draft.venuePickerOpen = false;
+    app.draft.seats = previous.seats.map(seat => ({ number: seat.number, profileId: seat.profileId || '', name: seat.name, autoGuestName: false }));
+    navigate('setup');
   } else if (action === 'setting-sound' || action === 'setting-haptics') {
     const key = action === 'setting-sound' ? 'sound' : 'haptics'; app.settings[key] = !app.settings[key]; await setSetting('appSettings', app.settings); render();
   } else if (action === 'set-theme') {
@@ -4304,6 +4784,29 @@ async function handleInput(element) {
     const search = $('[data-input="host-transfer-search"]');
     search?.focus();
     search?.setSelectionRange(app.modal.search.length, app.modal.search.length);
+  } else if (element.dataset.input === 'venue-search') {
+    if (!app.draft) return;
+    app.draft.venueSearch = element.value;
+    app.draft.venue = element.value.trim();
+    app.draft.venueId = '';
+    app.draft.venuePickerOpen = true;
+    if (app.draft.autoTitle !== false) app.draft.title = defaultGameTitle(new Date(), app.draft.venue);
+    render();
+    focusVenueSearch();
+  } else if (element.dataset.input === 'profile-club-search') {
+    if (app.modal?.type !== 'host-profile') return;
+    const query = element.value;
+    captureHostProfileDraft();
+    app.modal.profileDraft = {
+      ...(app.modal.profileDraft || {}),
+      club: query.trim(),
+      clubSearch: query,
+      clubPickerOpen: true
+    };
+    render();
+    focusProfileClubSearch();
+  } else if (element.dataset.venueField && app.modal?.type === 'venue') {
+    app.modal.venue = { ...(app.modal.venue || {}), [element.dataset.venueField]: element.value };
   } else if (element.dataset.draft) {
     app.draft[element.dataset.draft] = element.value;
     if (element.dataset.draft === 'title') app.draft.autoTitle = false;
@@ -4322,7 +4825,21 @@ async function handleInput(element) {
 }
 
 async function handleChange(element) {
-  if (element.dataset.seatProfile) {
+  if (element.dataset.input === 'venue-google-maps-url' && app.modal?.type === 'venue') {
+    applyGoogleMapsSuggestion();
+  } else if (element.dataset.input === 'setup-music-choice' && app.draft) {
+    const cue = element.dataset.musicCue;
+    if (!GAME_MUSIC_CUES.some(item => item.id === cue)) return;
+    app.draft.settings.music = normalizeGameMusicSettings({
+      ...app.draft.settings.music,
+      [cue]: element.value
+    });
+    if (app.draft.settings.music[cue] === customMusicChoice(cue) && !setupMusicFiles.has(cue)) {
+      element.closest('[data-music-cue-card]')?.querySelector('[data-input="setup-music-file"]')?.click();
+      return;
+    }
+    render();
+  } else if (element.dataset.seatProfile) {
     const seat = app.draft.seats.find(item => item.number === Number(element.dataset.seatProfile));
     if (!seat) return;
     const alreadySeated = element.value && app.draft.seats.some(item => item.number !== seat.number && item.profileId === element.value);
@@ -4362,6 +4879,8 @@ async function handleChange(element) {
     } catch (error) { toast(error.message); }
   } else if (element.dataset.input === 'music-file' && element.files?.[0]) {
     selectMusicFile(element.files[0]);
+  } else if (element.dataset.input === 'setup-music-file' && element.files?.[0] && app.draft) {
+    setupMusicFile(element.dataset.musicCue, element.files[0]);
   }
 }
 
@@ -4394,6 +4913,7 @@ async function activateAuthenticatedUser(user) {
     await Promise.all([
       connectCloudDirectory({ hasLocalProfile }),
       connectCloudArchive(),
+      connectVenueDirectory(),
       connectPlayerLinks(),
       connectHostTransfers()
     ]);
@@ -4413,14 +4933,21 @@ function clearAuthenticatedState() {
   clearInterval(app.observerTimerHandle);
   app.observerTimerHandle = null;
   clearMusicTrack();
+  clearSetupMusicFiles();
+  automaticMusicCue = '';
+  automaticMusicPaused = false;
+  automaticMusicBlockedCue = '';
+  automaticMusicPlayPendingCue = '';
   clearDriveAccess();
   stopCommunityProfiles();
   stopCommunityGames();
+  stopCommunityVenues();
   stopGameHostTransfers();
   stopPlayerLinks();
   stopProfilePresence();
   cloudDirectoryPromise = null;
   cloudArchivePromise = null;
+  venueDirectoryPromise = null;
   cloudArchiveMigrationStarted = false;
   pendingActiveGames.clear();
   activeGameRecoveryAttempts.clear();
@@ -4455,6 +4982,9 @@ function clearAuthenticatedState() {
   app.authBusy = false;
   app.cloudDirectory = { status: 'idle', error: '', fromCache: false };
   app.cloudArchive = { status: 'idle', error: '', fromCache: false };
+  app.venues = [];
+  app.venueDirectory = { status: 'idle', error: '', fromCache: false };
+  app.venueBusy = false;
 }
 
 async function loadAppData() {
@@ -4467,6 +4997,7 @@ async function loadAppData() {
   app.game = null;
   app.draft = null;
   app.settings = { ...DEFAULT_SETTINGS, ...(await getSetting('appSettings', {})) };
+  app.settings.music = normalizeGameMusicSettings(app.settings.music);
   app.settings.theme = applyTheme(app.settings.theme);
   app.settings.language = applyLanguage(app.settings.language);
   app.nextGameQueue = normalizeLineup(await getSetting('nextGameQueue', []));
@@ -4527,6 +5058,18 @@ document.addEventListener('click', async event => {
 
 document.addEventListener('input', event => handleInput(event.target));
 document.addEventListener('change', event => handleChange(event.target));
+document.addEventListener('focusin', event => {
+  if (event.target.dataset.input === 'venue-search' && app.draft && !app.draft.venuePickerOpen) {
+    app.draft.venuePickerOpen = true;
+    render();
+    focusVenueSearch();
+  } else if (event.target.dataset.input === 'profile-club-search' && app.modal?.type === 'host-profile' && !app.modal.profileDraft?.clubPickerOpen) {
+    captureHostProfileDraft();
+    app.modal.profileDraft = { ...(app.modal.profileDraft || {}), clubPickerOpen: true };
+    render();
+    focusProfileClubSearch();
+  }
+});
 document.addEventListener('submit', async event => {
   if (event.target.dataset.form === 'player') {
     event.preventDefault();
@@ -4534,6 +5077,9 @@ document.addEventListener('submit', async event => {
   } else if (event.target.dataset.form === 'host-profile') {
     event.preventDefault();
     await saveHostProfile(event.target);
+  } else if (event.target.dataset.form === 'venue') {
+    event.preventDefault();
+    await saveVenueForm(event.target);
   } else if (event.target.dataset.form === 'game-settings') {
     event.preventDefault();
     const data = new FormData(event.target);
@@ -4549,7 +5095,11 @@ document.addEventListener('submit', async event => {
   }
 });
 document.addEventListener('keydown', async event => {
-  if (event.key === 'Escape' && (app.modal || app.tooltip) && !app.accountDeleteBusy) { app.modal = null; closeOverlays(); render(); }
+  if (event.key === 'Escape' && (app.modal || app.tooltip) && !app.accountDeleteBusy) {
+    app.modal = app.modal?.type === 'venue' && app.modal.returnModal ? app.modal.returnModal : null;
+    closeOverlays();
+    render();
+  }
   if (app.route === 'game' && !app.modal && event.code === 'Space' && ['day', 'tieSpeech', 'lastWord'].includes(app.game?.phase)) {
     event.preventDefault();
     app.game.timer.running ? stopTimer() : startTimer();
@@ -4569,6 +5119,7 @@ window.addEventListener('online', () => {
   toast('Інтернет-з’єднання відновлено');
   if (app.authUser && app.cloudDirectory.status === 'error') connectCloudDirectory({ hasLocalProfile: true });
   if (app.authUser && ['error', 'offline'].includes(app.cloudArchive.status)) reconnectCloudArchive();
+  if (app.authUser && ['error', 'offline'].includes(app.venueDirectory.status)) connectVenueDirectory();
   if (app.authUser) syncLocalActiveGames();
   if (app.authUser) syncSharedManualPlayers().catch(() => {});
   if (app.authUser) connectPlayerLinks().catch(() => {});
@@ -4613,7 +5164,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=162', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=166', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

@@ -116,6 +116,39 @@ service cloud.firestore {
         && request.resource.data.lastSeenAt is timestamp;
     }
 
+    function validVenue(venueId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'communityId', 'name', 'googleMapsUrl', 'address', 'phone', 'website',
+          'createdByUid', 'createdByName', 'schemaVersion', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.id == venueId
+        && request.resource.data.communityId == 'enjoy'
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.googleMapsUrl is string
+        && request.resource.data.googleMapsUrl.size() <= 2048
+        && (request.resource.data.googleMapsUrl == ''
+          || request.resource.data.googleMapsUrl.matches('^https://(([^/]+[.])?google[.](com|[a-z]{2,3}|(com|co)[.][a-z]{2})|maps[.]app[.]goo[.]gl|goo[.]gl)/.*'))
+        && request.resource.data.address is string
+        && request.resource.data.address.size() <= 300
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 40
+        && request.resource.data.website is string
+        && request.resource.data.website.size() <= 2048
+        && (request.resource.data.website == ''
+          || request.resource.data.website.matches('^https?://.*'))
+        && request.resource.data.createdByUid is string
+        && request.resource.data.createdByUid.size() > 0
+        && request.resource.data.createdByUid.size() <= 128
+        && request.resource.data.createdByName is string
+        && request.resource.data.createdByName.size() > 0
+        && request.resource.data.createdByName.size() <= 60
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
     function validManualPlayer(playerId) {
       return request.resource.data.keys().hasOnly([
           'id', 'communityId', 'ownerUid', 'ownerName', 'localPlayerId',
@@ -334,6 +367,20 @@ service cloud.firestore {
         && validMember(uid)
         && request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if owns(uid);
+    }
+
+    match /communities/enjoy/venues/{venueId} {
+      allow get, list: if signedIn();
+      allow create: if hasVerifiedEmail()
+        && request.resource.data.createdByUid == request.auth.uid
+        && validVenue(venueId);
+      allow update: if hasVerifiedEmail()
+        && resource.data.createdByUid == request.auth.uid
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && validVenue(venueId);
+      allow delete: if signedIn()
+        && resource.data.createdByUid == request.auth.uid;
     }
 
     match /communities/enjoy/manualPlayers/{playerId} {

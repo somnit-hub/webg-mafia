@@ -811,10 +811,69 @@ img { display: block; max-width: 100%; }
 .setup-move-target span { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .setup-move-target.current { opacity: .42; }
 .setup-grid { display: grid; align-items: start; gap: 14px; }
-.setup-seating-panel, .setup-rules-panel { margin-top: 14px; }
+.setup-music-panel, .setup-seating-panel, .setup-rules-panel { margin-top: 14px; }
 .panel-actions { margin-bottom: 13px; }
 .panel-footer-actions { margin-top: 14px; }
 .setup-options { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.setup-music-stack { display: grid; gap: 12px; }
+.setup-music-toggle > span { min-width: 0; display: grid; gap: 3px; }
+.setup-music-toggle b { color: var(--text); font-size: 14px; }
+.setup-music-toggle small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.setup-music-grid { display: grid; gap: 9px; }
+.setup-music-cue { min-width: 0; padding: 12px; display: grid; align-content: start; gap: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--row-bg); }
+.setup-music-cue-copy { min-width: 0; display: grid; gap: 3px; }
+.setup-music-cue-copy b { font-size: 14px; }
+.setup-music-cue-copy small, .setup-music-local, .setup-music-warning { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.setup-music-warning { color: var(--gold); }
+.setup-music-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.setup-music-actions .btn { flex: 1 1 130px; }
+.setup-music-actions svg { width: 17px; height: 17px; fill: currentColor; }
+.setup-music-file-button { cursor: pointer; }
+.setup-music-note { margin: 0; }
+.venue-picker { position: relative; min-width: 0; }
+.venue-picker-row, .venue-map-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 7px; }
+.venue-add-button { min-width: 92px; }
+.venue-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--soft-line);
+  border-radius: 7px;
+  padding: 5px;
+  background: var(--surface);
+  box-shadow: 0 16px 38px rgb(0 0 0 / 35%);
+}
+.venue-option {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 5px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.venue-option:hover, .venue-option:focus-visible { outline: none; color: var(--gold); background: var(--row-bg); }
+.venue-option[aria-selected="true"] { background: color-mix(in srgb, var(--gold) 10%, var(--row-bg)); }
+.venue-option > span:first-child { min-width: 0; }
+.venue-option b, .venue-option small { display: block; overflow-wrap: anywhere; }
+.venue-option small, .venue-directory-status, .venue-google-status { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.venue-option-custom { border-top: 1px solid var(--line); color: var(--gold); }
+.venue-empty { margin: 8px; color: var(--muted); font-size: 12px; text-align: center; }
+.venue-directory-status.error, .venue-google-status.error { color: var(--danger); }
+.venue-modal { width: min(640px, 100%); }
+.venue-form-fields { margin-top: 4px; }
+.venue-map-row .btn { min-width: 112px; }
+.venue-google-status { min-height: 16px; margin: 0; }
 
 .reveal-page { min-height: calc(100dvh - var(--top-h) - var(--game-nav-h) - 16px); }
 .reveal-workspace { width: min(720px, 100%); margin-inline: auto; display: grid; gap: 8px; }
@@ -1362,7 +1421,7 @@ img { display: block; max-width: 100%; }
   .stat-grid { grid-template-columns: repeat(4, 1fr); }
   .player-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .seat-setup { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .setup-options { grid-template-columns: repeat(2, 1fr); }
+  .setup-options, .setup-music-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .vote-grid { grid-template-columns: repeat(3, 1fr); }
   .game-seat { min-height: 116px; padding: 8px; }
   .game-seat .avatar { width: 42px; height: 42px; flex-basis: 42px; }
@@ -1834,6 +1893,11 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .search-row { min-width: 0; margin-bottom: 8px; }
   .player-grid { gap: 4px; }
   .setup-grid { gap: 7px; }
+  .venue-picker-row { grid-template-columns: minmax(0, 1fr) 88px; }
+  .venue-add-button { min-width: 0; padding-right: 7px; padding-left: 7px; }
+  .venue-map-row { grid-template-columns: 1fr; }
+  .venue-map-row .btn { width: 100%; }
+  .venue-options { max-height: min(245px, 42dvh); }
   .setup-seating-panel, .setup-rules-panel { margin-top: 8px; }
   .setup-page [data-panel="setupTimers"] .setup-options { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 7px; }
   .setup-page [data-panel="setupTimers"] .setup-options .field { min-width: 0; }

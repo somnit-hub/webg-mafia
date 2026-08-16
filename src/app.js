@@ -1326,6 +1326,7 @@ function playersView() {
   const query = app.search.trim().toLocaleLowerCase('uk');
   const filteredPlayers = app.players.filter(player => !query || `${player.name} ${player.nickname || ''} ${player.email || ''} ${player.contact || ''} ${player.notes || ''} ${player.telegramUsername || ''} ${player.telegramDisplayName || ''}`.toLocaleLowerCase('uk').includes(query));
   const gameCounts = new Map(filteredPlayers.map(player => [player.id, statsForPlayer(player.id).games]));
+  const playerRankings = new Map(sharedLeaderboard(finishedGames()).map(row => [row.key, row]));
   const onlinePlayerIds = new Set(filteredPlayers.filter(playerIsOnline).map(player => player.id));
   const players = sortDirectoryPlayers(filteredPlayers, { onlinePlayerIds, gameCounts });
   const cloudLabel = app.cloudDirectory.status === 'online'
@@ -1338,7 +1339,7 @@ function playersView() {
     ${statusStrip(app.cloudDirectory.status, cloudLabel, app.cloudDirectory.error, 'Ручні профілі синхронізуються для всіх користувачів. Автоматично згенеровані тимчасові прізвиська до каталогу не додаються.', '<button class="btn small secondary" data-action="cloud-refresh">Оновити</button>')}
     ${nextGameQueueView()}
     <div class="search-row"><input class="input" type="search" data-input="player-search" value="${esc(app.search)}" placeholder="Пошук за ім’ям, ніком, клубом або описом"><button class="btn secondary icon" data-action="new-player" aria-label="Додати гравця">+</button></div>
-    ${players.length ? `<section class="player-grid">${players.map(playerCard).join('')}</section>` : statePanel('empty', 'Нікого не знайдено', 'Змініть запит або додайте гравця.')}
+    ${players.length ? `<section class="player-grid">${players.map(player => playerCard(player, playerRankings.get(player.id))).join('')}</section>` : statePanel('empty', 'Нікого не знайдено', 'Змініть запит або додайте гравця.')}
     <div class="players-fab-group" role="group" aria-label="Швидкі дії гравців"><button class="mobile-fab primary-fab" type="button" data-action="new-player" aria-label="Додати гравця" title="Додати гравця">${addPlayerIcon()}</button><button class="mobile-fab danger-fab" type="button" data-action="prepare-next-game" aria-label="До розсадки" title="До розсадки">${seatingIcon()}</button></div>
   </main>`;
 }
@@ -1369,7 +1370,7 @@ function playerIsOnline(player) {
     : profileWasRecentlyActive(player.lastSeenAt);
 }
 
-function playerCard(player) {
+function playerCard(player, ranking = null) {
   const stats = statsForPlayer(player.id);
   const isGoogleProfile = Boolean(player.cloudUid);
   const isSharedManual = Boolean(player.cloudManualId);
@@ -1380,7 +1381,7 @@ function playerCard(player) {
   const profileLocked = profileIsInActiveGame(player.id);
   const online = playerIsOnline(player);
   const presence = isGoogleProfile
-    ? `<span class="badge presence-badge ${online ? 'online' : 'offline'}" data-presence="${online ? 'online' : 'offline'}" title="${online ? 'Активність протягом останніх двох хвилин' : 'Активності не було понад дві хвилини'}"><i aria-hidden="true"></i>${online ? 'Онлайн' : 'Офлайн'}</span>`
+    ? `<span class="badge presence-badge status-only ${online ? 'online' : 'offline'}" data-presence="${online ? 'online' : 'offline'}" role="img" aria-label="${online ? 'Онлайн' : 'Офлайн'}" title="${online ? 'Активність протягом останніх двох хвилин' : 'Активності не було понад дві хвилини'}"><i aria-hidden="true"></i></span>`
     : '';
   const lockedButton = '<button class="icon-btn player-edit" type="button" aria-label="Профіль заблоковано до завершення гри" title="Профіль зараз у грі" disabled>🔒</button>';
   const editButton = profileLocked
@@ -1393,11 +1394,11 @@ function playerCard(player) {
   const profileKind = player.linkAccepted
     ? '<span class="badge green">Google · об’єднано</span>'
     : isGoogleProfile
-      ? '<span class="badge green">Google · Enjoy</span>'
+      ? '<span class="badge green">Google</span>'
       : '<span class="guest-label">Гість</span>';
   return `<article class="card player-card ${isCloud ? 'cloud' : 'local'} ${isGoogleProfile ? 'google-profile' : ''}">
     <button class="player-avatar-button" type="button" data-action="open-player-avatar" data-id="${esc(player.id)}" aria-label="Відкрити велике фото ${esc(preferredPlayerName(player))}" title="Відкрити фото">${avatar(player)}</button>
-    <div class="player-card-copy"><div class="player-name-line"><h3>${esc(preferredPlayerName(player))}</h3>${club ? `<span class="player-club">${esc(club)}</span>` : ''}</div>${description ? `<p>${esc(description)}</p>` : ''}<div class="player-stats">${profileKind}${presence}${telegramProfileBadge(player, { compact: true })}${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span></div></div>
+    <div class="player-card-copy"><div class="player-name-line"><h3>${esc(preferredPlayerName(player))}</h3>${club ? `<span class="player-club">${esc(club)}</span>` : ''}</div>${description ? `<p>${esc(description)}</p>` : ''}<div class="player-stats">${profileKind}${presence}${telegramProfileBadge(player, { compact: true })}${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span><span class="player-rating-points" title="Рейтингові бали FIIM/MWT">${formatRatingPoints(ranking?.points)} балів</span></div></div>
     <div class="player-card-actions">${editButton}<button class="icon-btn player-stats-button" type="button" data-action="open-player-stats" data-id="${esc(player.id)}" aria-label="Статистика ${esc(preferredPlayerName(player))}" title="Персональна статистика">${playerStatsIcon()}</button><button class="queue-player-btn ${queued ? 'selected' : ''}" data-action="toggle-next-player" data-id="${esc(player.id)}" aria-label="${queued ? `Прибрати ${esc(preferredPlayerName(player))} зі складу наступної гри` : `Додати ${esc(preferredPlayerName(player))} до наступної гри`}" aria-pressed="${queued}"><span aria-hidden="true">${queued ? '✓' : '+'}</span>${queued ? `<small>${queueIndex + 1}</small>` : ''}</button></div>
   </article>`;
 }
@@ -6114,7 +6115,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=176', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=189', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

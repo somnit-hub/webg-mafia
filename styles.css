@@ -578,9 +578,12 @@ img { display: block; max-width: 100%; }
 .guest-label { color: var(--subtle); font-size: 10px; }
 .presence-badge { gap: 5px; }
 .presence-badge i { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: var(--subtle); }
+.presence-badge.status-only { width: 20px; height: 20px; flex: 0 0 20px; justify-content: center; gap: 0; border-radius: 50%; padding: 0; }
+.presence-badge.status-only i { width: 8px; height: 8px; flex-basis: 8px; }
 .presence-badge.online { border-color: #32664a; color: #caffe0; }
 .presence-badge.online i { background: var(--green); box-shadow: 0 0 0 3px rgb(88 183 124 / 12%); }
 .presence-badge.offline { color: var(--subtle); }
+.player-rating-points { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; }
 .player-card-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
 .queue-player-btn {
   position: relative;

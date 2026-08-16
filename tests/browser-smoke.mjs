@@ -164,6 +164,44 @@ const homeAverageGameTime = await evaluate(`({
   value: document.querySelector('.home-stat-grid .stat-card:last-child b')?.textContent.trim(),
   label: document.querySelector('.home-stat-grid .stat-card:last-child span')?.textContent.trim()
 })`);
+const homeGameCalendarDefault = await evaluate(`(() => {
+  const panel = document.querySelector('[data-panel="homeGameCalendar"]');
+  return {
+    panel: Boolean(panel),
+    expanded: panel?.querySelector('[data-action="toggle-panel"]')?.getAttribute('aria-expanded'),
+    hidden: panel?.querySelector('.collapsible-content')?.hidden,
+    helpAbsent: !panel?.querySelector('.help')
+  };
+})()`);
+await click('[data-action="toggle-panel"][data-panel="homeGameCalendar"]');
+const homeGameCalendarExpanded = await evaluate(`(() => {
+  const panel = document.querySelector('[data-panel="homeGameCalendar"]');
+  const grid = panel?.querySelector('.game-calendar-grid');
+  const badges = [...(panel?.querySelectorAll('.game-calendar-day > b') || [])];
+  return {
+    expanded: panel?.querySelector('[data-action="toggle-panel"]')?.getAttribute('aria-expanded'),
+    hidden: panel?.querySelector('.collapsible-content')?.hidden,
+    month: panel?.querySelector('.game-calendar-toolbar strong')?.textContent.trim(),
+    previous: Boolean(panel?.querySelector('[data-action="previous-game-calendar-month"]')),
+    next: Boolean(panel?.querySelector('[data-action="next-game-calendar-month"]')),
+    weekdays: panel?.querySelectorAll('.game-calendar-weekdays span').length,
+    gridCells: grid?.children.length,
+    dates: panel?.querySelectorAll('.game-calendar-day:not(.is-empty)').length,
+    numericCounts: badges.every(badge => /^\\d+$/.test(badge.textContent.trim())),
+    detailsAbsent: !panel?.querySelector('.list, .list-row, .archive-game-entry')
+  };
+})()`);
+await click('[data-action="next-game-calendar-month"]');
+const homeGameCalendarNext = await evaluate(`({
+  month: document.querySelector('.game-calendar-toolbar strong')?.textContent.trim(),
+  focused: document.activeElement?.dataset.action
+})`);
+await click('[data-action="previous-game-calendar-month"]');
+const homeGameCalendarRestored = await evaluate(`({
+  month: document.querySelector('.game-calendar-toolbar strong')?.textContent.trim(),
+  focused: document.activeElement?.dataset.action
+})`);
+await click('[data-action="toggle-panel"][data-panel="homeGameCalendar"]');
 await click('[data-action="toggle-panel"][data-panel="homeActiveGames"]');
 const homeActiveGamesCollapsed = await evaluate(`({
   expanded: document.querySelector('[data-action="toggle-panel"][data-panel="homeActiveGames"]')?.getAttribute('aria-expanded'),
@@ -648,7 +686,7 @@ const settingsAboutExpanded = await evaluate(`(() => {
     expanded: panel?.querySelector('[data-action="toggle-panel"]')?.getAttribute('aria-expanded'),
     hidden: content?.hidden,
     paragraphs: content?.querySelectorAll('p').length,
-    version: text.includes('PWA v193'),
+    version: text.includes('PWA v194'),
     cache: text.includes('кешуються оболонка застосунку'),
     session: text.includes('Google-сесія'),
     profiles: text.includes('Профілі'),
@@ -2008,6 +2046,7 @@ verify(authenticatedHost.name === 'Тестовий ведучий' && authentic
 verify(enjoyBrand.headerBrandAbsent && enjoyBrand.documentTitle === 'Mafia Enjoy' && enjoyBrand.heroWordmarkAbsent && enjoyBrand.heroTitle === 'Мафія enjoy' && enjoyBrand.coffeeIcon && enjoyBrand.sheriffBadge && enjoyBrand.favicon.endsWith('/assets/favicon-32.png') && enjoyBrand.brandMarkSize >= 44 && enjoyBrand.brandArtworkSize === 'contain' && enjoyBrand.heroBackground.includes('overview-mafia-table.jpg') && enjoyBrand.heroBackgroundSize.includes('cover') && enjoyBrand.heroTextColor === 'rgb(246, 238, 226)' && enjoyBrand.heroIndexAbsent && enjoyBrand.addressAbsent && enjoyBrand.instagramAbsent && enjoyBrand.mapsAbsent && enjoyBrand.socialIcons === 0 && enjoyBrand.sharedArchive.includes('Активні й завершені') && enjoyBrand.externalArrowsAbsent && !enjoyBrand.redundantDescription && !enjoyBrand.redundantAudienceLabel, 'Enjoy brand with responsive Mafia table background');
 verify(initialActiveGames.panel && initialActiveGames.rows === 0 && initialActiveGames.refresh && initialActiveGames.observerHint && initialActiveGames.state && initialActiveGames.toggle && initialActiveGames.expanded === 'true' && !initialActiveGames.hidden && homeActiveGamesCollapsed.expanded === 'false' && homeActiveGamesCollapsed.hidden && homeActiveGamesExpanded.expanded === 'true' && !homeActiveGamesExpanded.hidden, 'overview active games are expanded by default and can be collapsed and expanded');
 verify(homeAverageGameTime.value === '0 хв' && homeAverageGameTime.label === 'середній час гри', 'overview shows average game duration instead of total time at the table');
+verify(homeGameCalendarDefault.panel && homeGameCalendarDefault.expanded === 'false' && homeGameCalendarDefault.hidden && homeGameCalendarDefault.helpAbsent && homeGameCalendarExpanded.expanded === 'true' && !homeGameCalendarExpanded.hidden && homeGameCalendarExpanded.previous && homeGameCalendarExpanded.next && homeGameCalendarExpanded.weekdays === 7 && homeGameCalendarExpanded.gridCells >= 28 && homeGameCalendarExpanded.gridCells <= 42 && homeGameCalendarExpanded.gridCells % 7 === 0 && homeGameCalendarExpanded.dates >= 28 && homeGameCalendarExpanded.dates <= 31 && homeGameCalendarExpanded.numericCounts && homeGameCalendarExpanded.detailsAbsent && homeGameCalendarNext.month !== homeGameCalendarExpanded.month && homeGameCalendarNext.focused === 'next-game-calendar-month' && homeGameCalendarRestored.month === homeGameCalendarExpanded.month && homeGameCalendarRestored.focused === 'previous-game-calendar-month', 'overview monthly game calendar is collapsed by default, count-only, and supports month navigation');
 verify(Object.entries(chromeByTab).every(([route, frame]) => isUnifiedAppChrome(frame, homeChrome) && (route === 'home' ? ['', '#home'].includes(frame.route) : frame.route === `#${route}`) && frame.activeLabel === ({ home: 'Огляд', players: 'Гравці', setup: 'Нова гра', stats: 'Статистика', settings: 'Ще' })[route]), 'unified chrome across tabs');
 verify(mobileLayout.heroActionsHidden && mobileLayout.homeQuickActionCount === 2 && mobileLayout.homeQuickActionsSquare && mobileLayout.homeQuickActionsCentered && mobileLayout.homeQuickActionsAboveNavigation && mobileLayout.addPlayerFirst && mobileLayout.createGameSecond && mobileLayout.createGameRed && mobileLayout.addPlayerGold, 'mobile home floating quick actions, order and colors');
 verify(settingsHeaderBrandAbsent, 'header brand copy absent on secondary tabs');
@@ -2030,7 +2069,7 @@ verify(enjoyInfo.descriptionAbsent && enjoyInfo.instagramIcon && enjoyInfo.mapsI
 verify(manualJsonTransferAbsent, 'manual JSON import and export controls removed');
 verify(settingsTechnicalTermsAbsent, 'technical storage terms absent from settings');
 verify(rulesLinks.count === 2 && rulesLinks.ukrainian?.includes('imafia.org/game-rules') && rulesLinks.international?.includes('fiim.world/fiim-rules') && rulesLinks.externalSafety && rulesLinks.arrowsAbsent, 'rules links');
-verify(settingsAboutDefault.last && settingsAboutDefault.expanded === 'false' && settingsAboutDefault.hidden && settingsAboutDefault.helpAbsent && settingsAboutExpanded.expanded === 'true' && !settingsAboutExpanded.hidden && settingsAboutExpanded.paragraphs === 2 && settingsAboutExpanded.version && settingsAboutExpanded.cache && settingsAboutExpanded.session && settingsAboutExpanded.profiles && settingsAboutExpanded.archives && settingsAboutExpanded.githubAbsent, 'collapsible About app section is last, has no help icon, and exposes PWA v193 storage details');
+verify(settingsAboutDefault.last && settingsAboutDefault.expanded === 'false' && settingsAboutDefault.hidden && settingsAboutDefault.helpAbsent && settingsAboutExpanded.expanded === 'true' && !settingsAboutExpanded.hidden && settingsAboutExpanded.paragraphs === 2 && settingsAboutExpanded.version && settingsAboutExpanded.cache && settingsAboutExpanded.session && settingsAboutExpanded.profiles && settingsAboutExpanded.archives && settingsAboutExpanded.githubAbsent, 'collapsible About app section is last, has no help icon, and exposes PWA v194 storage details');
 verify(compactHelp.count >= 8 && compactHelp.visiblePageDescriptions === 0 && compactHelp.visibleSectionDescriptions === 0 && compactHelp.visibleFieldHints === 0 && compactHelp.circular && helpPopover.visible && helpPopover.role === 'tooltip' && helpPopover.text.includes('Спільнота') && helpPopover.insideViewport, 'compact help tooltips');
 verify(accountDeletion.trashIconOnly && accountDeletion.trashButtonSize >= 40 && accountDeletion.dialog && accountDeletion.title === 'Видалити профіль Mafia?' && accountDeletion.retentionCopyAbsent && accountDeletion.confirm === 'Видалити профіль' && accountDeletion.focused && accountDeletion.scrollTop === 0 && accountDeletion.top >= 6 && accountDeletion.top <= 8 && accountDeletion.left === 6 && accountDeletion.rightGap === 6 && accountDeletion.bottomWithinViewport && accountDeletion.backdropAlign === 'start' && accountDeletion.bordered, 'account deletion controls');
 verify(Object.values(unifiedModalFrames).length === 14 && Object.values(unifiedModalFrames).every(isUnifiedModal), 'unified mobile modal frames');

@@ -506,6 +506,20 @@ img { display: block; max-width: 100%; }
 .button-random-icon { width: 20px; height: 20px; flex: 0 0 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 .button-dice-icon circle { fill: currentColor; stroke: none; }
 .setup-random-action span { min-width: 0; }
+
+.game-calendar { width: 100%; max-width: 760px; margin: 0 auto; display: grid; gap: 9px; }
+.game-calendar-toolbar { display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; align-items: center; gap: 8px; }
+.game-calendar-toolbar strong { overflow: hidden; color: var(--text); font-family: var(--font-display); font-size: 18px; text-align: center; text-overflow: ellipsis; text-transform: capitalize; white-space: nowrap; }
+.game-calendar-nav { width: 42px; height: 42px; min-height: 42px; }
+.game-calendar-nav svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.game-calendar-weekdays, .game-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.game-calendar-weekdays span { min-width: 0; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-align: center; text-transform: uppercase; }
+.game-calendar-day { min-width: 0; min-height: 62px; padding: 7px; display: flex; align-items: flex-start; justify-content: space-between; gap: 3px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--row-bg); font-family: var(--font-numeric); font-variant-numeric: tabular-nums; }
+.game-calendar-day > span { font-size: 12px; font-weight: 800; }
+.game-calendar-day > b { min-width: 25px; min-height: 25px; padding: 3px 6px; display: grid; place-items: center; border: 1px solid var(--primary-line); border-radius: 99px; color: #fff7f2; background: var(--primary-bg); font-size: 13px; line-height: 1; }
+.game-calendar-day.has-games { border-color: color-mix(in srgb, var(--gold) 55%, var(--line)); color: var(--text); background: var(--surface-2); }
+.game-calendar-day.is-today { box-shadow: inset 0 0 0 1px var(--gold); }
+.game-calendar-day.is-empty { border-color: transparent; background: transparent; }
 .panel-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr)) 50px;
@@ -1445,6 +1459,14 @@ img { display: block; max-width: 100%; }
 :root[data-theme="light"] .bar-track { background: #ded7ce; }
 
 @media (max-width: 619px) {
+  .game-calendar { gap: 7px; }
+  .game-calendar-weekdays, .game-calendar-grid { gap: 3px; }
+  .game-calendar-toolbar { grid-template-columns: 40px minmax(0, 1fr) 40px; }
+  .game-calendar-toolbar strong { font-size: 16px; }
+  .game-calendar-nav { width: 40px; height: 40px; min-height: 40px; }
+  .game-calendar-day { min-height: 47px; padding: 4px; border-radius: 5px; }
+  .game-calendar-day > span { font-size: 10px; }
+  .game-calendar-day > b { min-width: 21px; min-height: 21px; padding: 2px 5px; font-size: 11px; }
   .home-page, .players-page, .setup-page { padding-bottom: calc(var(--nav-h) + 102px + env(safe-area-inset-bottom)); }
   .home-page > .hero > .actions { display: none; }
   .players-page > .page-head > .actions, .players-page > .search-row > .btn { display: none; }

@@ -966,17 +966,20 @@ Object.assign(COPY.fr, {
 });
 
 Object.assign(COPY.en, {
-  'Поточна версія: PWA v193.': 'Current version: PWA v193.',
+  'Календар ігор': 'Game calendar', 'Попередній місяць': 'Previous month', 'Наступний місяць': 'Next month',
+  'Поточна версія: PWA v194.': 'Current version: PWA v194.',
   'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'The app shell, styles, icons, and built-in music are cached for a fast start.',
   'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'The Google session is stored on this device. Profiles and shared archives synchronize after sign-in, while local data helps the app keep working during a brief network outage.'
 });
 Object.assign(COPY.fr, {
-  'Поточна версія: PWA v193.': 'Version actuelle : PWA v193.',
+  'Календар ігор': 'Calendrier des parties', 'Попередній місяць': 'Mois précédent', 'Наступний місяць': 'Mois suivant',
+  'Поточна версія: PWA v194.': 'Version actuelle : PWA v194.',
   'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'La structure de l’application, les styles, les icônes et la musique intégrée sont mis en cache pour un démarrage rapide.',
   'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'La session Google est conservée sur cet appareil. Les profils et les archives partagées se synchronisent après la connexion, tandis que les données locales permettent de continuer lors d’une brève coupure réseau.'
 });
 Object.assign(COPY.it, {
-  'Поточна версія: PWA v193.': 'Versione attuale: PWA v193.',
+  'Календар ігор': 'Calendario delle partite', 'Попередній місяць': 'Mese precedente', 'Наступний місяць': 'Mese successivo',
+  'Поточна версія: PWA v194.': 'Versione attuale: PWA v194.',
   'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'La struttura dell’app, gli stili, le icone e la musica integrata vengono memorizzati nella cache per un avvio rapido.',
   'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'La sessione Google viene conservata su questo dispositivo. I profili e gli archivi condivisi si sincronizzano dopo l’accesso, mentre i dati locali consentono di continuare durante una breve interruzione della rete.'
 });

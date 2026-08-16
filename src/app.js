@@ -48,6 +48,7 @@ import {
 } from './game-feedback.js';
 import { canonicalRankingGames, mafiaPlayerRankings } from './player-ranking.js';
 import { buildGameStatistics, filterGamesByPeriod, gameActivityComparison } from './game-statistics.js';
+import { buildGameCalendarMonth, currentGameCalendarMonth, shiftGameCalendarMonth } from './game-calendar.js';
 import {
   createCommunityVenueFields, deleteCommunityVenue, isCommunityVenueAdmin,
   saveCommunityVenue, subscribeCommunityVenues, stopCommunityVenues
@@ -149,7 +150,7 @@ const BUILTIN_ENJOY_VENUE = Object.freeze({
 
 const THEMES = ['dark', 'light', 'cafe'];
 const THEME_COLORS = { dark: '#0d0c0b', light: '#e9e2d6', cafe: '#1a100b' };
-const PWA_VERSION = 193;
+const PWA_VERSION = 194;
 const ANDROID_BLUETOOTH_SETTINGS_URL = 'intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end';
 const CLIENT_PLATFORM = /Android/i.test(navigator.userAgent)
   ? 'android'
@@ -189,6 +190,7 @@ let app = {
   toastHandle: null,
   search: '',
   statsPeriod: 'all',
+  gameCalendarMonth: currentGameCalendarMonth(),
   nextGameQueue: [],
   authReady: false,
   authConfigured: false,
@@ -231,6 +233,7 @@ let app = {
   panelExpanded: {
     homeActiveGames: true,
     homeGameChats: true,
+    homeGameCalendar: false,
     homeRecentGames: false,
     moderatorPanel: false,
     setupGame: false,
@@ -1238,8 +1241,48 @@ function aggregateStats() {
   return buildGameStatistics(finishedGames()).summary;
 }
 
+function gameCalendarChevron(direction) {
+  const path = direction === 'next' ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6';
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+}
+
+function gameCalendarHtml(games) {
+  const calendar = buildGameCalendarMonth(games, app.gameCalendarMonth);
+  const locale = languageLocale(app.settings.language);
+  const monthDate = new Date(calendar.year, calendar.month, 1);
+  const monthLabel = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(monthDate);
+  const weekdayFormatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+  const weekdayLongFormatter = new Intl.DateTimeFormat(locale, { weekday: 'long' });
+  const dateFormatter = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' });
+  const monday = new Date(2026, 7, 17);
+  const weekdays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + index);
+    return `<span title="${esc(weekdayLongFormatter.format(date))}">${esc(weekdayFormatter.format(date))}</span>`;
+  }).join('');
+  const today = new Date();
+  const cells = calendar.cells.map(cell => {
+    if (!cell) return '<span class="game-calendar-day is-empty" aria-hidden="true"></span>';
+    const date = new Date(calendar.year, calendar.month, cell.day);
+    const current = date.getFullYear() === today.getFullYear()
+      && date.getMonth() === today.getMonth()
+      && date.getDate() === today.getDate();
+    const count = Number(cell.games) || 0;
+    return `<div class="game-calendar-day ${count ? 'has-games' : ''} ${current ? 'is-today' : ''}" role="gridcell" aria-label="${esc(dateFormatter.format(date))}: ${count}"><span>${cell.day}</span>${count ? `<b aria-hidden="true">${count}</b>` : ''}</div>`;
+  }).join('');
+  return `<div class="game-calendar">
+    <div class="game-calendar-toolbar">
+      <button class="icon-btn game-calendar-nav" type="button" data-action="previous-game-calendar-month" aria-label="Попередній місяць" title="Попередній місяць">${gameCalendarChevron('previous')}</button>
+      <strong aria-live="polite">${esc(monthLabel)}</strong>
+      <button class="icon-btn game-calendar-nav" type="button" data-action="next-game-calendar-month" aria-label="Наступний місяць" title="Наступний місяць">${gameCalendarChevron('next')}</button>
+    </div>
+    <div class="game-calendar-weekdays" aria-hidden="true">${weekdays}</div>
+    <div class="game-calendar-grid" role="grid" aria-label="${esc(monthLabel)}">${cells}</div>
+  </div>`;
+}
+
 function homeView() {
-  const recent = finishedGames().slice(0, 5);
+  const finished = finishedGames();
+  const recent = finished.slice(0, 5);
   const active = activeGames();
   const stats = aggregateStats();
   return `<main class="page tab-page home-page">
@@ -1256,6 +1299,7 @@ function homeView() {
       <article class="card stat-card"><b>${stats.redWinRate}%</b><span>перемог міста</span></article>
       <article class="card stat-card"><b>${formatDuration(stats.averageSeconds)}</b><span>середній час гри</span></article>
     </section>
+    ${collapsiblePanel('homeGameCalendar', 'Календар ігор', '', gameCalendarHtml(finished), 'home-game-calendar-panel')}
     ${collapsiblePanel(
       'homeRecentGames',
       'Останні ігри',
@@ -5388,6 +5432,11 @@ async function handleAction(action, element, sourceEvent) {
     app.statsPeriod = period;
     render();
     requestAnimationFrame(() => document.querySelector(`[data-stats-period="${period}"]`)?.focus());
+  } else if (action === 'previous-game-calendar-month' || action === 'next-game-calendar-month') {
+    const offset = action === 'previous-game-calendar-month' ? -1 : 1;
+    app.gameCalendarMonth = shiftGameCalendarMonth(app.gameCalendarMonth, offset);
+    render();
+    requestAnimationFrame(() => document.querySelector(`[data-action="${action}"]`)?.focus());
   } else if (action === 'toggle-panel') {
     const panel = element.dataset.panel;
     if (Object.hasOwn(app.panelExpanded, panel)) {

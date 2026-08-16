@@ -56,10 +56,11 @@ import {
   customMusicChoice, musicCueForGame, normalizeGameMusicSettings
 } from './game-music.js';
 import {
-  authorizedGameParticipantUids, canJoinActiveGameChat, createGameChatDocument, deleteGameChat, ensureGameChat,
+  GAME_CHAT_EMOTIONS, authorizedGameParticipantUids, canJoinActiveGameChat, createGameChatDocument, deleteGameChat, ensureGameChat,
+  insertGameChatEmotion,
   joinGameChat, sendGameChatMessage, stopGameChatMessages, stopGameChats,
   subscribeGameChatMessages, subscribeGameChats, telegramDiscussionLinks
-} from './game-chat.js?v=2';
+} from './game-chat.js?v=3';
 import {
   connectPreparedTelegramProfile, normalizeTelegramUsername,
   prepareTelegramProfileConnection, telegramManualProfile
@@ -2527,7 +2528,7 @@ function gameChatModalHtml() {
   return `<div class="modal-backdrop game-chat-backdrop" data-action="close-modal"><div class="card modal game-chat-modal" role="dialog" aria-modal="true" aria-labelledby="game-chat-title" tabindex="-1">
     <div class="section-title section-heading game-chat-head"><div><span class="eyebrow">${chat.status === 'active' ? 'Чат гри · наживо' : 'Обговорення гри'}</span><h2 id="game-chat-title">${esc(chat.gameTitle)}</h2><p>${chat.status === 'active' ? `Розпочато ${formatDate(chat.startedAt, true)}` : formatDate(chat.endedAt, true)}${chat.venue ? ` · ${esc(chat.venue)}` : ''} · ${chat.participantUids.length} учасн.</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div>
     <div class="game-chat-messages" data-chat-messages role="log" aria-live="polite">${messages}</div>
-    <form class="game-chat-composer" data-form="game-chat-message"><label class="sr-only" for="game-chat-message">Повідомлення</label><textarea id="game-chat-message" class="textarea" data-input="game-chat-message" maxlength="1000" rows="2" placeholder="Напишіть повідомлення…" ${app.chatBusy ? 'disabled' : ''}>${esc(app.chatDraft)}</textarea><button class="btn primary" type="submit" ${app.chatBusy || !app.chatDraft.trim() ? 'disabled' : ''}>${app.chatBusy ? 'Надсилаємо…' : 'Надіслати'}</button></form>
+    <form class="game-chat-composer" data-form="game-chat-message"><div class="game-chat-emotion-bar" role="group" aria-label="Емоції для повідомлення">${GAME_CHAT_EMOTIONS.map(item => `<button class="game-chat-emotion-btn" type="button" data-action="insert-chat-emotion" data-value="${item.key}" aria-label="${esc(item.label)}" title="${esc(item.label)}" ${app.chatBusy ? 'disabled' : ''}><span aria-hidden="true">${item.icon}</span></button>`).join('')}</div><label class="sr-only" for="game-chat-message">Повідомлення</label><textarea id="game-chat-message" class="textarea" data-input="game-chat-message" maxlength="1000" rows="2" placeholder="Напишіть повідомлення…" ${app.chatBusy ? 'disabled' : ''}>${esc(app.chatDraft)}</textarea><button class="btn primary" type="submit" ${app.chatBusy || !app.chatDraft.trim() ? 'disabled' : ''}>${app.chatBusy ? 'Надсилаємо…' : 'Надіслати'}</button></form>
   </div></div>`;
 }
 
@@ -4704,6 +4705,24 @@ async function handleAction(action, element, sourceEvent) {
     await openGameChat(chat);
   } else if (action === 'retry-game-chat-messages') {
     if (app.modal?.type === 'game-chat') await connectGameChatMessages(app.modal.chatId);
+  } else if (action === 'insert-chat-emotion') {
+    if (app.modal?.type !== 'game-chat' || app.chatBusy) return;
+    const composer = modalRoot.querySelector('[data-input="game-chat-message"]');
+    if (!composer) return;
+    const result = insertGameChatEmotion(
+      app.chatDraft,
+      element.dataset.value,
+      composer.selectionStart,
+      composer.selectionEnd,
+      composer.maxLength
+    );
+    if (!result.inserted) return;
+    app.chatDraft = result.text;
+    composer.value = result.text;
+    const submit = composer.closest('form')?.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = !app.chatDraft.trim();
+    composer.focus({ preventScroll: true });
+    composer.setSelectionRange(result.caret, result.caret);
   } else if (action === 'host-use-google-photo') {
     captureHostProfileDraft();
     app.modal.profileDraft = { ...(app.modal.profileDraft || {}), avatar: '' };

@@ -821,7 +821,7 @@ Object.assign(COPY.it, {
   'Завантажуємо чати…': 'Caricamento delle chat…', 'Чати тимчасово недоступні': 'Le chat non sono disponibili', 'Обговорень ще немає': 'Nessuna discussione',
   'Обговорення гри': 'Discussione della partita', 'Відкриваємо розмову…': 'Apertura della conversazione…', 'Повідомлення недоступні': 'Messaggi non disponibili',
   'Розмова ще порожня': 'La conversazione è vuota', 'Напишіть перше повідомлення про цю гру.': 'Scrivi il primo messaggio su questa partita.',
-  'Повідомлення': 'Messaggio', 'Напишіть повідомлення…': 'Scrivi un messaggio…', 'Надіслати': 'Invia', 'Надсилаємо…': 'Invio…',
+  'Повідомлення': 'Messaggio', 'Напишіть повідомлення…': 'Scrivi un messaggio…', 'Надіслати': 'Invia', 'Надсилаємо…': 'Invio…', 'Емоції для повідомлення': 'Emozioni per il messaggio',
   'Створюється автоматично. Ведучий і всі авторизовані учасники цього столу вже мають доступ.': 'Viene creata automaticamente. L’host e tutti i giocatori autenticati al tavolo hanno già accesso.',
   'Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.': 'Telegram aprirà la creazione di un nuovo gruppo. Per motivi di privacy, l’app non può aggiungere i profili Google come contatti Telegram: l’host li seleziona in Telegram.'
 });
@@ -833,7 +833,7 @@ Object.assign(COPY.en, {
   'Завантажуємо чати…': 'Loading chats…', 'Чати тимчасово недоступні': 'Chats are temporarily unavailable', 'Обговорень ще немає': 'No discussions yet',
   'Обговорення гри': 'Game discussion', 'Відкриваємо розмову…': 'Opening conversation…', 'Повідомлення недоступні': 'Messages are unavailable',
   'Розмова ще порожня': 'The conversation is empty', 'Напишіть перше повідомлення про цю гру.': 'Write the first message about this game.',
-  'Повідомлення': 'Message', 'Напишіть повідомлення…': 'Write a message…', 'Надіслати': 'Send', 'Надсилаємо…': 'Sending…',
+  'Повідомлення': 'Message', 'Напишіть повідомлення…': 'Write a message…', 'Надіслати': 'Send', 'Надсилаємо…': 'Sending…', 'Емоції для повідомлення': 'Message emotions',
   'Створюється автоматично. Ведучий і всі авторизовані учасники цього столу вже мають доступ.': 'It is created automatically. The host and every signed-in player at the table already have access.',
   'Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.': 'Telegram will open the new-group flow. For privacy, the app cannot add Google profiles as Telegram contacts; the host selects them in Telegram.'
 });
@@ -845,7 +845,7 @@ Object.assign(COPY.fr, {
   'Завантажуємо чати…': 'Chargement des chats…', 'Чати тимчасово недоступні': 'Les chats sont indisponibles', 'Обговорень ще немає': 'Aucune discussion',
   'Обговорення гри': 'Discussion de la partie', 'Відкриваємо розмову…': 'Ouverture de la conversation…', 'Повідомлення недоступні': 'Messages indisponibles',
   'Розмова ще порожня': 'La conversation est vide', 'Напишіть перше повідомлення про цю гру.': 'Écrivez le premier message sur cette partie.',
-  'Повідомлення': 'Message', 'Напишіть повідомлення…': 'Écrivez un message…', 'Надіслати': 'Envoyer', 'Надсилаємо…': 'Envoi…',
+  'Повідомлення': 'Message', 'Напишіть повідомлення…': 'Écrivez un message…', 'Надіслати': 'Envoyer', 'Надсилаємо…': 'Envoi…', 'Емоції для повідомлення': 'Émotions du message',
   'Створюється автоматично. Ведучий і всі авторизовані учасники цього столу вже мають доступ.': 'Il est créé automatiquement. L’animateur et tous les joueurs connectés à la table y ont déjà accès.',
   'Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.': 'Telegram ouvrira la création d’un groupe. Pour des raisons de confidentialité, l’app ne peut pas ajouter les profils Google comme contacts Telegram : l’animateur les sélectionne dans Telegram.'
 });

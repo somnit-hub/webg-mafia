@@ -1,9 +1,16 @@
 import { getCommunityFirestore } from './cloud-profiles.js';
+import { GAME_EMOTIONS } from './game-feedback.js';
 
 const COMMUNITY_ID = 'enjoy';
 const GOOGLE_PROFILE_PREFIX = 'google_';
 let stopChats = null;
 let stopMessages = null;
+
+export const GAME_CHAT_EMOTIONS = Object.freeze([
+  { key: 'up', icon: '👍', label: 'Зайшла' },
+  { key: 'down', icon: '👎', label: 'Гірчить' },
+  ...GAME_EMOTIONS
+]);
 
 function clean(value, maximum) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, maximum);
@@ -11,6 +18,28 @@ function clean(value, maximum) {
 
 function cleanMessage(value) {
   return String(value || '').replace(/\r\n?/g, '\n').trim().slice(0, 1000);
+}
+
+export function insertGameChatEmotion(value, emotionKey, selectionStart, selectionEnd, maximum = 1000) {
+  const text = String(value || '').slice(0, maximum);
+  const emotion = GAME_CHAT_EMOTIONS.find(item => item.key === emotionKey);
+  const fallback = text.length;
+  const clamp = position => Number.isInteger(position) ? Math.max(0, Math.min(position, text.length)) : fallback;
+  const start = clamp(selectionStart);
+  const end = Math.max(start, clamp(selectionEnd));
+  if (!emotion) return { text, caret: start, inserted: false };
+  const before = text.slice(0, start);
+  const after = text.slice(end);
+  const prefix = before && !/\s$/u.test(before) ? ' ' : '';
+  const suffix = after && !/^\s/u.test(after) ? ' ' : '';
+  let insertion = `${prefix}${emotion.icon}${suffix}`;
+  if (before.length + insertion.length + after.length > maximum && suffix) insertion = `${prefix}${emotion.icon}`;
+  if (before.length + insertion.length + after.length > maximum) return { text, caret: start, inserted: false };
+  return {
+    text: `${before}${insertion}${after}`,
+    caret: before.length + insertion.length,
+    inserted: true
+  };
 }
 
 function timestampMillis(value) {

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  activeAuthorizedPlayerUids, authorizedGameParticipantUids, canJoinActiveGameChat, createGameChatDocument,
-  gameChatFromSnapshot, gameChatMessageFromSnapshot, telegramDiscussionLinks
+  GAME_CHAT_EMOTIONS, activeAuthorizedPlayerUids, authorizedGameParticipantUids, canJoinActiveGameChat, createGameChatDocument,
+  gameChatFromSnapshot, gameChatMessageFromSnapshot, insertGameChatEmotion, telegramDiscussionLinks
 } from '../src/game-chat.js';
 
 function finishedGame() {
@@ -102,4 +102,16 @@ test('chat snapshots normalize timestamps and pending messages', () => {
   assert.equal(chat.status, 'finished');
   assert.equal(message.createdAt, Date.parse('2026-08-16T20:46:00.000Z'));
   assert.equal(message.pending, true);
+});
+
+test('chat reuses like, dislike and the five game feedback emotions', () => {
+  assert.deepEqual(GAME_CHAT_EMOTIONS.map(item => item.icon), ['👍', '👎', '🤯', '🎭', '🔥', '🤡', '💀']);
+  assert.equal(new Set(GAME_CHAT_EMOTIONS.map(item => item.key)).size, 7);
+});
+
+test('chat emotions insert at the cursor without sending the message', () => {
+  assert.deepEqual(insertGameChatEmotion('', 'up', 0, 0), { text: '👍', caret: 2, inserted: true });
+  assert.deepEqual(insertGameChatEmotion('Гра супер', 'fire', 4, 4), { text: 'Гра 🔥 супер', caret: 7, inserted: true });
+  assert.deepEqual(insertGameChatEmotion('Було дивно', 'circus', 5, 10), { text: 'Було 🤡', caret: 7, inserted: true });
+  assert.equal(insertGameChatEmotion('123456789', 'brain', 9, 9, 10).inserted, false);
 });

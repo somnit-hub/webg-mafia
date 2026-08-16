@@ -1498,6 +1498,37 @@ const timerNavigation = await evaluate(`({
   navRestored: Boolean(document.querySelector('.game-nav'))
 })`);
 
+await click('[data-action="open-app-game-chat"]');
+await wait(120);
+const gameChatEmotionControls = await evaluate(`(() => {
+  const bar = document.querySelector('.game-chat-emotion-bar');
+  const textarea = document.querySelector('#game-chat-message');
+  const buttons = [...document.querySelectorAll('.game-chat-emotion-btn')];
+  const barRect = bar?.getBoundingClientRect();
+  const textareaRect = textarea?.getBoundingClientRect();
+  return {
+    count: buttons.length,
+    icons: buttons.map(button => button.textContent.trim()),
+    labels: buttons.map(button => button.getAttribute('aria-label')),
+    aboveMessage: Boolean(barRect && textareaRect && barRect.bottom <= textareaRect.top),
+    sameRow: new Set(buttons.map(button => Math.round(button.getBoundingClientRect().top))).size === 1,
+    touchSize: Math.round(Math.min(...buttons.map(button => button.getBoundingClientRect().height))),
+    insideViewport: buttons.every(button => {
+      const rect = button.getBoundingClientRect();
+      return rect.left >= 0 && rect.right <= innerWidth;
+    }),
+    submitInitiallyDisabled: document.querySelector('.game-chat-composer button[type="submit"]')?.disabled
+  };
+})()`);
+await click('[data-action="insert-chat-emotion"][data-value="up"]');
+await click('[data-action="insert-chat-emotion"][data-value="fire"]');
+const gameChatEmotionDraft = await evaluate(`({
+  value: document.querySelector('#game-chat-message')?.value,
+  focused: document.activeElement === document.querySelector('#game-chat-message'),
+  submitEnabled: !document.querySelector('.game-chat-composer button[type="submit"]')?.disabled
+})`);
+await click('.game-chat-modal [data-action="close-modal"]');
+
 await click('.game-seat[data-seat="2"]');
 const seatModalFrame = await inspectModalFrame();
 const seatModalAppearance = await evaluate(`(() => {
@@ -1858,7 +1889,7 @@ function verify(condition, label) {
 
 verify(firstDay.hash === '#game' && firstDay.seats === 10 && firstDay.phase === 'День 1' && firstDay.timer === '01:00' && firstDay.bottomNav && firstDay.navItems === 5 && firstDay.activeLabel === 'Активна гра' && firstDay.navHeight <= 52 && firstDay.iconOnly && firstDay.scrollWidth <= firstDay.viewport, 'first day timer, layout and compact game navigation');
 verify(roleReadyLayout.moderatorVisible && roleReadyLayout.moderatorCollapsed && roleReadyLayout.moderatorAfterRole && roleReadyLayout.roleCardOrder === '1' && roleReadyLayout.moderatorOrder === '2', 'host panel is explicitly ordered below the role-dealing card and safely collapsed as soon as role dealing starts');
-verify(firstDay.moderatorPanelVisible && firstDay.moderatorPanelCollapsed && firstDay.moderatorUnusedActionsAbsent && firstDay.finishGameInsideCollapsedPanel && firstDay.mobileProtocolHidden && moderatorPanelExpanded.expanded && moderatorPanelExpanded.contentVisible && moderatorPanelExpanded.finishGameVisible && JSON.stringify(moderatorPanelExpanded.controls) === JSON.stringify(['Ролі', '↶ Скасувати', '⚙ Таймери', 'Передати ведення']), 'mobile host panel is collapsed by default and contains host transfer and the protected finish-game action');
+verify(firstDay.moderatorPanelVisible && firstDay.moderatorPanelCollapsed && firstDay.moderatorUnusedActionsAbsent && firstDay.finishGameInsideCollapsedPanel && firstDay.mobileProtocolHidden && moderatorPanelExpanded.expanded && moderatorPanelExpanded.contentVisible && moderatorPanelExpanded.finishGameVisible && JSON.stringify(moderatorPanelExpanded.controls) === JSON.stringify(['Ролі', '↶ Скасувати', '⚙ Таймери', 'Чат гри', 'Передати ведення']), 'mobile host panel is collapsed by default and contains chat, host transfer, and the protected finish-game action');
 verify(hostTransferInitial.search && hostTransferInitial.candidates === 2 && hostTransferInitial.names.includes('Гравець 1') && hostTransferInitial.names.includes('Гравець 2') && hostTransferInitial.seatNumbersAbsent && hostTransferInitial.anyUserCopy && hostTransferFiltered.value === 'Гравець 2' && hostTransferFiltered.focused && JSON.stringify(hostTransferFiltered.names) === JSON.stringify(['Гравець 2']), 'host transfer lists all authorized profiles and filters them with a focused search field');
 verify(runningTimerStability.rootReplacements === 0 && /^\d{2}:\d{2}$/.test(runningTimerStability.timer || ''), 'running timer updates without replacing the mobile game screen');
 verify(runningTimerAdjustment.afterMinusFive === Math.max(0, runningTimerAdjustment.beforeMinusFive - 5) && runningTimerAdjustment.afterMinusTick <= runningTimerAdjustment.afterMinusFive && runningTimerAdjustment.afterMinusTick >= runningTimerAdjustment.afterMinusFive - 2 && runningTimerAdjustment.afterPlusFive === runningTimerAdjustment.afterMinusTick + 5, 'running timer +/- 5 seconds');
@@ -1884,6 +1915,7 @@ verify(headerShareControl.icon && headerShareControl.label === 'Поділити
 verify(orderPanel.title === 'Замовлення' && orderPanel.categoryCount === 2 && JSON.stringify(orderPanel.categories) === JSON.stringify(['Кава', 'Чай']) && orderPanel.smallestCategory >= 100 && !orderPanel.recipient && orderPanel.categoryPrompt && orderCategory.title === 'Кава' && orderCategory.count === 3 && JSON.stringify(orderCategory.choices) === JSON.stringify(['Кава', 'Капучино', 'Лате']) && orderCategory.back === 'До категорій' && orderCategory.immediate && orderBack === 2 && orderResult.success && orderResult.text.includes('Telegram') && orderResult.modalOpen, 'two-level Telegram order menu with category navigation and local delivery result');
 verify(tabletLayout.scrollWidth <= tabletLayout.viewport && tabletLayout.headerHeight === 62 && tabletLayout.navHeight === 72 && tabletLayout.navItems === 5 && tabletLayout.smallestNavIcon >= 28 && tabletLayout.smallestNavLabel >= 12, 'tablet app chrome with larger navigation icons and labels');
 verify(desktopLayout.scrollWidth <= desktopLayout.viewport && desktopLayout.headerTop === 0 && desktopLayout.navTop === desktopLayout.headerBottom && desktopLayout.navHeight >= 58 && desktopLayout.smallestNavIcon >= 26 && desktopLayout.smallestNavLabel >= 14 && desktopLayout.itemWidthSpread <= 1 && desktopLayout.navRightGap <= 1, 'desktop layout with larger top navigation icons and labels');
+verify(gameChatEmotionControls.count === 7 && JSON.stringify(gameChatEmotionControls.icons) === JSON.stringify(['👍', '👎', '🤯', '🎭', '🔥', '🤡', '💀']) && JSON.stringify(gameChatEmotionControls.labels) === JSON.stringify(['Зайшла', 'Гірчить', 'Мозок закипів', 'Оскар за брехню', 'Стіл палав', 'Цирк Enjoy', 'Винесли красиво']) && gameChatEmotionControls.aboveMessage && gameChatEmotionControls.sameRow && gameChatEmotionControls.touchSize >= 44 && gameChatEmotionControls.insideViewport && gameChatEmotionControls.submitInitiallyDisabled && gameChatEmotionDraft.value === '👍 🔥' && gameChatEmotionDraft.focused && gameChatEmotionDraft.submitEnabled, 'seven reusable emotions above the game chat composer insert into the draft');
 verify(ownerDatabases.includes('mafia-desk-local-smoke-test') && hostProfileControls.email === 'test.host@example.com' && hostProfileControls.camera === 'environment' && hostProfileControls.cameraIcon && hostProfileControls.cameraEmojiAbsent && hostProfileControls.gallery && hostProfileControls.deleteButton && hostProfileControls.deleteIconOnly && hostProfileControls.deleteInIdentity && hostProfileControls.deleteAbsentFromHeader && hostProfileControls.languageCount === 4 && JSON.stringify(hostProfileControls.languageOrder) === JSON.stringify(['uk', 'en', 'fr', 'it']) && JSON.stringify(hostProfileControls.languageLabels) === JSON.stringify(['Українська', 'English', 'Français', 'Italiano']) && hostProfileControls.languageFlags === 4 && hostProfileControls.languageNamesHidden && hostProfileControls.italianFlagStripes === 3 && hostProfileControls.discoverable && hostProfileControls.clubSearchable && hostProfileControls.clubAddButton && hostProfileControls.displayNameLabel === 'Ім’я *' && hostProfileControls.displayNameRequired && hostProfileControls.nicknameLabel === 'Нікнейм' && !hostProfileControls.nicknameRequired && hostProfileControls.nicknameHint.startsWith('Якщо заповнений') && hostProfileControls.nicknameHint.includes('основне ім’я') && hostProfileControls.nicknameDescribedBy === 'host-nickname-hint' && hostClubPicker.expanded === 'true' && hostClubPicker.focused && hostClubPicker.builtinEnjoy && profileVenueCreate.venueModal === 'Нове місце / клуб' && profileVenueCreate.nameInitiallyBlank && profileVenueReturn.profileRestored && profileVenueReturn.club === 'Smoke Profile Club' && hostProfileControls.inputFontSize >= 16 && !hostProfileControls.inputAutofocus && hostProfileControls.descriptionPlaceholder === 'Досвід ведення, улюблена кава…' && hostProfileControls.dialogFocused && hostProfileControls.dialogScrollTop === 0 && hostProfileControls.sheetTop >= 6 && hostProfileControls.sheetTop <= 8 && hostProfileControls.sheetLeft === 6 && hostProfileControls.sheetRightGap === 6 && hostProfileControls.sheetBottom <= hostProfileControls.viewportBottom - 6 && hostAvatarDraft.namePreserved === 'Ведучий Smoke' && hostAvatarDraft.nicknamePreserved === 'Smoke Нік' && hostAvatarDraft.customPreview && savedHostAvatar.header && savedHostAvatar.stored && savedHostAvatar.club === 'Smoke Profile Club' && editedHostName === 'Ведучий Smoke', 'host profile requires the Google-backed name, keeps the gameplay nickname optional, and preserves profile media');
 verify(profilePhotoSyncStatus.label === 'Фото синхронізовано' && profilePhotoSyncStatus.status === 'synced' && profilePhotoSyncStatus.visible, 'explicit synced profile photo status');
 verify(languageOptions.count === 4 && JSON.stringify(languageOptions.order) === JSON.stringify(['uk', 'en', 'fr', 'it']) && JSON.stringify(languageOptions.labels) === JSON.stringify(['Українська', 'English', 'Français', 'Italiano']) && languageOptions.flags === 4 && languageOptions.namesHidden && languageOptions.italianFlagStripes === 3 && languageOptions.selected === 'uk' && englishLanguage.lang === 'en' && englishLanguage.stored === 'en' && englishLanguage.title === 'Settings' && JSON.stringify(englishLanguage.nav) === JSON.stringify(['Overview', 'Players', 'New game', 'Statistics', 'More']) && englishLanguage.field === 'App language?' && englishLanguage.selected === 'en' && frenchLanguage.lang === 'fr' && frenchLanguage.title === 'Paramètres' && frenchLanguage.more === 'Plus' && frenchLanguage.selected === 'fr' && italianLanguage.lang === 'it' && italianLanguage.title === 'Impostazioni' && italianLanguage.more === 'Altro' && italianLanguage.selected === 'it' && restoredUkrainianLanguage.lang === 'uk' && restoredUkrainianLanguage.stored === 'uk' && restoredUkrainianLanguage.title === 'Налаштування' && restoredUkrainianLanguage.selected === 'uk', 'flag-only language switching');

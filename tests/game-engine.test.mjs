@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
+  canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, nominationIsAllowed, normalizeGameState, resolveVote,
   secureShuffle, selectNumberRoleCard, takeNumberRoleCard, toggleBestMoveCandidate, victoryForSeats
 } from '../src/game-engine.js';
 
@@ -94,6 +94,16 @@ test('all-candidate lift follows first-day and critical-table restrictions', () 
   assert.equal(canLiftTiedCandidates({ day: 3, aliveCount: 6, tiedCount: 4 }), false);
 });
 
+test('a player may nominate themselves but may nominate only once per day', () => {
+  const state = game({ phase: 'day', subphase: 'speeches' });
+  assert.equal(nominationIsAllowed(state, 1, 1), true);
+  assert.equal(nominationIsAllowed(state, 2, 1), true);
+  state.nominations = [1];
+  state.seats[0].nominatedBy = 1;
+  assert.equal(nominationIsAllowed(state, 1, 1), false);
+  assert.equal(nominationIsAllowed(state, 2, 1), false);
+});
+
 test('night actions reject eliminated targets', () => {
   const state = game();
   state.seats[4].status = 'dead';
@@ -101,6 +111,14 @@ test('night actions reject eliminated targets', () => {
   assert.equal(nightTargetIsAllowed(state, 5), false);
   state.night.step = 4;
   assert.equal(nightTargetIsAllowed(state, 4), false);
+});
+
+test('mafia shooting may target a living black teammate', () => {
+  const state = game();
+  assert.equal(state.seats[0].role, 'don');
+  assert.equal(state.seats[1].role, 'mafia');
+  assert.equal(nightTargetIsAllowed(state, 1), true);
+  assert.equal(nightTargetIsAllowed(state, 2), true);
 });
 
 test('best move keeps three unique living candidates in spoken order', () => {
@@ -129,6 +147,32 @@ test('persisted game recovery closes role and check results and removes dead tar
   assert.equal(normalized.night.sheriffCheck, null);
   assert.equal(normalized.timer.running, false);
   assert.equal(normalized.settings.bestMove, 20);
+});
+
+test('persisted rating penalties and disqualification flags normalize independently', () => {
+  const state = game();
+  state.seats[0].ratingPenalty = -0.3;
+  state.seats[0].disqualified = true;
+  state.seats[1].ratingPenalty = -1;
+  state.seats[1].disqualified = false;
+  state.seats[1].eliminatedReason = '4-й фол';
+  state.seats[2].eliminatedReason = '4-й фол';
+
+  const normalized = normalizeGameState(state);
+  assert.equal(normalized.seats[0].ratingPenalty, -0.3);
+  assert.equal(normalized.seats[0].disqualified, true);
+  assert.equal(normalized.seats[1].ratingPenalty, 0);
+  assert.equal(normalized.seats[1].disqualified, false);
+  assert.equal(normalized.seats[2].disqualified, true);
+});
+
+test('persisted Best Move keeps selected players after they leave the table', () => {
+  const state = game({ phase: 'day' });
+  state.bestMove = { seat: 5, selected: [1, 2, 3] };
+  state.seats[0].status = 'dead';
+  state.seats[1].status = 'dead';
+  const normalized = normalizeGameState(state);
+  assert.deepEqual(normalized.bestMove, { seat: 5, selected: [1, 2, 3] });
 });
 
 test('persisted number deal keeps progress but closes the role and clears a pending tap', () => {

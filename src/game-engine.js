@@ -1,3 +1,6 @@
+import { normalizeGameMusicSettings } from './game-music.js';
+import { normalizedRatingPenalty, seatIsDisqualified } from './player-ranking.js';
+
 export const ACTIVE_GAME_PHASES = Object.freeze([
   'reveal', 'zeroNight', 'day', 'vote', 'tieSpeech', 'tieVote',
   'allTie', 'lastWord', 'bestMove', 'night'
@@ -99,6 +102,18 @@ export function canLiftTiedCandidates({ day = 1, aliveCount = 10, tiedCount = 0 
   return true;
 }
 
+export function nominationIsAllowed(game, targetNumber, speakerNumber) {
+  const target = Number(targetNumber);
+  const speaker = Number(speakerNumber);
+  if (!game || game.phase !== 'day' || game.subphase !== 'speeches') return false;
+  if (!Number.isInteger(target) || !Number.isInteger(speaker)) return false;
+  const targetSeat = game.seats?.find(seat => seat.number === target);
+  const speakerSeat = game.seats?.find(seat => seat.number === speaker);
+  if (targetSeat?.status !== 'alive' || speakerSeat?.status !== 'alive') return false;
+  if ((game.nominations || []).map(Number).includes(target)) return false;
+  return !game.seats.some(seat => Number(seat.nominatedBy) === speaker);
+}
+
 export function nightTargetIsAllowed(game, number) {
   const seatNumber = Number(number);
   if (!game || game.phase !== 'night' || ![1, 2, 3].includes(game.night?.step)) return false;
@@ -120,6 +135,7 @@ export function normalizeGameState(value, defaultSettings = {}, { closeReveal = 
   const savedDealMode = ['number', 'automatic'].includes(value.settings?.dealMode) ? value.settings.dealMode : null;
   const storedRoleDealMode = value.roleDeal?.mode === 'number' ? 'number' : null;
   game.settings = { ...defaultSettings, ...(game.settings || {}) };
+  game.settings.music = normalizeGameMusicSettings(game.settings.music);
   game.status = game.status === 'finished' ? 'finished' : 'active';
   game.phase = game.status === 'finished'
     ? 'finished'
@@ -133,7 +149,9 @@ export function normalizeGameState(value, defaultSettings = {}, { closeReveal = 
     faults: integer(seat.faults, 0, 4),
     noVote: Boolean(seat.noVote),
     nominatedBy: Number.isInteger(Number(seat.nominatedBy)) ? Number(seat.nominatedBy) : null,
-    eliminatedReason: String(seat.eliminatedReason || '')
+    eliminatedReason: String(seat.eliminatedReason || ''),
+    ratingPenalty: normalizedRatingPenalty(seat.ratingPenalty),
+    disqualified: seatIsDisqualified(seat)
   })) : [];
   const allSeatsAlreadyHaveRoles = game.seats.length > 0 && game.seats.every(seat => ROLE_KEYS.has(seat.role));
   game.settings.dealMode = storedRoleDealMode || savedDealMode || (game.phase === 'reveal' && allSeatsAlreadyHaveRoles ? 'automatic' : 'number');
@@ -152,6 +170,7 @@ export function normalizeGameState(value, defaultSettings = {}, { closeReveal = 
   } else {
     delete game.roleDeal;
   }
+  const seatNumbers = new Set(game.seats.map(seat => seat.number));
   const aliveNumbers = new Set(game.seats.filter(seat => seat.status === 'alive').map(seat => seat.number));
   game.revealIndex = integer(game.revealIndex, 0, Math.max(0, game.seats.length - 1));
   game.revealOpen = closeReveal ? false : Boolean(game.revealOpen);
@@ -180,7 +199,7 @@ export function normalizeGameState(value, defaultSettings = {}, { closeReveal = 
   const bestMoveSeat = integer(game.bestMove?.seat || game.lastWordSeat, 0, 10);
   game.bestMove = {
     seat: bestMoveSeat || null,
-    selected: [...new Set((game.bestMove?.selected || []).map(Number).filter(number => aliveNumbers.has(number)))].slice(0, 3)
+    selected: [...new Set((game.bestMove?.selected || []).map(Number).filter(number => seatNumbers.has(number)))].slice(0, 3)
   };
   const timerWasRunning = Boolean(game.timer?.running);
   const timerEndsAt = Number(game.timer?.endsAt);

@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GameFeedbackStore, handleRequest, orderPayload, parseMenuCsv, telegramOrderText } from './order-worker.js';
+import {
+  GameFeedbackStore, createTelegramProfileNonce, handleRequest, orderPayload, parseMenuCsv,
+  telegramOrderText, telegramProfileFromClaims, verifyTelegramProfileNonce
+} from './order-worker.js';
 
 const originalFetch = globalThis.fetch;
 
@@ -9,6 +12,7 @@ function environment({ limiterStatus = 204, feedbackResult } = {}) {
     FIREBASE_WEB_API_KEY: 'public-test-key',
     FIREBASE_PROJECT_ID: 'test-project',
     TELEGRAM_BOT_TOKEN: 'secret-token',
+    TELEGRAM_CLIENT_ID: '123456789',
     ORDER_TELEGRAM_CHAT_ID: '123456',
     ORDER_LIMITER: {
       idFromName: value => value,
@@ -35,6 +39,21 @@ function request(path = '/orders', options = {}) {
     },
     body: JSON.stringify(options.body || { item: 'latte', sender: 'Ведучий', game: 'Гра 1' })
   });
+}
+
+function jwtPart(value) {
+  return Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)).toString('base64url');
+}
+
+async function signedTelegramToken(privateKey, claims, kid = 'telegram-test-key') {
+  const header = jwtPart({ alg: 'RS256', typ: 'JWT', kid });
+  const payload = jwtPart(claims);
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    privateKey,
+    new TextEncoder().encode(`${header}.${payload}`)
+  );
+  return `${header}.${payload}.${Buffer.from(signature).toString('base64url')}`;
 }
 
 test.afterEach(() => { globalThis.fetch = originalFetch; });
@@ -116,6 +135,82 @@ test('missing login and repeated order are rejected', async () => {
   assert.match((await limited.json()).error, /Зачекайте/);
 });
 
+test('Telegram profile nonce is short-lived and bound to the Firebase user', async () => {
+  const env = environment();
+  const now = Date.parse('2026-08-16T12:00:00.000Z');
+  const nonce = await createTelegramProfileNonce('host-1', env, now);
+  assert.equal(await verifyTelegramProfileNonce(nonce, 'host-1', env, now + 60000), true);
+  await assert.rejects(() => verifyTelegramProfileNonce(nonce, 'another-host', env, now + 60000), /недійсний|прострочено/);
+  await assert.rejects(() => verifyTelegramProfileNonce(nonce, 'host-1', env, now + 700000), /прострочено/);
+});
+
+test('Telegram claims are normalized into a linked public profile', () => {
+  const profile = telegramProfileFromClaims({
+    sub: '987654321',
+    name: '  Марія   Enjoy  ',
+    preferred_username: '@Maria_Enjoy',
+    picture: 'https://cdn4.telesco.pe/file/photo'
+  }, Date.parse('2026-08-16T12:00:00.000Z'));
+  assert.deepEqual(profile, {
+    telegramUsername: 'maria_enjoy',
+    telegramUserId: '987654321',
+    telegramDisplayName: 'Марія Enjoy',
+    telegramPhotoURL: 'https://cdn4.telesco.pe/file/photo',
+    telegramVerified: true,
+    telegramLinkedAt: '2026-08-16T12:00:00.000Z'
+  });
+});
+
+test('authorized Firebase user receives Telegram Login configuration', async () => {
+  globalThis.fetch = async url => String(url).includes('identitytoolkit.googleapis.com')
+    ? Response.json({ users: [{ localId: 'host-1', email: 'host@example.com', emailVerified: true }] })
+    : Response.json({});
+  const response = await handleRequest(new Request('https://orders.example/telegram-profile/config', {
+    method: 'GET',
+    headers: { Origin: 'https://mafia-cafe.web.app', Authorization: 'Bearer valid-firebase-token' }
+  }), environment());
+  const result = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(result.clientId, '123456789');
+  assert.match(result.nonce, /^[^.]+[.][^.]+$/);
+  assert.equal(await verifyTelegramProfileNonce(result.nonce, 'host-1', environment()), true);
+});
+
+test('Telegram profile endpoint verifies the official RS256 token before returning profile data', async () => {
+  const keys = await crypto.subtle.generateKey({
+    name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256', modulusLength: 2048,
+    publicExponent: new Uint8Array([1, 0, 1])
+  }, true, ['sign', 'verify']);
+  const publicJwk = await crypto.subtle.exportKey('jwk', keys.publicKey);
+  const env = environment();
+  globalThis.fetch = async url => {
+    if (String(url).includes('identitytoolkit.googleapis.com')) {
+      return Response.json({ users: [{ localId: 'host-1', email: 'host@example.com', emailVerified: true }] });
+    }
+    if (String(url).includes('oauth.telegram.org/.well-known/jwks.json')) {
+      return Response.json({ keys: [{ ...publicJwk, kid: 'telegram-test-key', alg: 'RS256', use: 'sig' }] });
+    }
+    return Response.json({}, { status: 404 });
+  };
+  const configResponse = await handleRequest(new Request('https://orders.example/telegram-profile/config', {
+    method: 'GET', headers: { Origin: 'https://mafia-cafe.web.app', Authorization: 'Bearer valid-firebase-token' }
+  }), env);
+  const config = await configResponse.json();
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const idToken = await signedTelegramToken(keys.privateKey, {
+    iss: 'https://oauth.telegram.org', aud: env.TELEGRAM_CLIENT_ID,
+    sub: '987654321', iat: nowSeconds - 5, exp: nowSeconds + 3600,
+    nonce: config.nonce, name: 'Марія Enjoy', preferred_username: 'Maria_Enjoy',
+    picture: 'https://cdn4.telesco.pe/file/photo'
+  });
+  const response = await handleRequest(request('/telegram-profile/verify', { body: { idToken } }), env);
+  const result = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(result.telegramUserId, '987654321');
+  assert.equal(result.telegramUsername, 'maria_enjoy');
+  assert.equal(result.telegramVerified, true);
+});
+
 function activeGame() {
   return {
     id: 'game_test_live',
@@ -127,6 +222,8 @@ function activeGame() {
     startedAt: '2026-08-14T18:00:00.000Z',
     gameUpdatedAt: '2026-08-14T18:01:00.000Z',
     status: 'active',
+    participantUids: ['host-1', 'player-1', 'player-2'],
+    activePlayerUids: ['player-1'],
     phase: 'day',
     subphase: 'speeches',
     day: 1,
@@ -169,6 +266,8 @@ test('active game is published through the authenticated Firestore proxy', async
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, changed: true, gameId: 'game_test_live' });
   assert.equal(writtenDocument.fields.ownerUid.stringValue, 'host-1');
+  assert.equal(writtenDocument.fields.participantUids.arrayValue.values.length, 3);
+  assert.equal(writtenDocument.fields.activePlayerUids.arrayValue.values[0].stringValue, 'player-1');
   assert.equal(writtenDocument.fields.seats.arrayValue.values.length, 10);
   assert.match(writtenDocument.fields.createdAt.timestampValue, /^2026-/);
   assert.equal(writeAuthorization, 'Bearer valid-firebase-token');

@@ -1,15 +1,17 @@
-const CACHE = 'mafia-desk-v161';
+const CACHE = 'mafia-desk-v195';
 const APP_SHELL = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './assets/logo-mafia.webp', './assets/favicon-32.png', './assets/favicon-64.png', './assets/favicon.ico',
   './assets/apple-touch-icon.png', './assets/icon-192.png', './assets/icon-512.png', './assets/icon-maskable-512.png',
-  './assets/theme-dark-mafioso.jpg', './assets/theme-light-sheriff.jpg', './assets/theme-cafe-bar.jpg',
+  './assets/theme-dark-mafioso.jpg', './assets/theme-light-sheriff.jpg', './assets/theme-cafe-bar.jpg', './assets/overview-mafia-table.jpg',
   './assets/avatars/raccoon.webp', './assets/avatars/cat.webp', './assets/avatars/capybara.webp', './assets/avatars/pug.webp', './assets/avatars/fox.webp',
   './assets/avatars/owl.webp', './assets/avatars/hamster.webp', './assets/avatars/lion.webp', './assets/avatars/frog.webp', './assets/avatars/boar.webp',
   './assets/signals/citizen.webp', './assets/signals/mafia.webp',
   './assets/signals/don.webp', './assets/signals/sheriff.webp',
   './assets/signals/don-found-sheriff.webp', './assets/signals/don-not-sheriff.webp',
-  './src/app.js?v=161', './src/auth.js', './src/pwa.js', './src/cloud-profiles.js', './src/cloud-games.js?v=156', './src/game-feedback.js', './src/game-engine.js', './src/order-service.js', './src/player-directory.js', './src/player-links.js', './src/timer.js', './src/lineup.js', './src/guest-names.js', './src/i18n.js', './src/firebase-config.js', './src/db.js', './src/google-sync.js', './src/enjoy.js'
+  './assets/audio/mafia-ambient.mp3', './assets/audio/mafia-2-theme.mp3',
+  './assets/audio/pink-panther-night.mp3', './assets/audio/night-intro.mp3',
+  './src/app.js?v=195', './src/auth.js', './src/pwa.js', './src/cloud-profiles.js', './src/cloud-games.js?v=158', './src/cloud-venues.js', './src/venue-directory.js', './src/game-music.js', './src/game-feedback.js', './src/player-ranking.js', './src/game-statistics.js', './src/game-calendar.js', './src/game-chat.js?v=3', './src/telegram-profile.js?v=2', './src/game-engine.js', './src/order-service.js', './src/player-directory.js', './src/player-links.js', './src/timer.js', './src/lineup.js', './src/guest-names.js', './src/i18n.js', './src/firebase-config.js', './src/db.js', './src/google-sync.js', './src/enjoy.js'
 ];
 const FIREBASE_SDK = [
   'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js',

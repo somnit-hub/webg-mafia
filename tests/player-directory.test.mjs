@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { sortDirectoryPlayers } from '../src/player-directory.js';
+import { selectHostTransferCandidates, sortDirectoryPlayers } from '../src/player-directory.js';
 
 test('directory orders online Google profiles, offline Google profiles, then guests by game count', () => {
   const players = [
@@ -37,4 +37,30 @@ test('directory uses nickname and stable source order to resolve ties', () => {
   const sorted = sortDirectoryPlayers(players, { gameCounts: new Map(players.map(player => [player.id, 3])) });
 
   assert.deepEqual(sorted.map(player => player.id), ['first', 'second', 'same-a', 'same-b']);
+});
+
+test('host transfer offers every authorized directory user, not only seated players', () => {
+  const players = [
+    { id: 'host', cloudUid: 'host-uid', name: 'Поточний ведучий' },
+    { id: 'seated', cloudUid: 'seated-uid', name: 'Учасниця', contact: 'Enjoy' },
+    { id: 'not-seated', cloudUid: 'remote-uid', name: 'Олександр', nickname: 'Саша', contact: 'Інший клуб' },
+    { id: 'manual', name: 'Ручний профіль' }
+  ];
+
+  const candidates = selectHostTransferCandidates(players, 'host-uid');
+
+  assert.deepEqual(candidates.map(candidate => candidate.uid), ['remote-uid', 'seated-uid']);
+  assert.equal(candidates[0].name, 'Саша');
+});
+
+test('host transfer search matches name, nickname and club case-insensitively', () => {
+  const players = [
+    { cloudUid: 'anna-uid', name: 'Анна Коваль', nickname: 'Лисиця', contact: 'Enjoy' },
+    { cloudUid: 'bohdan-uid', name: 'Богдан Мельник', nickname: 'Шериф', contact: 'Kyiv Mafia' }
+  ];
+
+  assert.deepEqual(selectHostTransferCandidates(players, '', 'АННА').map(item => item.uid), ['anna-uid']);
+  assert.deepEqual(selectHostTransferCandidates(players, '', 'шериф').map(item => item.uid), ['bohdan-uid']);
+  assert.deepEqual(selectHostTransferCandidates(players, '', 'kyiv mafia').map(item => item.uid), ['bohdan-uid']);
+  assert.deepEqual(selectHostTransferCandidates(players, '', 'невідомий').map(item => item.uid), []);
 });

@@ -34,6 +34,140 @@ function clean(value, maximum = 80) {
   return String(value || '').trim().replace(/\s+/g, ' ').slice(0, maximum);
 }
 
+function base64UrlEncode(value) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  let binary = '';
+  bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+function base64UrlDecode(value) {
+  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  if (!/^[a-zA-Z0-9+/]*={0,2}$/.test(`${normalized}${'='.repeat((4 - normalized.length % 4) % 4)}`)) {
+    throw new HttpError(400, 'Некоректні дані Telegram');
+  }
+  const binary = atob(`${normalized}${'='.repeat((4 - normalized.length % 4) % 4)}`);
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
+}
+
+function telegramClientId(env) {
+  const configured = clean(env?.TELEGRAM_CLIENT_ID, 32);
+  const fromBotToken = clean(env?.TELEGRAM_BOT_TOKEN, 160).split(':')[0];
+  const clientId = configured || fromBotToken;
+  if (!/^\d{5,32}$/.test(clientId)) throw new HttpError(503, 'Telegram Login ще не налаштовано');
+  return clientId;
+}
+
+async function telegramNonceKey(env) {
+  const secret = clean(env?.TELEGRAM_LOGIN_NONCE_SECRET || env?.TELEGRAM_BOT_TOKEN, 512);
+  if (!secret) throw new HttpError(503, 'Telegram Login ще не налаштовано');
+  return crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign', 'verify']
+  );
+}
+
+export async function createTelegramProfileNonce(uid, env, now = Date.now()) {
+  const random = new Uint8Array(18);
+  crypto.getRandomValues(random);
+  const payload = new TextEncoder().encode(JSON.stringify({
+    uid: clean(uid, 128),
+    issuedAt: Number(now),
+    random: base64UrlEncode(random)
+  }));
+  const signature = await crypto.subtle.sign('HMAC', await telegramNonceKey(env), payload);
+  return `${base64UrlEncode(payload)}.${base64UrlEncode(signature)}`;
+}
+
+export async function verifyTelegramProfileNonce(nonce, uid, env, now = Date.now()) {
+  const [payloadPart, signaturePart, extra] = String(nonce || '').split('.');
+  if (!payloadPart || !signaturePart || extra) throw new HttpError(401, 'Сеанс Telegram недійсний');
+  const payload = base64UrlDecode(payloadPart);
+  const signature = base64UrlDecode(signaturePart);
+  const valid = await crypto.subtle.verify('HMAC', await telegramNonceKey(env), signature, payload);
+  if (!valid) throw new HttpError(401, 'Сеанс Telegram недійсний');
+  let data;
+  try { data = JSON.parse(new TextDecoder().decode(payload)); }
+  catch { throw new HttpError(401, 'Сеанс Telegram недійсний'); }
+  const age = Number(now) - Number(data.issuedAt);
+  if (clean(data.uid, 128) !== clean(uid, 128) || !Number.isFinite(age) || age < -30000 || age > 10 * 60 * 1000) {
+    throw new HttpError(401, 'Сеанс Telegram прострочено');
+  }
+  return true;
+}
+
+function telegramUsername(value) {
+  const username = clean(value, 32).replace(/^@+/, '');
+  return /^[a-zA-Z0-9_]{5,32}$/.test(username) ? username.toLowerCase() : '';
+}
+
+function telegramPhotoUrl(value) {
+  const photo = clean(value, 2048);
+  if (!photo) return '';
+  try { return new URL(photo).protocol === 'https:' ? photo : ''; }
+  catch { return ''; }
+}
+
+export function telegramProfileFromClaims(claims, now = Date.now()) {
+  const telegramUserId = clean(claims?.sub || claims?.id, 32);
+  if (!/^\d{1,32}$/.test(telegramUserId)) throw new HttpError(401, 'Telegram-профіль не містить коректного ID');
+  return {
+    telegramUsername: telegramUsername(claims?.preferred_username),
+    telegramUserId,
+    telegramDisplayName: clean(claims?.name, 80),
+    telegramPhotoURL: telegramPhotoUrl(claims?.picture),
+    telegramVerified: true,
+    telegramLinkedAt: new Date(now).toISOString()
+  };
+}
+
+function decodeTelegramJwtPart(part) {
+  try { return JSON.parse(new TextDecoder().decode(base64UrlDecode(part))); }
+  catch { throw new HttpError(401, 'Некоректний токен Telegram'); }
+}
+
+async function verifyTelegramIdToken(idToken, env, now = Date.now()) {
+  const parts = String(idToken || '').split('.');
+  if (parts.length !== 3 || parts.some(part => !part)) throw new HttpError(401, 'Некоректний токен Telegram');
+  const header = decodeTelegramJwtPart(parts[0]);
+  const claims = decodeTelegramJwtPart(parts[1]);
+  if (header.alg !== 'RS256' || !clean(header.kid, 160)) throw new HttpError(401, 'Непідтримуваний підпис Telegram');
+  const response = await fetch('https://oauth.telegram.org/.well-known/jwks.json', {
+    headers: { Accept: 'application/json' },
+    cf: { cacheEverything: true, cacheTtl: 3600 }
+  });
+  const jwks = await response.json().catch(() => ({}));
+  const jwk = Array.isArray(jwks.keys) ? jwks.keys.find(key => key.kid === header.kid && key.kty === 'RSA') : null;
+  if (!response.ok || !jwk) throw new HttpError(502, 'Не вдалося перевірити підпис Telegram');
+  const key = await crypto.subtle.importKey(
+    'jwk',
+    jwk,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+  const valid = await crypto.subtle.verify(
+    'RSASSA-PKCS1-v1_5',
+    key,
+    base64UrlDecode(parts[2]),
+    new TextEncoder().encode(`${parts[0]}.${parts[1]}`)
+  );
+  const nowSeconds = Math.floor(Number(now) / 1000);
+  const audience = Array.isArray(claims.aud) ? claims.aud.map(String) : [String(claims.aud || '')];
+  if (!valid
+    || claims.iss !== 'https://oauth.telegram.org'
+    || !audience.includes(telegramClientId(env))
+    || !Number.isFinite(Number(claims.exp))
+    || Number(claims.exp) <= nowSeconds
+    || Number(claims.iat || 0) > nowSeconds + 300) {
+    throw new HttpError(401, 'Токен Telegram недійсний або прострочений');
+  }
+  return { claims, profile: telegramProfileFromClaims(claims, now) };
+}
+
 function integer(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, Math.round(Number(value) || 0)));
 }
@@ -304,6 +438,11 @@ function liveGamePayload(source, identity) {
   const seatNumbers = value => Array.isArray(value)
     ? value.slice(0, 10).map(number => integer(number, 1, 10))
     : [];
+  const uidList = (value, maximum) => Array.isArray(value)
+    ? [...new Set(value.map(uid => clean(uid, 128)).filter(Boolean))].slice(0, maximum)
+    : [];
+  const participantUids = [...new Set([identity.uid, ...uidList(game.participantUids, 11)])].slice(0, 11);
+  const activePlayerUids = uidList(game.activePlayerUids, 10).filter(uid => uid !== identity.uid && participantUids.includes(uid));
   const timer = game.timer && typeof game.timer === 'object' ? game.timer : {};
   const startedAt = clean(game.startedAt, 40);
   const gameUpdatedAt = clean(game.gameUpdatedAt, 40);
@@ -318,6 +457,8 @@ function liveGamePayload(source, identity) {
     startedAt,
     gameUpdatedAt,
     status: 'active',
+    participantUids,
+    activePlayerUids,
     phase,
     subphase: clean(game.subphase, 40),
     day: integer(game.day, 1, 100),
@@ -354,7 +495,10 @@ async function saveLiveGame(body, identity, idToken, env) {
   const existing = await firestoreLiveGame(game.id, idToken, env);
   const existingOwnerUid = firestoreValue(existing?.fields?.ownerUid);
   if (existingOwnerUid && existingOwnerUid !== identity.uid) throw new HttpError(403, 'Ця активна гра належить іншому ведучому');
-  if (existingOwnerUid === identity.uid && firestoreValue(existing?.fields?.gameUpdatedAt) === game.gameUpdatedAt) {
+  if (existingOwnerUid === identity.uid
+    && firestoreValue(existing?.fields?.gameUpdatedAt) === game.gameUpdatedAt
+    && existing?.fields?.participantUids?.arrayValue
+    && existing?.fields?.activePlayerUids?.arrayValue) {
     return { ok: true, changed: false, gameId: game.id };
   }
   const now = new Date().toISOString();
@@ -487,19 +631,33 @@ export async function handleRequest(request, env) {
     if (request.method !== 'GET') return json(origin, 405, { error: 'Потрібен GET-запит' });
     return json(origin, 200, await loadMenu(env), 'public,max-age=60,s-maxage=300,stale-while-revalidate=3600');
   }
-  if (!['/orders', '/ratings', '/ratings/batch', '/ratings/summary/batch', '/live-games'].includes(url.pathname)) return json(origin, 404, { error: 'Маршрут не знайдено' });
+  if (!['/orders', '/ratings', '/ratings/batch', '/ratings/summary/batch', '/live-games', '/telegram-profile/config', '/telegram-profile/verify'].includes(url.pathname)) return json(origin, 404, { error: 'Маршрут не знайдено' });
   if (url.pathname === '/orders' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
   if (url.pathname === '/live-games' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
+  if (url.pathname === '/telegram-profile/config' && request.method !== 'GET') return json(origin, 405, { error: 'Потрібен GET-запит' });
+  if (url.pathname === '/telegram-profile/verify' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
   if (url.pathname === '/ratings' && !['GET', 'POST'].includes(request.method)) return json(origin, 405, { error: 'Метод не підтримується' });
   if (url.pathname === '/ratings/batch' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
   if (url.pathname === '/ratings/summary/batch' && request.method !== 'POST') return json(origin, 405, { error: 'Потрібен POST-запит' });
-  const bodyLimit = url.pathname === '/live-games' ? 16384 : 4096;
+  const bodyLimit = ['/live-games', '/telegram-profile/verify'].includes(url.pathname) ? 16384 : 4096;
   if (Number(request.headers.get('Content-Length') || 0) > bodyLimit) return json(origin, 413, { error: 'Запит завеликий' });
 
   try {
     const match = (request.headers.get('Authorization') || '').match(/^Bearer\s+(.+)$/i);
     if (!match) throw new HttpError(401, 'Потрібен Google-вхід');
     const identity = await firebaseIdentity(match[1], env);
+    if (url.pathname === '/telegram-profile/config') {
+      return json(origin, 200, {
+        clientId: telegramClientId(env),
+        nonce: await createTelegramProfileNonce(identity.uid, env)
+      });
+    }
+    if (url.pathname === '/telegram-profile/verify') {
+      const body = await request.json().catch(() => { throw new HttpError(400, 'Некоректний запит'); });
+      const verified = await verifyTelegramIdToken(clean(body.idToken, 12000), env);
+      await verifyTelegramProfileNonce(verified.claims.nonce, identity.uid, env);
+      return json(origin, 200, verified.profile);
+    }
     if (url.pathname === '/live-games') {
       const body = await request.json().catch(() => { throw new HttpError(400, 'Некоректний запит'); });
       if (body.action === 'upsert') return json(origin, 200, await saveLiveGame(body, identity, match[1], env));
@@ -542,10 +700,13 @@ export async function handleRequest(request, env) {
     return json(origin, 200, { ok: true, item: order.item, label: order.label });
   } catch (error) {
     const status = Number(error?.status) || 500;
-    if (status >= 500) console.error(url.pathname === '/live-games' ? 'Live game sync failed' : 'Order delivery failed', { name: error?.name || 'Error', status });
+    const telegramProfileRoute = url.pathname.startsWith('/telegram-profile/');
+    if (status >= 500) console.error(url.pathname === '/live-games' ? 'Live game sync failed' : telegramProfileRoute ? 'Telegram profile link failed' : 'Order delivery failed', { name: error?.name || 'Error', status });
     const fallback = url.pathname === '/live-games'
       ? 'Не вдалося синхронізувати активну гру'
-      : 'Не вдалося надіслати замовлення';
+      : telegramProfileRoute
+        ? 'Не вдалося підключити Telegram'
+        : 'Не вдалося надіслати замовлення';
     return json(origin, status, { error: status < 500 || error instanceof HttpError ? error.message : fallback });
   }
 }

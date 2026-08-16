@@ -73,9 +73,42 @@ export function resolveOwnProfilePhotoDataURL(localAvatar, remotePhotoDataURL) {
   return sharedAvatar(remotePhotoDataURL) || sharedAvatar(localAvatar);
 }
 
+export function ownProfileSyncAction(localProfile, remoteProfile) {
+  if (!remoteProfile) return 'push';
+  const hasPendingLocalChanges = localProfile?.profileSyncState === 'pending';
+  const localIsNewer = String(localProfile?.updatedAt || '') > String(remoteProfile?.profileUpdatedAt || '');
+  return hasPendingLocalChanges && localIsNewer ? 'push' : 'pull';
+}
+
 function sharedAvatarPreset(value) {
   const preset = clean(value, 80);
   return MANUAL_AVATAR_PRESETS.has(preset) ? preset : '';
+}
+
+function telegramUsername(value) {
+  const username = clean(value, 32).replace(/^@+/, '');
+  return /^[a-zA-Z0-9_]{5,32}$/.test(username) ? username.toLowerCase() : '';
+}
+
+function telegramPhotoURL(value) {
+  const photo = clean(value, 2048);
+  if (!photo) return '';
+  try { return new URL(photo).protocol === 'https:' ? photo : ''; }
+  catch { return ''; }
+}
+
+function telegramProfileFields(profile) {
+  const userId = clean(profile?.telegramUserId, 32);
+  const linkedAt = clean(profile?.telegramLinkedAt, 40);
+  const verified = profile?.telegramVerified === true && /^\d{1,32}$/.test(userId) && Boolean(linkedAt);
+  return {
+    telegramUsername: telegramUsername(profile?.telegramUsername),
+    telegramUserId: verified ? userId : '',
+    telegramDisplayName: verified ? clean(profile?.telegramDisplayName, 80) : '',
+    telegramPhotoURL: verified ? telegramPhotoURL(profile?.telegramPhotoURL) : '',
+    telegramVerified: verified,
+    telegramLinkedAt: verified ? linkedAt : ''
+  };
 }
 
 export function createSharedManualPlayerFields(user, hostProfile, player) {
@@ -127,6 +160,7 @@ export function createOwnCommunityProfileFields(user, profile) {
     description: clean(profile.description, 600),
     photoURL: clean(user.googlePhotoURL, 2048),
     photoDataURL: sharedAvatar(profile.avatar),
+    ...telegramProfileFields(profile),
     discoverable: profile.discoverable !== false,
     profileUpdatedAt: profile.updatedAt || new Date().toISOString(),
     schemaVersion: 1
@@ -143,6 +177,7 @@ function memberFromSnapshot(snapshot) {
     description: clean(data.description, 600),
     photoURL: clean(data.photoURL, 2048),
     photoDataURL: sharedAvatar(data.photoDataURL),
+    ...telegramProfileFields(data),
     discoverable: data.discoverable !== false,
     profileUpdatedAt: clean(data.profileUpdatedAt, 40),
     lastSeenAt: profileLastSeenMillis(data.lastSeenAt)
@@ -216,7 +251,7 @@ async function writeOwnProfile(user, profile, existingCreatedAt = null) {
   }, { merge: true });
 }
 
-export async function reconcileOwnCommunityProfile(user, profile, { hasLocalProfile = false } = {}) {
+export async function reconcileOwnCommunityProfile(user, profile) {
   const { database, sdk } = await loadDatabase();
   const reference = profilePath(sdk, database, user.uid);
   const snapshot = await sdk.getDoc(reference);
@@ -226,8 +261,7 @@ export async function reconcileOwnCommunityProfile(user, profile, { hasLocalProf
   }
 
   const remote = memberFromSnapshot(snapshot);
-  const localIsNewer = hasLocalProfile && String(profile.updatedAt || '') > String(remote.profileUpdatedAt || '');
-  if (localIsNewer) {
+  if (ownProfileSyncAction(profile, remote) === 'push') {
     await writeOwnProfile(user, profile, snapshot.data().createdAt);
     return { ...createOwnCommunityProfileFields(user, profile), uid: user.uid };
   }

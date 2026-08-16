@@ -28,10 +28,10 @@ import {
   saveFinishedCommunityGame, deleteFinishedCommunityGame,
   requestGameHostTransfer, acceptGameHostTransfer, resolveGameHostTransfer,
   subscribeCommunityGames, stopCommunityGames, subscribeGameHostTransfers, stopGameHostTransfers
-} from './cloud-games.js?v=156';
+} from './cloud-games.js?v=158';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
-  canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
+  canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, nominationIsAllowed, normalizeGameState, resolveVote,
   secureShuffle, selectNumberRoleCard, takeNumberRoleCard, toggleBestMoveCandidate, victoryForSeats
 } from './game-engine.js';
 import {
@@ -42,10 +42,32 @@ import { pickFunnyGuestNames } from './guest-names.js';
 import { LANGUAGES, applyLanguage, languageLocale, localizeDom, normalizeLanguage } from './i18n.js';
 import { DEFAULT_ORDER_MENU, loadOrderMenu, sendTelegramOrder } from './order-service.js';
 import { pwaInstallMode } from './pwa.js';
-import { sortDirectoryPlayers } from './player-directory.js';
+import { selectHostTransferCandidates, sortDirectoryPlayers } from './player-directory.js';
 import {
   GAME_EMOTIONS, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
+import { FIIM_RATING_RULES, mafiaGamePoints, mafiaPlayerRankings } from './player-ranking.js';
+import { buildGameStatistics, filterGamesByPeriod, gameActivityComparison } from './game-statistics.js';
+import { buildGameCalendarMonth, currentGameCalendarMonth, shiftGameCalendarMonth } from './game-calendar.js';
+import {
+  createCommunityVenueFields, deleteCommunityVenue, isCommunityVenueAdmin,
+  saveCommunityVenue, subscribeCommunityVenues, stopCommunityVenues
+} from './cloud-venues.js';
+import { filterVenues, gameTitleForVenue, googleMapsVenueSuggestion, venuePickerOptions } from './venue-directory.js';
+import {
+  BUILTIN_GAME_TRACKS, DEFAULT_GAME_MUSIC, GAME_MUSIC_CUES, GAME_MUSIC_DEFAULTS_VERSION, builtinGameTrack,
+  customMusicChoice, migrateGameMusicSettings, musicCueForGame, normalizeGameMusicSettings
+} from './game-music.js';
+import {
+  GAME_CHAT_EMOTIONS, authorizedGameParticipantUids, canJoinActiveGameChat, createGameChatDocument, deleteGameChat, ensureGameChat,
+  insertGameChatEmotion,
+  joinGameChat, sendGameChatMessage, stopGameChatMessages, stopGameChats,
+  subscribeGameChatMessages, subscribeGameChats, telegramDiscussionLinks
+} from './game-chat.js?v=3';
+import {
+  connectPreparedTelegramProfile, normalizeTelegramUsername,
+  prepareTelegramProfileConnection, telegramManualProfile
+} from './telegram-profile.js?v=2';
 
 const ROLE_DECK = [
   { key: 'sheriff', label: 'Шериф', team: 'red', symbol: '★', description: 'Щоночі перевіряє одного гравця та дізнається колір його команди.' },
@@ -84,7 +106,8 @@ const ANIMAL_AVATAR_LABELS = Object.freeze({
 
 const RULES_LINKS = Object.freeze({
   ukrainian: 'https://www.imafia.org/game-rules',
-  international: 'https://fiim.world/fiim-rules'
+  international: 'https://fiim.world/fiim-rules',
+  scoring: 'https://fiim.world/scoring'
 });
 
 const ORDER_CATEGORIES = Object.freeze([
@@ -109,13 +132,26 @@ const DEFAULT_SETTINGS = {
   firstDaySingleNoVote: true,
   lastGetsRemainder: true,
   dealMode: 'number',
-  penaltyMode: 'tournament'
+  penaltyMode: 'tournament',
+  musicDefaultsVersion: GAME_MUSIC_DEFAULTS_VERSION,
+  music: DEFAULT_GAME_MUSIC
 };
 
 const FOUL_SYSTEM_HELP = 'Турнірна: 3 фоли — без промови, 4-й фол — гравець залишає стіл. Клубна: 2 фоли — промова 30 секунд, 3 фоли — без права голосу, 4-й фол — гравець залишає стіл.';
 
+const BUILTIN_ENJOY_VENUE = Object.freeze({
+  id: 'builtin_enjoy',
+  name: ENJOY_CAFE.name,
+  googleMapsUrl: ENJOY_CAFE.mapsUrl,
+  address: ENJOY_CAFE.address,
+  phone: '',
+  website: ENJOY_CAFE.instagramUrl,
+  builtin: true
+});
+
 const THEMES = ['dark', 'light', 'cafe'];
 const THEME_COLORS = { dark: '#0d0c0b', light: '#e9e2d6', cafe: '#1a100b' };
+const PWA_VERSION = 195;
 const ANDROID_BLUETOOTH_SETTINGS_URL = 'intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end';
 const CLIENT_PLATFORM = /Android/i.test(navigator.userAgent)
   ? 'android'
@@ -141,7 +177,7 @@ let app = {
   cloudGames: [],
   deletedGameIds: [],
   games: [],
-  settings: { ...DEFAULT_SETTINGS },
+  settings: { ...DEFAULT_SETTINGS, music: normalizeGameMusicSettings(DEFAULT_SETTINGS.music) },
   draft: null,
   game: null,
   modal: null,
@@ -154,6 +190,8 @@ let app = {
   wakeLock: null,
   toastHandle: null,
   search: '',
+  statsPeriod: 'all',
+  gameCalendarMonth: currentGameCalendarMonth(),
   nextGameQueue: [],
   authReady: false,
   authConfigured: false,
@@ -162,20 +200,30 @@ let app = {
   hostProfile: null,
   cloudDirectory: { status: 'idle', error: '', fromCache: false },
   cloudArchive: { status: 'idle', error: '', fromCache: false },
+  venues: [],
+  venueDirectory: { status: 'idle', error: '', fromCache: false },
+  venueBusy: false,
   ownedPlayerLinks: [],
   playerLinkOffers: [],
   playerLinkBusy: false,
   legacyMigration: null,
   authBusy: false,
   accountDeleteBusy: false,
-  media: { trackName: '', playing: false, error: '' },
+  media: { trackName: '', playing: false, error: '', sourceKey: '', automatic: false, cue: '' },
   order: { busy: false, status: 'idle', error: '', lastItem: '', category: '', selectedItem: '', selectedOptions: [] },
   orderMenu: DEFAULT_ORDER_MENU,
   profilePhotoSync: { status: 'idle' },
+  telegramLink: { status: 'idle', error: '', prepared: null },
   gameFeedback: {},
   gameFeedbackSummaries: {},
   pendingActiveGameDeletes: [],
   hostTransfers: { incoming: [], outgoing: [], busy: false, error: '' },
+  gameChats: [],
+  gameChatsState: { status: 'idle', error: '' },
+  chatMessages: [],
+  chatMessagesState: { status: 'idle', error: '' },
+  chatDraft: '',
+  chatBusy: false,
   bluetooth: {
     supported: 'bluetooth' in navigator,
     available: null,
@@ -185,13 +233,22 @@ let app = {
   },
   panelExpanded: {
     homeActiveGames: true,
+    homeGameChats: true,
+    homeGameCalendar: false,
     homeRecentGames: false,
     moderatorPanel: false,
     setupGame: false,
     setupTimers: false,
+    setupMusic: false,
     setupRules: false,
     setupSeating: true,
+    settingsVenues: false,
+    settingsAbout: false,
     statsActiveGames: false,
+    statsSummary: true,
+    statsTime: false,
+    statsActivity: false,
+    statsVenues: false,
     statsRoles: false,
     statsPlayers: false,
     statsArchiveGames: false
@@ -201,12 +258,20 @@ let activationPromise = null;
 let activationUid = null;
 let cloudDirectoryPromise = null;
 let cloudArchivePromise = null;
+let venueDirectoryPromise = null;
+let gameChatsPromise = null;
 let cloudArchiveMigrationStarted = false;
 let activeGamePublishPromise = null;
 let activeGamePublishRetryHandle = null;
 let profilePresenceHandle = null;
+let renderedRoute = '';
+let renderedModalKey = '';
+let renderRevision = 0;
+let passiveRenderPending = false;
 const pendingActiveGames = new Map();
 const activeGameRecoveryAttempts = new Set();
+const ensuredActiveGameChats = new Set();
+const activeGameChatMembershipSyncs = new Set();
 const handledHostTransfers = new Set();
 const presetAvatarDataUrls = new Map();
 
@@ -242,6 +307,12 @@ function formatDuration(seconds = 0) {
   const minutes = Math.max(0, Math.round(seconds / 60));
   if (minutes < 60) return `${minutes} хв`;
   return `${Math.floor(minutes / 60)} год ${minutes % 60} хв`;
+}
+function formatRatingPoints(value = 0) {
+  return new Intl.NumberFormat(languageLocale(app.settings.language), { maximumFractionDigits: 1 }).format(Number(value) || 0);
+}
+function formatRatingCoefficient(value = 0) {
+  return new Intl.NumberFormat(languageLocale(app.settings.language), { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(Number(value) || 0);
 }
 function formatTimer(seconds) {
   const safe = Math.max(0, Number(seconds) || 0);
@@ -322,6 +393,13 @@ function checkSignal(signalKey, className = '', alt = '') {
 function activeGames() { return app.games.filter(game => game.status === 'active').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); }
 function finishedGames() { return app.games.filter(game => game.status === 'finished').sort((a, b) => (b.endedAt || b.updatedAt).localeCompare(a.endedAt || a.updatedAt)); }
 function gameById(id) { return app.games.find(game => game.id === id); }
+function gameChatById(id) { return app.gameChats.find(chat => chat.id === id || chat.gameId === id); }
+function gameChatForGame(gameId) { return app.gameChats.find(chat => chat.gameId === gameId); }
+function authorizedSeatUid(seat) {
+  if (seat?.cloudUid) return String(seat.cloudUid);
+  return String(seat?.profileId || '').startsWith('google_') ? String(seat.profileId).slice('google_'.length) : '';
+}
+function authorizedGameSeats(game) { return (game?.seats || []).filter(seat => authorizedSeatUid(seat)); }
 function playerById(id) { return app.players.find(player => player.id === id); }
 function profileIsInActiveGame(profileId) {
   return Boolean(profileId) && activeGames().some(game => game.seats?.some(seat => seat.profileId === profileId));
@@ -352,6 +430,12 @@ function cloudPlayer(member) {
     contact: member.club || 'Enjoy',
     notes: member.description || '',
     avatar: member.photoDataURL || member.photoURL || '',
+    telegramUsername: member.telegramUsername || '',
+    telegramUserId: member.telegramUserId || '',
+    telegramDisplayName: member.telegramDisplayName || '',
+    telegramPhotoURL: member.telegramPhotoURL || '',
+    telegramVerified: member.telegramVerified === true,
+    telegramLinkedAt: member.telegramLinkedAt || '',
     updatedAt: member.profileUpdatedAt || '',
     lastSeenAt: member.lastSeenAt || 0
   };
@@ -366,7 +450,13 @@ function ownProfilePlayer() {
     nickname: app.hostProfile?.nickname || '',
     contact: app.hostProfile?.club || 'Enjoy',
     notes: app.hostProfile?.description || '',
-    avatar: app.hostProfile?.avatar || app.authUser?.googlePhotoURL || ''
+    avatar: app.hostProfile?.avatar || app.authUser?.googlePhotoURL || '',
+    telegramUsername: app.hostProfile?.telegramUsername || '',
+    telegramUserId: app.hostProfile?.telegramUserId || '',
+    telegramDisplayName: app.hostProfile?.telegramDisplayName || '',
+    telegramPhotoURL: app.hostProfile?.telegramPhotoURL || '',
+    telegramVerified: app.hostProfile?.telegramVerified === true,
+    telegramLinkedAt: app.hostProfile?.telegramLinkedAt || ''
   };
 }
 function preferredPlayerName(player) {
@@ -531,20 +621,8 @@ function pendingIncomingHostTransfer() {
 function outgoingHostTransfer(gameId = app.game?.id) {
   return app.hostTransfers.outgoing.find(transfer => transfer.gameId === gameId && transfer.status === 'pending') || null;
 }
-function hostTransferCandidates(game = app.game) {
-  const candidates = new Map();
-  (game?.seats || []).forEach(seat => {
-    const player = seat.profileId ? playerById(seat.profileId) : null;
-    const cloudUid = seat.cloudUid || player?.cloudUid || '';
-    if (!cloudUid || cloudUid === app.authUser?.uid || candidates.has(cloudUid)) return;
-    candidates.set(cloudUid, {
-      uid: cloudUid,
-      name: preferredPlayerName(player) || seat.name,
-      seatNumber: seat.number,
-      avatar: player?.avatar || player?.avatarPreset || seat.avatar || ''
-    });
-  });
-  return [...candidates.values()].sort((left, right) => left.seatNumber - right.seatNumber);
+function hostTransferCandidates(search = '') {
+  return selectHostTransferCandidates(app.players, app.authUser?.uid || '', search);
 }
 function seatByNo(number) { return app.game?.seats.find(seat => seat.number === Number(number)); }
 function aliveSeats() { return app.game?.seats.filter(seat => seat.status === 'alive') || []; }
@@ -570,7 +648,14 @@ function vibrate(pattern = 20) {
 let timerAudioContext = null;
 const musicAudio = new Audio();
 musicAudio.preload = 'metadata';
-let musicObjectUrl = '';
+let manualMusicObjectUrl = '';
+const setupMusicFiles = new Map();
+let automaticMusicCue = '';
+let automaticMusicPaused = false;
+let automaticMusicBlockedCue = '';
+let automaticMusicPlayPendingCue = '';
+let automaticMusicSyncQueued = false;
+let missingCustomMusicNotice = '';
 
 function getTimerAudioContext() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -632,50 +717,186 @@ function updateMusicMetadata() {
   } catch { /* Metadata is an enhancement. */ }
 }
 
-async function playMusic() {
+async function playMusic({ automatic = false } = {}) {
   if (!app.media.trackName || !musicAudio.src) return toast('Спочатку оберіть аудіофайл');
+  const sourceKey = app.media.sourceKey;
+  const cue = app.media.cue;
   try {
     app.media.error = '';
     await musicAudio.play();
   } catch (error) {
+    if (app.media.sourceKey !== sourceKey) return;
     app.media.playing = false;
     app.media.error = 'Браузер не зміг відтворити цей аудіофайл.';
+    if (automatic && cue) automaticMusicBlockedCue = cue;
     setMediaSessionState('paused');
     render();
-    toast(error?.message || app.media.error);
+    toast(automatic ? 'Торкніться Play, щоб дозволити автоматичну музику' : (error?.message || app.media.error));
   }
 }
 
-function pauseMusic() {
+function pauseMusic({ manual = true } = {}) {
   if (!app.media.trackName) return;
+  if (manual && app.media.automatic) automaticMusicPaused = true;
   musicAudio.pause();
 }
 
-function clearMusicTrack() {
-  musicAudio.pause();
+function clearMusicTrack({ revokeManual = true } = {}) {
+  pauseMusic({ manual: false });
   musicAudio.removeAttribute('src');
   musicAudio.load();
-  if (musicObjectUrl) URL.revokeObjectURL(musicObjectUrl);
-  musicObjectUrl = '';
-  app.media = { trackName: '', playing: false, error: '' };
+  musicAudio.loop = false;
+  if (revokeManual && manualMusicObjectUrl) URL.revokeObjectURL(manualMusicObjectUrl);
+  if (revokeManual) manualMusicObjectUrl = '';
+  app.media = { trackName: '', playing: false, error: '', sourceKey: '', automatic: false, cue: '' };
   setMediaSessionState('none');
+}
+
+function loadMusicTrack({ key, name, src, automatic = false, cue = '', loop = false }) {
+  if (!key || !src) return false;
+  if (app.media.sourceKey === key && musicAudio.src) {
+    app.media.automatic = automatic;
+    app.media.cue = cue;
+    app.media.error = '';
+    musicAudio.loop = loop;
+    updateMusicMetadata();
+    return true;
+  }
+  clearMusicTrack();
+  musicAudio.src = src;
+  musicAudio.loop = loop;
+  app.media = { trackName: name || 'Аудіофайл', playing: false, error: '', sourceKey: key, automatic, cue };
+  updateMusicMetadata();
+  return true;
 }
 
 function selectMusicFile(file) {
   clearMusicTrack();
-  musicObjectUrl = URL.createObjectURL(file);
-  musicAudio.src = musicObjectUrl;
-  app.media.trackName = file.name || 'Локальний аудіофайл';
-  updateMusicMetadata();
+  const objectUrl = URL.createObjectURL(file);
+  loadMusicTrack({
+    key: `manual:${file.name || 'audio'}:${file.size || 0}:${file.lastModified || 0}`,
+    name: file.name || 'Локальний аудіофайл',
+    src: objectUrl
+  });
+  manualMusicObjectUrl = objectUrl;
   render();
   toast('Музику підготовлено');
 }
 
+function setupMusicFile(cue, file) {
+  const customChoice = customMusicChoice(cue);
+  if (!customChoice || !file) return;
+  const previous = setupMusicFiles.get(cue);
+  if (previous && app.media.sourceKey === previous.key) clearMusicTrack();
+  if (previous?.url) URL.revokeObjectURL(previous.url);
+  const entry = {
+    key: `setup:${cue}:${file.name || 'audio'}:${file.size || 0}:${file.lastModified || 0}`,
+    name: file.name || 'Власний аудіофайл',
+    url: URL.createObjectURL(file)
+  };
+  setupMusicFiles.set(cue, entry);
+  app.draft.settings.music = normalizeGameMusicSettings(app.draft.settings.music);
+  app.draft.settings.music[cue] = customChoice;
+  missingCustomMusicNotice = '';
+  render();
+  toast(`Файл для «${GAME_MUSIC_CUES.find(item => item.id === cue)?.label || 'сцени'}» обрано`);
+}
+
+function clearSetupMusicFiles() {
+  for (const entry of setupMusicFiles.values()) {
+    if (app.media.sourceKey === entry.key) clearMusicTrack();
+    URL.revokeObjectURL(entry.url);
+  }
+  setupMusicFiles.clear();
+}
+
+function configuredMusicTrack(cue, choice) {
+  if (choice === customMusicChoice(cue)) {
+    const custom = setupMusicFiles.get(cue);
+    if (custom) return { key: custom.key, name: custom.name, src: custom.url };
+  }
+  const fallbackId = choice === customMusicChoice(cue) ? DEFAULT_GAME_MUSIC[cue] : choice;
+  const builtin = builtinGameTrack(fallbackId) || builtinGameTrack(DEFAULT_GAME_MUSIC[cue]);
+  return builtin ? { key: `builtin:${builtin.id}`, name: builtin.label, src: builtin.src } : null;
+}
+
+async function previewSetupMusic(cue) {
+  if (!app.draft) return;
+  const settings = normalizeGameMusicSettings(app.draft.settings.music);
+  const choice = settings[cue];
+  if (choice === customMusicChoice(cue) && !setupMusicFiles.has(cue)) {
+    document.querySelector(`[data-input="setup-music-file"][data-music-cue="${cue}"]`)?.click();
+    return;
+  }
+  const track = configuredMusicTrack(cue, choice);
+  if (!track) return toast('Не вдалося підготувати цю мелодію');
+  automaticMusicCue = '';
+  automaticMusicPaused = false;
+  automaticMusicBlockedCue = '';
+  automaticMusicPlayPendingCue = '';
+  loadMusicTrack({ ...track, cue, loop: false });
+  await playMusic();
+}
+
+async function syncAutomaticMusic() {
+  const settings = normalizeGameMusicSettings(app.game?.settings?.music);
+  const canPlayAutomatically = Boolean(
+    app.authUser && app.game?.status === 'active' && !app.game.publicOnly
+    && canManageGame(app.game) && settings.enabled
+  );
+  const cue = canPlayAutomatically ? musicCueForGame(app.game) : null;
+  if (!cue) {
+    automaticMusicCue = '';
+    automaticMusicPaused = false;
+    automaticMusicBlockedCue = '';
+    automaticMusicPlayPendingCue = '';
+    missingCustomMusicNotice = '';
+    if (app.media.automatic) clearMusicTrack();
+    return;
+  }
+
+  if (cue !== automaticMusicCue) {
+    automaticMusicCue = cue;
+    automaticMusicPaused = false;
+    automaticMusicBlockedCue = '';
+    automaticMusicPlayPendingCue = '';
+  }
+  const choice = settings[cue];
+  if (choice === customMusicChoice(cue) && !setupMusicFiles.has(cue)) {
+    const noticeKey = `${app.game.id}:${cue}`;
+    if (missingCustomMusicNotice !== noticeKey) {
+      missingCustomMusicNotice = noticeKey;
+      toast('Власний файл недоступний після перезавантаження · грає вбудована мелодія');
+    }
+  }
+  const track = configuredMusicTrack(cue, choice);
+  if (!track) return;
+  if (app.media.sourceKey !== track.key || !app.media.automatic || app.media.cue !== cue) {
+    loadMusicTrack({ ...track, automatic: true, cue, loop: true });
+  }
+  if (!automaticMusicPaused && automaticMusicBlockedCue !== cue && automaticMusicPlayPendingCue !== cue && !app.media.playing) {
+    automaticMusicPlayPendingCue = cue;
+    try { await playMusic({ automatic: true }); }
+    finally {
+      if (automaticMusicPlayPendingCue === cue) automaticMusicPlayPendingCue = '';
+    }
+  }
+}
+
+function queueAutomaticMusicSync() {
+  if (automaticMusicSyncQueued) return;
+  automaticMusicSyncQueued = true;
+  queueMicrotask(() => {
+    automaticMusicSyncQueued = false;
+    void syncAutomaticMusic();
+  });
+}
+
 function configureMediaSession() {
   if (!('mediaSession' in navigator)) return;
-  try { navigator.mediaSession.setActionHandler('play', () => { void playMusic(); }); } catch { /* Not supported. */ }
-  try { navigator.mediaSession.setActionHandler('pause', pauseMusic); } catch { /* Not supported. */ }
-  try { navigator.mediaSession.setActionHandler('stop', pauseMusic); } catch { /* Not supported. */ }
+  try { navigator.mediaSession.setActionHandler('play', () => { automaticMusicPaused = false; automaticMusicBlockedCue = ''; void playMusic({ automatic: app.media.automatic }); }); } catch { /* Not supported. */ }
+  try { navigator.mediaSession.setActionHandler('pause', () => pauseMusic()); } catch { /* Not supported. */ }
+  try { navigator.mediaSession.setActionHandler('stop', () => pauseMusic()); } catch { /* Not supported. */ }
 }
 
 async function refreshBluetoothState() {
@@ -802,6 +1023,27 @@ function randomActionIcon(kind) {
   return '<svg class="button-random-icon button-shuffle-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2.5c4.5 0 6.5 12 11 12H21"/><path d="m18 15 3 3-3 3"/><path d="M4 18h2.5c1.8 0 3.1-2 4.3-4.4M13.2 9.8C14.4 7.7 15.7 6 17.5 6H21"/><path d="m18 3 3 3-3 3"/></svg>';
 }
 
+function clearSeatingIcon() {
+  return '<svg class="button-clear-seating-icon button-broom-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m20.5 3.5-9.8 9.8"/><path d="m9 11.5 3.5 3.5-3.2 5.5H3.5L9 11.5Z"/><path d="m7.5 14-3.2 5.3m5.3-3.1-2.5 4.3"/></svg>';
+}
+
+function discussionIcon() {
+  return '<svg class="discussion-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v11H9l-5 4v-15Z"/><path d="M8 10h8M8 13h5"/></svg>';
+}
+
+function telegramIcon() {
+  return '<svg class="discussion-icon telegram-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 17-7-4.2 16-5.2-4.2-3 2.8.5-5.2L17 7.2l-10.5 5Z"/><path d="m8.1 13.4 7.7-5.2"/></svg>';
+}
+
+function telegramProfileBadge(profile, { compact = false } = {}) {
+  const username = normalizeTelegramUsername(profile?.telegramUsername);
+  if (!username) return profile?.telegramVerified
+    ? `<span class="badge telegram-profile-badge ${profile.telegramVerified ? 'green' : 'gold'}">${compact ? 'Telegram' : 'Telegram підключено'}</span>`
+    : '';
+  const label = compact ? `@${username}` : `${profile.telegramVerified ? 'Telegram' : 'Telegram вручну'} · @${username}`;
+  return `<a class="badge telegram-profile-badge ${profile.telegramVerified ? 'green' : 'gold'}" href="https://t.me/${esc(username)}" target="_blank" rel="noopener noreferrer" title="Відкрити @${esc(username)} у Telegram">${telegramIcon()}<span>${esc(label)}</span></a>`;
+}
+
 function externalAppIcon(name) {
   if (name === 'instagram') return `<svg class="external-app-icon instagram-app-icon" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="instagram-app-gradient" x1="3" y1="21" x2="21" y2="3" gradientUnits="userSpaceOnUse"><stop stop-color="#ffd600"/><stop offset=".46" stop-color="#ff0169"/><stop offset="1" stop-color="#7638fa"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#instagram-app-gradient)"/><rect x="5.7" y="5.7" width="12.6" height="12.6" rx="4" fill="none" stroke="white" stroke-width="1.8"/><circle cx="12" cy="12" r="3.1" fill="none" stroke="white" stroke-width="1.8"/><circle cx="17.1" cy="6.9" r="1.1" fill="white"/></svg>`;
   return `<svg class="external-app-icon maps-app-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285f4" d="M12 1.5a7.4 7.4 0 0 1 7.4 7.4c0 5.4-7.4 13.6-7.4 13.6S4.6 14.3 4.6 8.9A7.4 7.4 0 0 1 12 1.5Z"/><path fill="#34a853" d="M4.6 8.9c0 3.2 2.7 7.4 4.8 10.2l2.6-4.4-4.1-7.1-3.3 1.3Z"/><path fill="#fbbc04" d="m9.4 19.1 2.6 3.4 2.8-3.7-2.8-4.1-2.6 4.4Z"/><path fill="#ea4335" d="M12 1.5a7.4 7.4 0 0 1 6.4 3.7L12 8.9 8 3.1A7.3 7.3 0 0 1 12 1.5Z"/><circle cx="12" cy="8.9" r="2.8" fill="white"/></svg>`;
@@ -816,6 +1058,8 @@ function headerControlIcon(name) {
     bluetooth: '<path d="M7 7l10 10-5 4V3l5 4L7 17"/><path d="m4 8 8 8m-8 0 8-8"/>',
     play: '<path d="m8 5 11 7-11 7V5Z"/>',
     pause: '<path d="M8 5v14m8-14v14"/>',
+    file: '<path d="M4 5h6l2 2h8v12H4V5Z"/><path d="M12 16v-6m-3 3 3-3 3 3"/>',
+    share: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/>',
     order: '<path d="M4 16h16M6 16a6 6 0 0 1 12 0M3 20h18M12 6v2"/><circle cx="12" cy="4" r="1"/>',
     cancelGame: '<circle cx="12" cy="12" r="8"/><path d="m9 9 6 6m0-6-6 6"/>'
   };
@@ -857,22 +1101,24 @@ function headerHtml() {
   const hasTrack = Boolean(app.media.trackName);
   const bluetoothLabel = 'Bluetooth і музика';
   const canInstall = ['native', 'ios-guide'].includes(currentPwaInstallMode());
+  const showHeaderShare = !['game', 'reveal'].includes(app.route);
   const cancelableGame = app.game?.status === 'active' && canManageGame(app.game)
     ? app.game
     : activeGames().find(game => canManageGame(game));
   const cancelGameButton = cancelableGame
     ? `<button class="icon-btn header-media-btn cancel-game-btn" type="button" data-action="cancel-active-game" data-id="${esc(cancelableGame.id)}" aria-label="Скасувати активну гру" title="Скасувати активну гру" aria-haspopup="dialog">${headerControlIcon('cancelGame')}</button>`
     : '';
-  return `<header class="shell-header ${canInstall && !['game', 'reveal'].includes(app.route) ? 'has-install' : ''} ${cancelableGame ? 'has-cancel-game' : ''}">
+  return `<header class="shell-header ${canInstall && showHeaderShare ? 'has-install' : ''} ${showHeaderShare ? 'has-share' : ''} ${cancelableGame ? 'has-cancel-game' : ''}">
     <a class="brand" href="#home" aria-label="Mafia — головна">
       <img class="brand-mark" src="./assets/logo-mafia.webp" alt="" width="44" height="44" aria-hidden="true">
     </a>
     <div class="header-actions">
-      ${canInstall && !['game', 'reveal'].includes(app.route) ? pwaInstallButtonHtml() : ''}
+      ${canInstall && showHeaderShare ? pwaInstallButtonHtml() : ''}
+      ${showHeaderShare ? `<button class="icon-btn share-btn" type="button" data-action="share-app" aria-label="Поділитися застосунком" title="Поділитися застосунком">${headerControlIcon('share')}</button>` : ''}
       <button class="icon-btn order-btn" type="button" data-action="open-order-panel" aria-label="Замовити напій" title="Замовити напій" aria-haspopup="dialog">${headerControlIcon('order')}</button>
       <div class="header-media-controls" role="group" aria-label="Bluetooth і музика">
         <button class="icon-btn header-media-btn play-btn ${app.media.playing ? 'active' : ''}" data-action="media-play" aria-label="Відтворити музику" title="Відтворити музику" ${!hasTrack || app.media.playing ? 'disabled' : ''}>${headerControlIcon('play')}</button>
-        <button class="icon-btn header-media-btn pause-btn" data-action="media-pause" aria-label="Призупинити музику" title="Призупинити музику" ${!hasTrack || !app.media.playing ? 'disabled' : ''}>${headerControlIcon('pause')}</button>
+        <button class="icon-btn header-media-btn pause-btn ${app.media.playing ? 'pause-active' : ''}" data-action="media-pause" aria-label="Призупинити музику" title="Призупинити музику" ${!hasTrack || !app.media.playing ? 'disabled' : ''}>${headerControlIcon('pause')}</button>
       </div>
       <div class="header-profile-actions">
         ${cancelGameButton}
@@ -946,6 +1192,10 @@ function stateIcon(kind = 'empty') {
   return `<span class="state-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${paths[kind] || paths.empty}</svg></span>`;
 }
 
+function trashIcon() {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/></svg>';
+}
+
 function statePanel(kind, title, detail = '', action = '', compact = false) {
   return `<div class="ui-state state-${esc(kind)} ${compact ? 'ui-state-inline' : 'ui-state-panel'}" role="status">${stateIcon(kind)}<div class="state-copy"><b>${esc(title)}</b>${detail ? `<small>${esc(detail)}</small>` : ''}</div>${action}</div>`;
 }
@@ -953,12 +1203,15 @@ function statePanel(kind, title, detail = '', action = '', compact = false) {
 function collapsiblePanel(id, title, explanation, content, className = '', headerAction = '') {
   const expanded = Boolean(app.panelExpanded[id]);
   const contentId = `panel-${id}`;
+  const headerTools = explanation || headerAction
+    ? `<div class="collapsible-head-tools">${explanation ? helpIcon(explanation, `Пояснення: ${title}`) : ''}${headerAction}</div>`
+    : '';
   return `<section class="card card-pad collapsible-panel ${expanded ? 'expanded' : 'collapsed'} ${className}" data-panel="${id}">
     <div class="collapsible-head section-heading">
       <button class="collapsible-toggle" type="button" data-action="toggle-panel" data-panel="${id}" aria-expanded="${expanded}" aria-controls="${contentId}">
         <span class="panel-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></span><h2>${title}</h2>
       </button>
-      <div class="collapsible-head-tools">${helpIcon(explanation, `Пояснення: ${title}`)}${headerAction}</div>
+      ${headerTools}
     </div>
     <div id="${contentId}" class="collapsible-content" ${expanded ? '' : 'hidden'}>${content}</div>
   </section>`;
@@ -985,8 +1238,52 @@ function archiveStatusText() {
   return 'Активні й завершені ігри Enjoy';
 }
 
+function aggregateStats() {
+  return buildGameStatistics(finishedGames()).summary;
+}
+
+function gameCalendarChevron(direction) {
+  const path = direction === 'next' ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6';
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+}
+
+function gameCalendarHtml(games) {
+  const calendar = buildGameCalendarMonth(games, app.gameCalendarMonth);
+  const locale = languageLocale(app.settings.language);
+  const monthDate = new Date(calendar.year, calendar.month, 1);
+  const monthLabel = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(monthDate);
+  const weekdayFormatter = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+  const weekdayLongFormatter = new Intl.DateTimeFormat(locale, { weekday: 'long' });
+  const dateFormatter = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' });
+  const monday = new Date(2026, 7, 17);
+  const weekdays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + index);
+    return `<span title="${esc(weekdayLongFormatter.format(date))}">${esc(weekdayFormatter.format(date))}</span>`;
+  }).join('');
+  const today = new Date();
+  const cells = calendar.cells.map(cell => {
+    if (!cell) return '<span class="game-calendar-day is-empty" aria-hidden="true"></span>';
+    const date = new Date(calendar.year, calendar.month, cell.day);
+    const current = date.getFullYear() === today.getFullYear()
+      && date.getMonth() === today.getMonth()
+      && date.getDate() === today.getDate();
+    const count = Number(cell.games) || 0;
+    return `<div class="game-calendar-day ${count ? 'has-games' : ''} ${current ? 'is-today' : ''}" role="gridcell" aria-label="${esc(dateFormatter.format(date))}: ${count}"><span>${cell.day}</span>${count ? `<b aria-hidden="true">${count}</b>` : ''}</div>`;
+  }).join('');
+  return `<div class="game-calendar">
+    <div class="game-calendar-toolbar">
+      <button class="icon-btn game-calendar-nav" type="button" data-action="previous-game-calendar-month" aria-label="Попередній місяць" title="Попередній місяць">${gameCalendarChevron('previous')}</button>
+      <strong aria-live="polite">${esc(monthLabel)}</strong>
+      <button class="icon-btn game-calendar-nav" type="button" data-action="next-game-calendar-month" aria-label="Наступний місяць" title="Наступний місяць">${gameCalendarChevron('next')}</button>
+    </div>
+    <div class="game-calendar-weekdays" aria-hidden="true">${weekdays}</div>
+    <div class="game-calendar-grid" role="grid" aria-label="${esc(monthLabel)}">${cells}</div>
+  </div>`;
+}
+
 function homeView() {
-  const recent = finishedGames().slice(0, 5);
+  const finished = finishedGames();
+  const recent = finished.slice(0, 5);
   const active = activeGames();
   const stats = aggregateStats();
   return `<main class="page tab-page home-page">
@@ -996,12 +1293,14 @@ function homeView() {
       <div class="actions"><button class="btn primary" data-nav="setup">Створити гру</button><button class="btn secondary" data-nav="players">Додати гравців</button></div>
     </section>
     ${activeGamesPanel(active, true, 'homeActiveGames')}
+    ${gameChatsPanel()}
     <section class="stat-grid home-stat-grid">
       <article class="card stat-card"><b>${stats.games}</b><span>завершених ігор</span></article>
       <article class="card stat-card"><b>${app.players.length}</b><span>гравців у базі</span></article>
       <article class="card stat-card"><b>${stats.redWinRate}%</b><span>перемог міста</span></article>
-      <article class="card stat-card"><b>${formatDuration(stats.totalSeconds)}</b><span>за ігровим столом</span></article>
+      <article class="card stat-card"><b>${formatDuration(stats.averageSeconds)}</b><span>середній час гри</span></article>
     </section>
+    ${collapsiblePanel('homeGameCalendar', 'Календар ігор', '', gameCalendarHtml(finished), 'home-game-calendar-panel')}
     ${collapsiblePanel(
       'homeRecentGames',
       'Останні ігри',
@@ -1018,6 +1317,11 @@ function gameRow(game) {
   const winner = game.winner === 'red' ? 'Місто' : game.winner === 'black' ? 'Мафія' : game.winner === 'draw' ? 'Нічия' : 'Не визначено';
   const host = preferredGameHostName(game);
   return `<div class="list-row"><div class="list-main"><b>${esc(game.title)}</b><span>${formatDate(game.endedAt || game.updatedAt, true)} · ${formatDuration(game.durationSeconds)}${host ? ` · ведучий ${esc(host)}` : ''}</span></div><span class="badge ${game.winner === 'red' ? 'red' : ''}">${winner}</span></div>`;
+}
+
+function discussionButtonForGame(game, className = 'secondary') {
+  if (game?.status !== 'finished' || (!canManageGame(game) && !gameChatForGame(game.id))) return '';
+  return `<button class="btn ${className}" type="button" data-action="open-game-discussion" data-id="${esc(game.id)}">${discussionIcon()}<span>Обговорити гру</span></button>`;
 }
 
 function activeGamesPanel(active, refreshAction = false, collapsibleId = '') {
@@ -1037,6 +1341,25 @@ function activeGamesPanel(active, refreshAction = false, collapsibleId = '') {
   return `<section class="card card-pad active-games-panel"><div class="section-title section-heading">${titleHelp('h2', 'Активні ігри', explanation)}${refresh}</div>${content}</section>`;
 }
 
+function gameChatsPanel() {
+  const status = app.gameChatsState.status;
+  let content = app.gameChats.length
+    ? `<div class="game-chat-list">${app.gameChats.map(chat => `<article class="game-chat-row"><div class="game-chat-row-icon" aria-hidden="true">${discussionIcon()}</div><div class="game-chat-row-copy"><b>${esc(chat.gameTitle)}</b><span>${chat.status === 'active' ? 'Гра триває' : formatDate(chat.endedAt, true)}${chat.venue ? ` · ${esc(chat.venue)}` : ''} · ${chat.participantUids.length} учасн.</span></div>${chat.status === 'active' ? '<span class="badge green">Наживо</span>' : ''}<button class="btn small secondary" type="button" data-action="open-game-chat" data-id="${esc(chat.id)}">Відкрити</button></article>`).join('')}</div>`
+    : status === 'loading' || status === 'idle'
+      ? statePanel('loading', 'Завантажуємо чати…', 'Тут з’являться доступні обговорення активних і завершених ігор.', '', true)
+      : status === 'error'
+        ? statePanel('error', 'Чати тимчасово недоступні', app.gameChatsState.error, '<button class="btn small secondary" data-action="game-chats-refresh">Повторити</button>', true)
+        : statePanel('empty', 'Обговорень ще немає', 'Чат створиться автоматично разом із наступною грою.', '', true);
+  return collapsiblePanel(
+    'homeGameChats',
+    'Обговорення ігор',
+    'Чат створюється разом із грою. Під час гри він доступний ведучому, глядачам і гравцям, які вже вибули.',
+    content,
+    'game-chats-panel',
+    status === 'online' ? '<span class="badge green">Онлайн</span>' : ''
+  );
+}
+
 function activeGameRow(game) {
   const resumable = canManageGame(game) && (!game.publicOnly || ownsCloudGame(game));
   const host = preferredGameHostName(game);
@@ -1051,8 +1374,9 @@ function activeGameRow(game) {
 
 function playersView() {
   const query = app.search.trim().toLocaleLowerCase('uk');
-  const filteredPlayers = app.players.filter(player => !query || `${player.name} ${player.nickname || ''} ${player.email || ''} ${player.contact || ''} ${player.notes || ''}`.toLocaleLowerCase('uk').includes(query));
+  const filteredPlayers = app.players.filter(player => !query || `${player.name} ${player.nickname || ''} ${player.email || ''} ${player.contact || ''} ${player.notes || ''} ${player.telegramUsername || ''} ${player.telegramDisplayName || ''}`.toLocaleLowerCase('uk').includes(query));
   const gameCounts = new Map(filteredPlayers.map(player => [player.id, statsForPlayer(player.id).games]));
+  const playerRankings = new Map(sharedLeaderboard(finishedGames()).map(row => [row.key, row]));
   const onlinePlayerIds = new Set(filteredPlayers.filter(playerIsOnline).map(player => player.id));
   const players = sortDirectoryPlayers(filteredPlayers, { onlinePlayerIds, gameCounts });
   const cloudLabel = app.cloudDirectory.status === 'online'
@@ -1065,7 +1389,7 @@ function playersView() {
     ${statusStrip(app.cloudDirectory.status, cloudLabel, app.cloudDirectory.error, 'Ручні профілі синхронізуються для всіх користувачів. Автоматично згенеровані тимчасові прізвиська до каталогу не додаються.', '<button class="btn small secondary" data-action="cloud-refresh">Оновити</button>')}
     ${nextGameQueueView()}
     <div class="search-row"><input class="input" type="search" data-input="player-search" value="${esc(app.search)}" placeholder="Пошук за ім’ям, ніком, клубом або описом"><button class="btn secondary icon" data-action="new-player" aria-label="Додати гравця">+</button></div>
-    ${players.length ? `<section class="player-grid">${players.map(playerCard).join('')}</section>` : statePanel('empty', 'Нікого не знайдено', 'Змініть запит або додайте гравця.')}
+    ${players.length ? `<section class="player-grid">${players.map(player => playerCard(player, playerRankings.get(player.id))).join('')}</section>` : statePanel('empty', 'Нікого не знайдено', 'Змініть запит або додайте гравця.')}
     <div class="players-fab-group" role="group" aria-label="Швидкі дії гравців"><button class="mobile-fab primary-fab" type="button" data-action="new-player" aria-label="Додати гравця" title="Додати гравця">${addPlayerIcon()}</button><button class="mobile-fab danger-fab" type="button" data-action="prepare-next-game" aria-label="До розсадки" title="До розсадки">${seatingIcon()}</button></div>
   </main>`;
 }
@@ -1096,7 +1420,7 @@ function playerIsOnline(player) {
     : profileWasRecentlyActive(player.lastSeenAt);
 }
 
-function playerCard(player) {
+function playerCard(player, ranking = null) {
   const stats = statsForPlayer(player.id);
   const isGoogleProfile = Boolean(player.cloudUid);
   const isSharedManual = Boolean(player.cloudManualId);
@@ -1107,7 +1431,7 @@ function playerCard(player) {
   const profileLocked = profileIsInActiveGame(player.id);
   const online = playerIsOnline(player);
   const presence = isGoogleProfile
-    ? `<span class="badge presence-badge ${online ? 'online' : 'offline'}" data-presence="${online ? 'online' : 'offline'}" title="${online ? 'Активність протягом останніх двох хвилин' : 'Активності не було понад дві хвилини'}"><i aria-hidden="true"></i>${online ? 'Онлайн' : 'Офлайн'}</span>`
+    ? `<span class="badge presence-badge status-only ${online ? 'online' : 'offline'}" data-presence="${online ? 'online' : 'offline'}" role="img" aria-label="${online ? 'Онлайн' : 'Офлайн'}" title="${online ? 'Активність протягом останніх двох хвилин' : 'Активності не було понад дві хвилини'}"><i aria-hidden="true"></i></span>`
     : '';
   const lockedButton = '<button class="icon-btn player-edit" type="button" aria-label="Профіль заблоковано до завершення гри" title="Профіль зараз у грі" disabled>🔒</button>';
   const editButton = profileLocked
@@ -1120,11 +1444,11 @@ function playerCard(player) {
   const profileKind = player.linkAccepted
     ? '<span class="badge green">Google · об’єднано</span>'
     : isGoogleProfile
-      ? '<span class="badge green">Google · Enjoy</span>'
+      ? '<span class="badge green">Google</span>'
       : '<span class="guest-label">Гість</span>';
   return `<article class="card player-card ${isCloud ? 'cloud' : 'local'} ${isGoogleProfile ? 'google-profile' : ''}">
     <button class="player-avatar-button" type="button" data-action="open-player-avatar" data-id="${esc(player.id)}" aria-label="Відкрити велике фото ${esc(preferredPlayerName(player))}" title="Відкрити фото">${avatar(player)}</button>
-    <div class="player-card-copy"><div class="player-name-line"><h3>${esc(preferredPlayerName(player))}</h3>${club ? `<span class="player-club">${esc(club)}</span>` : ''}</div>${description ? `<p>${esc(description)}</p>` : ''}<div class="player-stats">${profileKind}${presence}${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span></div></div>
+    <div class="player-card-copy"><div class="player-name-line"><h3>${esc(preferredPlayerName(player))}</h3>${club ? `<span class="player-club">${esc(club)}</span>` : ''}</div>${description ? `<p>${esc(description)}</p>` : ''}<div class="player-stats">${profileKind}${presence}${telegramProfileBadge(player, { compact: true })}${!isGoogleProfile && player.email ? '<span class="badge gold">Очікує Google</span>' : ''}<span>${stats.games} ігор</span><span>${stats.winRate}% перемог</span><span class="player-rating-points" title="Рейтингові бали FIIM/MWT">${formatRatingPoints(ranking?.points)} балів</span></div></div>
     <div class="player-card-actions">${editButton}<button class="icon-btn player-stats-button" type="button" data-action="open-player-stats" data-id="${esc(player.id)}" aria-label="Статистика ${esc(preferredPlayerName(player))}" title="Персональна статистика">${playerStatsIcon()}</button><button class="queue-player-btn ${queued ? 'selected' : ''}" data-action="toggle-next-player" data-id="${esc(player.id)}" aria-label="${queued ? `Прибрати ${esc(preferredPlayerName(player))} зі складу наступної гри` : `Додати ${esc(preferredPlayerName(player))} до наступної гри`}" aria-pressed="${queued}"><span aria-hidden="true">${queued ? '✓' : '+'}</span>${queued ? `<small>${queueIndex + 1}</small>` : ''}</button></div>
   </article>`;
 }
@@ -1143,10 +1467,110 @@ function playerAvatarModalHtml() {
   </div></div>`;
 }
 
-function defaultGameTitle(date = new Date()) {
-  const gameDate = new Intl.DateTimeFormat('uk-UA', { day: '2-digit', month: '2-digit' }).format(date);
-  const gameTime = new Intl.DateTimeFormat('uk-UA', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
-  return `Мафія в Enjoy · ${gameDate} · ${gameTime}`;
+function availableVenues() {
+  const seen = new Set();
+  const venues = [BUILTIN_ENJOY_VENUE, ...app.venues].filter(venue => {
+    const name = String(venue?.name || '').trim().toLocaleLowerCase('uk');
+    const address = String(venue?.address || '').trim().toLocaleLowerCase('uk');
+    const key = `${name}|${address}`;
+    if (!name || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return filterVenues(venues);
+}
+
+function canAdministerVenues() {
+  return LOCAL_AUTH_TEST || isCommunityVenueAdmin(app.authUser);
+}
+
+function venueDirectoryManagementHtml() {
+  const venues = availableVenues();
+  const administrator = canAdministerVenues();
+  const status = app.venueDirectory.status === 'error'
+    ? statePanel('error', 'Каталог тимчасово недоступний', app.venueDirectory.error || 'Перевірте з’єднання з інтернетом.', '<button class="btn small secondary" type="button" data-action="retry-venue-directory">Повторити</button>', true)
+    : '';
+  const rows = venues.map(venue => {
+    const contacts = [venue.address, venue.phone].filter(Boolean);
+    const links = [
+      venue.googleMapsUrl ? `<a href="${esc(venue.googleMapsUrl)}" target="_blank" rel="noopener noreferrer">Google Maps ↗</a>` : '',
+      venue.website ? `<a href="${esc(venue.website)}" target="_blank" rel="noopener noreferrer">Сайт ↗</a>` : ''
+    ].filter(Boolean).join('');
+    const owner = venue.builtin ? '<span class="badge gold">Основне</span>' : venue.createdByName ? `<span>Додав: ${esc(venue.createdByName)}</span>` : '';
+    const deleteButton = administrator && !venue.builtin
+      ? `<button class="icon-btn settings-venue-delete" type="button" data-action="delete-venue" data-id="${esc(venue.id)}" aria-label="Видалити ${esc(venue.name)}" title="Видалити місце">${trashIcon()}</button>`
+      : '';
+    return `<article class="settings-venue-row"><div class="settings-venue-copy"><div class="settings-venue-name"><b>${esc(venue.name)}</b>${owner}</div>${contacts.length ? `<small>${esc(contacts.join(' · '))}</small>` : '<small>Контакти не вказано</small>'}${links ? `<div class="settings-venue-links">${links}</div>` : ''}</div>${deleteButton}</article>`;
+  }).join('');
+  return `<div class="settings-venue-directory">
+    <div class="settings-venue-toolbar"><div><b>Спільний каталог місць</b><small>Новий запис додається окремо й не замінює вже створені клуби.</small></div><button class="btn primary" type="button" data-action="open-settings-venue-create">+ Додати місце / клуб</button></div>
+    ${status}
+    <div class="settings-venue-list">${rows || statePanel('empty', 'Каталог порожній', 'Додайте перше місце або клуб.')}</div>
+    ${administrator ? '<p class="privacy-note settings-venue-admin-note">Ви адміністратор каталогу й можете видаляти користувацькі місця. Історичні ігри після видалення не змінюються.</p>' : ''}
+  </div>`;
+}
+
+function defaultGameTitle(date = new Date(), venueName = BUILTIN_ENJOY_VENUE.name) {
+  return gameTitleForVenue(venueName, date);
+}
+
+function setDraftVenue(venue) {
+  if (!app.draft) return;
+  const name = String(venue?.name || '').trim();
+  app.draft.venueId = String(venue?.id || '');
+  app.draft.venue = name;
+  app.draft.venueSearch = name;
+  app.draft.venuePickerOpen = false;
+  if (app.draft.autoTitle !== false) app.draft.title = defaultGameTitle(new Date(), name);
+}
+
+function focusVenueSearch() {
+  requestAnimationFrame(() => {
+    const search = $('[data-input="venue-search"]');
+    search?.focus();
+    search?.setSelectionRange(search.value.length, search.value.length);
+  });
+}
+
+function venuePickerHtml() {
+  const query = String(app.draft.venueSearch ?? app.draft.venue ?? '');
+  const open = Boolean(app.draft.venuePickerOpen);
+  const allVenues = availableVenues();
+  const venues = venuePickerOptions(allVenues, query, { open, selectedId: app.draft.venueId, selectedName: app.draft.venue });
+  const exact = allVenues.some(venue => venue.name.toLocaleLowerCase('uk') === query.trim().toLocaleLowerCase('uk'));
+  const options = venues.map(venue => `<button class="venue-option" type="button" role="option" data-action="select-game-venue" data-id="${esc(venue.id)}" aria-selected="${app.draft.venueId === venue.id}"><span><b>${esc(venue.name)}</b>${venue.address ? `<small>${esc(venue.address)}</small>` : ''}</span><span aria-hidden="true">›</span></button>`).join('');
+  const custom = query.trim() && !exact
+    ? `<button class="venue-option venue-option-custom" type="button" role="option" data-action="use-custom-game-venue"><span><b>Використати «${esc(query.trim())}»</b><small>Лише для цієї гри, без збереження в каталозі</small></span><span aria-hidden="true">+</span></button>`
+    : '';
+  const directoryStatus = app.venueDirectory.status === 'error'
+    ? `<small class="venue-directory-status error">${esc(app.venueDirectory.error)}</small>`
+    : '';
+  return `<div class="field venue-field"><label for="game-venue">Місце / клуб</label><div class="venue-picker"><div class="venue-picker-row"><input id="game-venue" class="input" type="search" data-input="venue-search" value="${esc(query)}" maxlength="60" placeholder="Пошук місця або клубу" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="venue-options" aria-expanded="${open}"><button class="btn small secondary venue-add-button" type="button" data-action="open-venue-create">+ Додати</button></div>${open ? `<div id="venue-options" class="venue-options" role="listbox">${options}${custom}${!options && !custom ? '<p class="venue-empty">Місць не знайдено</p>' : ''}</div>` : ''}</div>${directoryStatus}</div>`;
+}
+
+function focusProfileClubSearch() {
+  requestAnimationFrame(() => {
+    const search = $('[data-input="profile-club-search"]');
+    search?.focus();
+    search?.setSelectionRange(search.value.length, search.value.length);
+  });
+}
+
+function profileClubPickerHtml(profile) {
+  const query = String(app.modal?.profileDraft?.clubSearch ?? profile.club ?? '');
+  const open = Boolean(app.modal?.profileDraft?.clubPickerOpen);
+  const allVenues = availableVenues();
+  const selectedId = app.modal?.profileDraft?.clubSearchDirty ? '' : 'selected-profile-club';
+  const venues = venuePickerOptions(allVenues, query, { open, selectedId, selectedName: app.modal?.profileDraft?.club || profile.club });
+  const exact = allVenues.some(venue => venue.name.toLocaleLowerCase('uk') === query.trim().toLocaleLowerCase('uk'));
+  const options = venues.map(venue => `<button class="venue-option" type="button" role="option" data-action="select-profile-club" data-id="${esc(venue.id)}" aria-selected="${String(profile.club || '').trim().toLocaleLowerCase('uk') === venue.name.toLocaleLowerCase('uk')}"><span><b>${esc(venue.name)}</b>${venue.address ? `<small>${esc(venue.address)}</small>` : ''}</span><span aria-hidden="true">›</span></button>`).join('');
+  const custom = query.trim() && !exact
+    ? `<button class="venue-option venue-option-custom" type="button" role="option" data-action="use-custom-profile-club"><span><b>Використати «${esc(query.trim())}»</b><small>Зберегти назву лише у профілі</small></span><span aria-hidden="true">+</span></button>`
+    : '';
+  const directoryStatus = app.venueDirectory.status === 'error'
+    ? `<small class="venue-directory-status error">${esc(app.venueDirectory.error)}</small>`
+    : '';
+  return `<div class="field venue-field profile-club-field"><label for="host-club">Клуб або організація</label><div class="venue-picker"><div class="venue-picker-row"><input id="host-club" class="input" type="search" name="club" data-input="profile-club-search" value="${esc(query)}" maxlength="60" placeholder="Пошук місця або клубу" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="profile-club-options" aria-expanded="${open}"><button class="btn small secondary venue-add-button" type="button" data-action="open-profile-club-create">+ Додати</button></div>${open ? `<div id="profile-club-options" class="venue-options" role="listbox">${options}${custom}${!options && !custom ? '<p class="venue-empty">Місць не знайдено</p>' : ''}</div>` : ''}</div>${directoryStatus}</div>`;
 }
 
 function createDraft() {
@@ -1155,10 +1579,54 @@ function createDraft() {
     : app.players.length >= TABLE_SIZE ? shuffled(app.players).slice(0, TABLE_SIZE) : [];
   return {
     title: defaultGameTitle(), autoTitle: true,
-    venue: ENJOY_CAFE.venue, notes: '',
-    settings: { ...app.settings },
+    venue: BUILTIN_ENJOY_VENUE.name,
+    venueId: BUILTIN_ENJOY_VENUE.id,
+    venueSearch: BUILTIN_ENJOY_VENUE.name,
+    venuePickerOpen: false,
+    notes: '',
+    settings: { ...app.settings, music: normalizeGameMusicSettings(app.settings.music) },
     seats: draftSeatsForPlayers(selectedPlayers)
   };
+}
+
+function setupMusicCueHtml(cue, settings) {
+  const choice = settings[cue.id];
+  const custom = setupMusicFiles.get(cue.id);
+  const customValue = customMusicChoice(cue.id);
+  const options = BUILTIN_GAME_TRACKS.map(track => `<option value="${track.id}" ${choice === track.id ? 'selected' : ''}>${esc(track.label)}</option>`).join('');
+  const customLabel = custom ? `Власний файл · ${custom.name}` : 'Власний файл із пристрою';
+  const customMissing = choice === customValue && !custom;
+  const inputId = `setup-music-file-${cue.id}`;
+  const previewPlaying = app.media.playing && app.media.cue === cue.id;
+  return `<article class="setup-music-cue" data-music-cue-card="${cue.id}">
+    <div class="setup-music-cue-copy"><b>${esc(cue.label)}</b><small>${esc(cue.description)}</small></div>
+    <div class="field"><label for="setup-music-choice-${cue.id}">Мелодія</label><select id="setup-music-choice-${cue.id}" class="select" data-input="setup-music-choice" data-music-cue="${cue.id}">${options}<option value="${customValue}" ${choice === customValue ? 'selected' : ''}>${esc(customLabel)}</option></select></div>
+    <div class="setup-music-actions" role="group" aria-label="Керування мелодією ${esc(cue.label)}"><button class="btn small secondary" type="button" data-action="preview-setup-music" data-music-cue="${cue.id}" aria-label="Прослухати" title="Прослухати">${headerControlIcon('play')}</button><button class="btn small secondary setup-music-pause-action" type="button" data-action="pause-setup-music" data-music-cue="${cue.id}" aria-label="Пауза" title="Пауза" ${previewPlaying ? '' : 'disabled'}>${headerControlIcon('pause')}</button><button class="btn small secondary setup-music-file-button" type="button" data-action="choose-setup-music-file" data-music-cue="${cue.id}" aria-label="Файл з пристрою" title="Файл з пристрою">${headerControlIcon('file')}</button></div>
+    <input id="${inputId}" class="visually-hidden" type="file" accept="audio/*" data-input="setup-music-file" data-music-cue="${cue.id}">
+    ${customMissing ? '<small class="setup-music-warning">Після перезавантаження виберіть файл повторно. До цього гратиме вбудована мелодія.</small>' : custom ? `<small class="setup-music-local">${esc(custom.name)} · лише на цьому пристрої</small>` : ''}
+  </article>`;
+}
+
+function setupMusicHtml() {
+  const settings = normalizeGameMusicSettings(app.draft.settings.music);
+  app.draft.settings.music = settings;
+  return `<div class="setup-music-stack">
+    <div class="toggle-row setup-music-toggle"><span><b>Автоматична музика</b><small>Вмикає потрібну мелодію на відповідному етапі гри та вимикає її вдень.</small></span><button class="switch ${settings.enabled ? 'on' : ''}" type="button" data-action="toggle-draft-music" role="switch" aria-checked="${settings.enabled}" aria-label="Автоматична музика"></button></div>
+    <div class="setup-music-device-controls">
+      <div class="toggle-row setup-music-toggle"><span><b>Звукові сигнали таймера</b><small>Попереджають про завершення часу промови або іншої дії.</small></span><button class="switch ${app.settings.sound ? 'on' : ''}" type="button" data-action="setting-sound" role="switch" aria-checked="${app.settings.sound}" aria-label="Звукові сигнали таймера"></button></div>
+      <div class="toggle-row setup-music-toggle"><span><b>Вібрація важливих дій</b><small>Підтверджує ключові натискання та важливі події під час гри.</small></span><button class="switch ${app.settings.haptics ? 'on' : ''}" type="button" data-action="setting-haptics" role="switch" aria-checked="${app.settings.haptics}" aria-label="Вібрація важливих дій"></button></div>
+    </div>
+    <div class="setup-music-grid">${GAME_MUSIC_CUES.map(cue => setupMusicCueHtml(cue, settings)).join('')}</div>
+    <p class="privacy-note setup-music-note">Власні файли не завантажуються в мережу й доступні до закриття вкладки. Після перезавантаження застосунок тимчасово використає вбудовану мелодію, доки ви знову не оберете файл.</p>
+  </div>`;
+}
+
+function ratingRulesHtml() {
+  return `<div class="rating-rules-card"><h3>Рейтингові коригування FIIM/MWT</h3><ul><li><b>Штраф −0,3 або −0,5</b> ведучий обирає за дію, що негативно вплинула на хід гри.</li><li><b>Дискваліфікація −0,8</b> позначається окремим прапорцем і не залежить від причини вибуття.</li><li><b>Фінальний бал</b> — сума бала за результат, бонусу за «Кращий хід», штрафу та дискваліфікації.</li></ul><p>Прапорець дискваліфікації автоматично вмикається після четвертого фолу, але ведучий може змінити його окремо.</p></div>`;
+}
+
+function rulesLinksHtml() {
+  return `<div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a><a class="btn secondary" href="${RULES_LINKS.scoring}" target="_blank" rel="noopener noreferrer">Система балів FIIM/MWT</a></div>`;
 }
 
 function setupView() {
@@ -1173,13 +1641,13 @@ function setupView() {
     <div class="setup-grid">
       ${collapsiblePanel('setupGame', 'Гра', 'Назва гри потрапить до спільного архіву після завершення.', `<div class="stack">
         <div class="field"><label for="game-title">Назва</label><input id="game-title" class="input" data-draft="title" value="${esc(app.draft.title)}" maxlength="80"></div>
-        <div class="field"><label for="game-venue">Місце / клуб</label><input id="game-venue" class="input" data-draft="venue" value="${esc(app.draft.venue)}" maxlength="100" placeholder="Необов’язково"></div>
+        ${venuePickerHtml()}
         <div class="field"><label for="game-notes">Нотатка ведучого</label><textarea id="game-notes" class="textarea" data-draft="notes" maxlength="500" placeholder="Турнір, номер столу, особливі умови…">${esc(app.draft.notes)}</textarea></div>
       </div>`)}
       ${collapsiblePanel('setupTimers', 'Правила й таймери', 'Ці значення можна змінити й під час гри.', `
         <div class="setup-options">
           ${numberField('Промова, сек', 'speech', app.draft.settings.speech, 'Основний час промови гравця.')}
-          ${numberField('Автокатастрофа, сек', 'tieSpeech', app.draft.settings.tieSpeech, 'Додаткова промова кандидатів після нічиєї.')}
+          ${numberField('Попіл, сек', 'tieSpeech', app.draft.settings.tieSpeech, 'Додаткова промова кандидатів після нічиєї.')}
           ${numberField('Останнє слово, сек', 'lastWord', app.draft.settings.lastWord, 'Час гравця, який залишає стіл.')}
           ${numberField('Нічна дія, сек', 'nightCheck', app.draft.settings.nightCheck, 'Час на постріл або одну перевірку Дона чи Шерифа.')}
           ${numberField('Знайомство мафії, сек', 'mafiaMeet', app.draft.settings.mafiaMeet, 'У нульову ніч Дон представляється команді та задає порядок відстрілу.')}
@@ -1191,8 +1659,9 @@ function setupView() {
         <div class="field"><label>${help('Система фолів', FOUL_SYSTEM_HELP)}</label><select class="select" data-draft-setting="penaltyMode"><option value="tournament" ${app.draft.settings.penaltyMode === 'tournament' ? 'selected' : ''}>Турнірна</option><option value="club" ${app.draft.settings.penaltyMode === 'club' ? 'selected' : ''}>Клубна</option></select></div>
       `)}
     </div>
-    ${collapsiblePanel('setupSeating', 'Розсадка', seatingHelp, `<div class="actions panel-actions"><div class="setup-deal-action"><div class="setup-deal-caption"><span>Спосіб роздачі ролей</span>${helpIcon('За обраною цифрою: гравці по черзі жестом показують число в межах карт, що залишилися, а суддя відкриває відповідну карту. Якщо число завелике — гравець обирає повторно; остання карта видається автоматично.', 'Пояснення: Спосіб роздачі ролей')}</div><select class="select" data-draft-setting="dealMode" aria-label="Спосіб роздачі ролей"><option value="number" ${app.draft.settings.dealMode !== 'automatic' ? 'selected' : ''}>За обраною цифрою</option><option value="automatic" ${app.draft.settings.dealMode === 'automatic' ? 'selected' : ''}>Автоматично</option></select></div><button class="btn small secondary setup-random-action" data-action="shuffle-seats">${randomActionIcon('shuffle')}<span>Перемішати місця</span></button></div><div class="seat-setup">${app.draft.seats.map(setupSeat).join('')}</div><div class="actions panel-footer-actions"><button class="btn secondary" data-action="new-player">+ Новий профіль</button><button class="btn danger" data-action="start-game">Роздати ролі</button></div>`, 'setup-seating-panel')}
-    ${collapsiblePanel('setupRules', 'Правила спортивної «Мафії»', 'Регламент, жести ведучого та турнірні процедури. Перед турніром звіряйте редакцію з регламентом організатора.', `<div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div>`, 'setup-rules-panel')}
+    ${collapsiblePanel('setupMusic', 'Музика гри', 'Автоматизація фонової музики під час роздачі ролей, нульової ночі, нічних дій та оголошення результату.', setupMusicHtml(), 'setup-music-panel', `<span class="badge ${app.draft.settings.music.enabled ? 'green' : ''}">${app.draft.settings.music.enabled ? 'Увімкнено' : 'Вимкнено'}</span>`)}
+    ${collapsiblePanel('setupSeating', 'Розсадка', seatingHelp, `<div class="actions panel-actions"><div class="setup-deal-action"><div class="setup-deal-caption"><span>Спосіб роздачі ролей</span>${helpIcon('За обраною цифрою: гравці по черзі жестом показують число в межах карт, що залишилися, а суддя відкриває відповідну карту. Якщо число завелике — гравець обирає повторно; остання карта видається автоматично.', 'Пояснення: Спосіб роздачі ролей')}</div><select class="select" data-draft-setting="dealMode" aria-label="Спосіб роздачі ролей"><option value="number" ${app.draft.settings.dealMode !== 'automatic' ? 'selected' : ''}>За обраною цифрою</option><option value="automatic" ${app.draft.settings.dealMode === 'automatic' ? 'selected' : ''}>Автоматично</option></select></div><div class="setup-seating-actions"><button class="btn small secondary setup-random-action" data-action="shuffle-seats">${randomActionIcon('shuffle')}<span>Перемішати місця</span></button><button class="icon-btn setup-clear-seating-action" type="button" data-action="clear-setup-seats" aria-label="Очистити розсадку" title="Очистити розсадку">${clearSeatingIcon()}</button></div></div><div class="seat-setup">${app.draft.seats.map(setupSeat).join('')}</div><div class="actions panel-footer-actions"><button class="btn secondary" data-action="new-player">+ Новий профіль</button><button class="btn danger" data-action="start-game">Роздати ролі</button></div>`, 'setup-seating-panel')}
+    ${collapsiblePanel('setupRules', 'Правила спортивної «Мафії»', 'Регламент, жести ведучого, рейтинг і турнірні процедури. Перед турніром звіряйте редакцію з регламентом організатора.', `${ratingRulesHtml()}${rulesLinksHtml()}`, 'setup-rules-panel')}
     <div class="setup-fab-group" role="group" aria-label="Дії нової гри"><button class="mobile-fab primary-fab" type="button" data-action="new-player" aria-label="Додати гравця" title="Додати гравця">${addPlayerIcon()}</button><button class="mobile-fab danger-fab" type="button" data-action="start-game" aria-label="Роздати ролі" title="Роздати ролі">${dealRolesIcon()}</button></div>
   </main>`;
 }
@@ -1219,59 +1688,128 @@ function draftSeatLabel(seat) {
   return preferredPlayerName(playerById(seat?.profileId)) || String(seat?.name || '').trim() || 'Тимчасовий гравець';
 }
 
-function aggregateStats() {
-  const games = finishedGames();
-  const totalSeconds = games.reduce((sum, game) => sum + (game.durationSeconds || 0), 0);
-  const redWins = games.filter(game => game.winner === 'red').length;
-  const blackWins = games.filter(game => game.winner === 'black').length;
-  const redWinRate = games.length ? Math.round(redWins / games.length * 100) : 0;
-  return { games: games.length, totalSeconds, redWinRate, blackWinRate: games.length ? Math.round(blackWins / games.length * 100) : 0 };
+function sharedLeaderboard(games) {
+  return mafiaPlayerRankings(
+    games,
+    playerById,
+    { excludeUnknownProfiles: true }
+  );
 }
 
-function sharedLeaderboard(games) {
-  const rows = new Map();
-  games.forEach(game => game.seats.forEach(seat => {
-    const key = seat.profileId || `guest:${seat.name.toLocaleLowerCase('uk')}`;
-    const known = seat.profileId ? playerById(seat.profileId) : null;
-    const row = rows.get(key) || {
-      player: known || { id: key, name: seat.name, avatar: seat.avatar || '' },
-      games: 0,
-      wins: 0,
-      winRate: 0
-    };
-    row.games += 1;
-    if (game.winner && game.winner === teamOf(seat)) row.wins += 1;
-    row.winRate = Math.round(row.wins / row.games * 100);
-    rows.set(key, row);
-  }));
-  return [...rows.values()].sort((a, b) => b.wins - a.wins || b.winRate - a.winRate || b.games - a.games).slice(0, 10);
+function statisticsPeriodPicker() {
+  const periods = [
+    { key: 'all', label: 'Увесь час' },
+    { key: '30d', label: '30 днів' },
+    { key: '90d', label: '90 днів' },
+    { key: '365d', label: '12 місяців' }
+  ];
+  return `<section class="card stats-period-bar"><div><span class="eyebrow">Період аналізу</span><b>${esc(periods.find(period => period.key === app.statsPeriod)?.label || periods[0].label)}</b></div><div class="stats-period-options" role="group" aria-label="Період статистики">${periods.map(period => `<button class="btn small ${app.statsPeriod === period.key ? 'primary' : 'secondary'}" type="button" data-action="set-stats-period" data-stats-period="${period.key}" aria-pressed="${app.statsPeriod === period.key}">${period.label}</button>`).join('')}</div></section>`;
+}
+
+function formatStatisticsDuration(seconds) {
+  return seconds > 0 ? formatDuration(seconds) : '—';
+}
+
+function formatStatisticsGap(seconds) {
+  if (!(seconds > 0)) return '—';
+  const hours = Math.round(seconds / 3600);
+  if (hours < 48) return formatDuration(seconds);
+  const days = Math.floor(hours / 24);
+  const remainder = hours % 24;
+  return `${days} дн${remainder ? ` ${remainder} год` : ''}`;
+}
+
+function statisticsDelta(value) {
+  if (!value) return '<span class="stats-delta neutral">без змін</span>';
+  return `<span class="stats-delta ${value > 0 ? 'positive' : 'negative'}">${value > 0 ? '+' : '−'}${Math.abs(value)}</span>`;
+}
+
+function statisticsMonthLabel(item) {
+  return new Intl.DateTimeFormat(languageLocale(app.settings.language), { month: 'short', year: '2-digit' })
+    .format(new Date(item.year, item.month, 1));
+}
+
+function statisticsWeekdayLabel(index) {
+  if (!Number.isInteger(index)) return '—';
+  const referenceSunday = new Date(2026, 7, 16);
+  referenceSunday.setDate(referenceSunday.getDate() + index);
+  return new Intl.DateTimeFormat(languageLocale(app.settings.language), { weekday: 'long' }).format(referenceSunday);
+}
+
+function statisticsStartWindowLabel(index) {
+  return ['00:00–05:59', '06:00–11:59', '12:00–17:59', '18:00–23:59'][index] || '—';
+}
+
+function statisticsMetric(value, label) {
+  return `<article class="stats-mini-card"><b>${value}</b><span>${label}</span></article>`;
+}
+
+function statisticsPhaseRow(label, detail, phase) {
+  return `<div class="stats-phase-row"><div><b>${label}</b><span>${detail}</span></div><strong>${formatStatisticsDuration(phase.averageSeconds)}</strong><small>${phase.samples ? `${phase.samples} вимір.` : 'немає міток'}</small></div>`;
 }
 
 function statsView() {
-  const games = finishedGames();
+  const allGames = finishedGames();
+  const games = filterGamesByPeriod(allGames, app.statsPeriod);
   const active = activeGames();
-  const aggregate = aggregateStats();
+  const statistics = buildGameStatistics(games);
+  const aggregate = statistics.summary;
+  const activity = gameActivityComparison(allGames);
   const leaderboard = sharedLeaderboard(games);
   const roles = ['citizen', 'sheriff', 'mafia', 'don'].map(key => {
     const appearances = games.flatMap(game => game.seats.map(seat => ({ game, seat }))).filter(item => item.seat.role === key);
     const wins = appearances.filter(item => item.game.winner === teamOf(item.seat)).length;
     return { label: ROLE_DECK.find(role => role.key === key)?.label || key, games: appearances.length, rate: appearances.length ? Math.round(wins / appearances.length * 100) : 0 };
   });
+  const maximumMonthGames = Math.max(1, ...statistics.months.map(month => month.games));
+  const timePanel = `<div class="stats-detail-grid">
+    ${statisticsMetric(formatStatisticsDuration(aggregate.medianSeconds), 'медіанний час')}
+    ${statisticsMetric(formatStatisticsDuration(aggregate.shortestSeconds), 'найкоротша гра')}
+    ${statisticsMetric(formatStatisticsDuration(aggregate.longestSeconds), 'найдовша гра')}
+    ${statisticsMetric(formatStatisticsGap(statistics.cadence.averageGapSeconds), 'середній інтервал між стартами')}
+  </div><div class="stats-subheading"><b>Фази за протоколом</b><span>Ураховано лише відрізки з повними часовими мітками</span></div><div class="stats-phase-list">
+    ${statisticsPhaseRow('Підготовка столу', 'від створення гри до першого дня', statistics.phases.setup)}
+    ${statisticsPhaseRow('Ігровий день', 'від початку дня до оголошення ночі', statistics.phases.day)}
+    ${statisticsPhaseRow('Ніч', 'від оголошення ночі до наступного дня або фінішу', statistics.phases.night)}
+  </div>`;
+  const activityPanel = `<div class="stats-compare-grid">
+    <article><span>Останні 7 днів</span><b>${activity.current7} ігор</b>${statisticsDelta(activity.delta7)}<small>попередні 7: ${activity.previous7}</small></article>
+    <article><span>Останні 30 днів</span><b>${activity.current30} ігор</b>${statisticsDelta(activity.delta30)}<small>попередні 30: ${activity.previous30}</small></article>
+    <article><span>Середній фінальний день</span><b>${aggregate.averageDays || '—'}</b><small>максимальний: ${aggregate.maxDays || '—'}</small></article>
+    <article><span>Найдовша пауза між стартами</span><b>${formatStatisticsGap(statistics.cadence.maxGapSeconds)}</b><small>${statistics.cadence.gapSamples} інтерв.</small></article>
+  </div><div class="stats-subheading"><b>Динаміка за 6 місяців</b><span>кількість завершених ігор</span></div><div class="bar-chart stats-month-chart">${statistics.months.map(month => `<div class="bar-row"><span>${esc(statisticsMonthLabel(month))}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round(month.games / maximumMonthGames * 100)}%"></div></div><span class="bar-value">${month.games}</span></div>`).join('')}</div>`;
+  const venuesPanel = `<div class="stats-detail-grid stats-schedule-grid">
+    ${statisticsMetric(statisticsWeekdayLabel(statistics.cadence.peakWeekday), 'найактивніший день тижня')}
+    ${statisticsMetric(statisticsStartWindowLabel(statistics.cadence.peakStartWindow), 'найчастіший час старту')}
+    ${statisticsMetric(aggregate.uniqueVenues, 'місць / клубів')}
+    ${statisticsMetric(aggregate.averageFaults, 'фолів у середньому за гру')}
+    ${statisticsMetric(aggregate.disqualifications, 'позначених дискваліфікацій')}
+  </div><div class="stats-subheading"><b>Результати за місцями</b><span>перші 5 за кількістю ігор</span></div>${statistics.venues.length ? `<div class="list stats-venue-list">${statistics.venues.slice(0, 5).map(venue => `<div class="list-row"><div class="list-main"><b>${esc(venue.name)}</b><span>${venue.games} ігор · ${formatStatisticsDuration(venue.averageSeconds)} у середньому${venue.draws ? ` · нічиї: ${venue.draws}` : ''}</span></div><div class="stats-venue-results"><span class="badge red">Місто ${venue.redWinRate}%</span><span class="badge">Мафія ${venue.blackWinRate}%</span></div></div>`).join('')}</div>` : statePanel('empty', 'Місця ще не вказували', 'Оберіть місце або клуб у налаштуваннях нової гри.', '', true)}`;
   return `<main class="page tab-page">
-    ${pageHeader('Статистика', 'Активні ігри та спільні результати завершених ігор усіх ведучих.', '<button class="btn small secondary" data-action="cloud-games-refresh">Оновити</button>')}
-    ${statusStrip(app.cloudArchive.status, archiveStatusText(), app.cloudArchive.error, `${active.length} активних і ${games.length} завершених ігор доступно всім авторизованим учасникам.`)}
+    ${pageHeader('Статистика', 'Результати, темп, фази, активність, місця та рейтинг завершених ігор усіх ведучих.', '<button class="btn small secondary" data-action="cloud-games-refresh">Оновити</button>')}
+    ${statusStrip(app.cloudArchive.status, archiveStatusText(), app.cloudArchive.error, `${active.length} активних і ${allGames.length} завершених ігор доступно всім авторизованим учасникам.`)}
     ${activeGamesPanel(active, false, 'statsActiveGames')}
-    <section class="stat-grid stats-summary-grid">
+    ${statisticsPeriodPicker()}
+    ${collapsiblePanel('statsSummary', 'Ключові показники', 'Числовий підсумок за вибраний період можна сховати або розгорнути цією кнопкою.', `<section class="stat-grid stats-summary-grid">
       <article class="card stat-card"><b>${aggregate.games}</b><span>ігор</span></article>
       <article class="card stat-card"><b>${aggregate.redWinRate}%</b><span>перемог міста</span></article>
       <article class="card stat-card"><b>${aggregate.blackWinRate}%</b><span>перемог мафії</span></article>
+      <article class="card stat-card"><b>${aggregate.drawRate}%</b><span>нічиїх</span></article>
+      <article class="card stat-card"><b>${formatStatisticsDuration(aggregate.averageSeconds)}</b><span>середній час гри</span></article>
       <article class="card stat-card"><b>${formatDuration(aggregate.totalSeconds)}</b><span>загальний час</span></article>
-    </section>
+      <article class="card stat-card"><b>${aggregate.maxDays || '—'}</b><span>максимальний ігровий день</span></article>
+      <article class="card stat-card"><b>${aggregate.uniquePlayers}</b><span>унікальних гравців</span></article>
+    </section>`, 'stats-summary-panel')}
+    <div class="grid two stats-analysis-panels">
+      ${collapsiblePanel('statsTime', 'Час і темп гри', 'Тривалість і фазові відрізки обчислюються з фактичних часових міток протоколу. Старі ігри без міток не спотворюють середні значення.', timePanel)}
+      ${collapsiblePanel('statsActivity', 'Активність і динаміка', 'Порівняння останніх періодів, ігрові дні та частота проведення столів.', activityPanel)}
+    </div>
+    ${collapsiblePanel('statsVenues', 'Місця, розклад і дисципліна', 'Зріз за клубами, типовим часом старту та зафіксованими фолами у вибраному періоді.', venuesPanel)}
     <div class="grid two stats-panels">
       ${collapsiblePanel('statsRoles', 'Результативність ролей', 'Показано частку перемог команди гравця для кожної ролі.', `<div class="bar-chart">${roles.map(role => `<div class="bar-row"><span>${esc(role.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${role.rate}%"></div></div><span class="bar-value">${role.rate}%</span></div>`).join('')}</div>`)}
-      ${collapsiblePanel('statsPlayers', 'Гравці', 'Рейтинг упорядковано за кількістю перемог.', leaderboard.length ? `<div class="list">${leaderboard.map((row, index) => `<div class="list-row"><div style="display:flex;align-items:center;gap:9px"><b class="muted">${index + 1}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог</span></div></div><b>${row.wins}</b></div>`).join('')}</div>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.'))}
+      ${collapsiblePanel('statsPlayers', 'Рейтинг гравців', 'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; штраф −0,3/−0,5 за негативний вплив на гру; −0,8 за окремо позначену дискваліфікацію незалежно від причини. Фінальний бал — сума всіх цих складових. КР — сума балів останніх 100 ігор, поділена на 100.', leaderboard.length ? `<div class="list player-ranking-list">${leaderboard.map(row => `<div class="list-row player-ranking-row"><div class="player-ranking-person"><b class="ranking-place" aria-label="Ранг ${row.rank}">#${row.rank}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог · КР ${formatRatingCoefficient(row.coefficient)}</span></div></div><div class="ranking-score"><b>${formatRatingPoints(row.points)}</b><span>балів</span></div></div>`).join('')}</div><a class="ranking-method-link" href="${RULES_LINKS.scoring}" target="_blank" rel="noopener noreferrer">Методика FIIM/MWT ↗</a>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.'))}
     </div>
-    ${collapsiblePanel('statsArchiveGames', 'Спільний архів ігор', 'Протоколи та анонімні оцінки синхронізуються між пристроями. Розподіл відповідей відкривається після трьох оцінок.', games.length ? `<div class="list archive-games-list">${games.map(game => `<article class="archive-game-entry">${gameRow(game)}${archiveGameFeedbackHtml(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div></article>`).join('')}</div>` : statePanel('empty', 'Архів ігор порожній', 'Завершені ігри з’являться тут автоматично.'))}
+    ${collapsiblePanel('statsArchiveGames', 'Спільний архів ігор', 'Протоколи, чати та анонімні оцінки синхронізуються між пристроями. Архів також враховує вибраний період; розподіл відповідей відкривається після трьох оцінок.', games.length ? `<div class="list archive-games-list">${games.map(game => `<article class="archive-game-entry">${gameRow(game)}${archiveGameFeedbackHtml(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${discussionButtonForGame(game, 'small secondary')}${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div></article>`).join('')}</div>` : statePanel('empty', 'За цей період ігор немає', 'Оберіть довший період або завершіть нову гру.'))}
   </main>`;
 }
 
@@ -1310,7 +1848,7 @@ function settingsView() {
       <section class="card card-pad">
         <div class="section-title section-heading">${titleHelp('h2', 'Профіль Enjoy', 'Google-акаунт і спільний каталог гравців. Email приватний. Email ручного профілю використовується лише для запрошення на об’єднання і доступний цьому ведучому та відповідному підтвердженому Google-акаунту. Ім’я, нікнейм, клуб, опис і вибраний аватар синхронізуються у каталозі.')}<span class="badge ${app.cloudDirectory.status === 'online' ? 'green' : ''}">${esc(directoryStatus)}</span></div>
         <div class="settings-profile-layout">
-          <div class="host-profile-summary">${hostAvatar('large')}<div><h3>${esc(app.hostProfile?.displayName || app.authUser?.googleName || 'Ведучий')}</h3><p>${esc(app.authUser?.email || '')}</p><div class="host-profile-badges">${app.hostProfile?.club ? `<span class="badge gold">${esc(app.hostProfile.club)}</span>` : ''}${profilePhotoSyncHtml()}</div></div></div>
+          <div class="host-profile-summary">${hostAvatar('large')}<div><h3>${esc(app.hostProfile?.displayName || app.authUser?.googleName || 'Ведучий')}</h3><p>${esc(app.authUser?.email || '')}</p><div class="host-profile-badges">${app.hostProfile?.club ? `<span class="badge gold">${esc(app.hostProfile.club)}</span>` : ''}${telegramProfileBadge(app.hostProfile, { compact: true })}${profilePhotoSyncHtml()}</div></div></div>
           <div class="actions profile-actions"><button class="btn secondary" data-action="edit-host-profile">Редагувати</button><button class="icon-btn profile-stats-shortcut" type="button" data-action="open-player-stats" data-id="google_${esc(app.authUser?.uid || '')}" aria-label="Моя статистика" title="Моя статистика">${playerStatsIcon()}</button><button class="btn secondary" data-action="auth-signout">Вийти</button><button class="icon-btn account-delete-btn" type="button" data-action="delete-account" aria-label="Видалити профіль Mafia" title="Видалити профіль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/></svg></button></div>
         </div>
       </section>
@@ -1334,11 +1872,26 @@ function settingsView() {
         </div>
       </section>
     </div>
+    ${collapsiblePanel(
+      'settingsVenues',
+      'Місця та клуби',
+      'Спільний каталог доступний усім авторизованим користувачам. Кожне збереження створює окреме місце; адміністратор може прибрати помилковий або застарілий запис.',
+      venueDirectoryManagementHtml(),
+      'settings-venues-panel',
+      `<span class="badge">${availableVenues().length}</span>`
+    )}
     <section class="card card-pad">
       <div class="section-title section-heading">${titleHelp('h2', 'Резервна копія Google Drive', `Остання синхронізація: ${lastSync}. Окремий дозвіл drive.appdata надається лише після команди підключення; застосунок не бачить звичайні файли користувача.`)}<span class="badge ${drive.connected ? 'green' : ''}">${drive.connected ? 'Підключено' : 'Не підключено'}</span></div>
       <div class="actions drive-actions">${drive.connected ? '<button class="btn primary" data-action="cloud-push">Зберегти у Drive</button><button class="btn secondary" data-action="cloud-pull">Відновити з Drive</button><button class="btn secondary" data-action="drive-disconnect">Відключити Drive</button>' : '<button class="btn primary" data-action="drive-connect">Увімкнути резервну копію</button>'}</div>
     </section>
-    <section class="card card-pad"><div class="section-title section-heading">${titleHelp('h2', 'Про застосунок', 'Версія 3.1 · Enjoy Editorial. Створено для мафія-спільноти кав’ярні Enjoy. PWA працює на GitHub Pages і кешує оболонку, Google-сесію, профілі та спільний архів для офлайн-запуску після першого входу.')}</div><div class="divider"></div><div class="section-title section-heading rules-title">${titleHelp('h3', 'Правила спортивної «Мафії»', 'Тут доступні регламент, жести ведучого та турнірні процедури. Основне посилання веде на актуальні правила iMafia українською; перед турніром звіряйте редакцію з регламентом організатора.')}</div><div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div></section>
+    <section class="card card-pad"><div class="section-title section-heading rules-title">${titleHelp('h2', 'Правила спортивної «Мафії»', 'Тут доступні регламент, жести ведучого, методика рейтингу та турнірні процедури. Перед турніром звіряйте редакцію з регламентом організатора.')}</div>${ratingRulesHtml()}${rulesLinksHtml()}</section>
+    ${collapsiblePanel(
+      'settingsAbout',
+      'Про застосунок',
+      '',
+      `<div class="about-app-copy"><p><strong>Поточна версія: PWA v${PWA_VERSION}.</strong> Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.</p><p>Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.</p></div>`,
+      'settings-about-panel'
+    )}
   </main>`;
 }
 
@@ -1397,7 +1950,7 @@ function phaseLabel(game = app.game) {
   if (!game) return 'Немає гри';
   const labels = {
     reveal: 'Роздача ролей', zeroNight: 'Нульова ніч', day: `День ${game.day}`,
-    vote: `Голосування · день ${game.day}`, tieSpeech: 'Автокатастрофа · промови', tieVote: 'Автокатастрофа · голосування',
+    vote: `Голосування · день ${game.day}`, tieSpeech: 'Попіл · промови', tieVote: 'Попіл · голосування',
     allTie: 'Вихід усіх кандидатів', lastWord: 'Останнє слово', bestMove: 'Кращий хід', night: `Ніч ${game.day}`, finished: 'Гру завершено'
   };
   return labels[game.phase] || game.phase;
@@ -1555,7 +2108,7 @@ function voteControlHtml() {
 function tieSpeechHtml() {
   const number = app.game.vote.tied[app.game.speakerIndex];
   const seat = seatByNo(number);
-  return `<section class="card control-card"><div class="speaker-row"><div><div class="eyebrow">Автокатастрофа · додаткова промова</div><h2>№${number} · ${esc(seat?.name)}</h2></div><span class="badge gold">${app.game.speakerIndex + 1}/${app.game.vote.tied.length}</span></div>${timerControls('next-tie-speaker', app.game.speakerIndex >= app.game.vote.tied.length - 1 ? 'Голосувати' : 'Наступний →')}</section>`;
+  return `<section class="card control-card"><div class="speaker-row"><div><div class="eyebrow">Попіл · додаткова промова</div><h2>№${number} · ${esc(seat?.name)}</h2></div><span class="badge gold">${app.game.speakerIndex + 1}/${app.game.vote.tied.length}</span></div>${timerControls('next-tie-speaker', app.game.speakerIndex >= app.game.vote.tied.length - 1 ? 'Голосувати' : 'Наступний →')}</section>`;
 }
 
 function allTieHtml() {
@@ -1647,7 +2200,7 @@ function moderatorSideHtml({ includeProtocol = true } = {}) {
   const black = game.seats.filter(seat => teamOf(seat) === 'black');
   const pendingTransfer = outgoingHostTransfer(game.id);
   const transferLabel = pendingTransfer ? `Очікує: ${pendingTransfer.toName}` : 'Передати ведення';
-  const moderatorControls = `<div class="actions moderator-actions"><button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати ролі' : 'Ролі'}</button><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button><button class="btn small ${pendingTransfer ? 'primary' : 'secondary'} host-transfer-button" data-action="open-host-transfer">${esc(transferLabel)}</button></div>${game.showSecrets ? `<div class="divider"></div><div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}<div class="divider"></div><button class="btn danger wide moderator-finish-game" data-action="end-game-manual">Завершити гру</button>`;
+  const moderatorControls = `<div class="actions moderator-actions"><button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати ролі' : 'Ролі'}</button><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button><button class="btn small secondary" data-action="open-app-game-chat" data-id="${esc(game.id)}">${discussionIcon()} Чат гри</button><button class="btn small ${pendingTransfer ? 'primary' : 'secondary'} host-transfer-button" data-action="open-host-transfer">${esc(transferLabel)}</button></div>${game.showSecrets ? `<div class="divider"></div><div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}<div class="divider"></div><button class="btn danger wide moderator-finish-game" data-action="end-game-manual">Завершити гру</button>`;
   const protocol = includeProtocol
     ? `<section class="card card-pad moderator-protocol-panel"><div class="section-title section-heading"><div><h3>Протокол</h3><p>${game.history.length} подій</p></div></div><div class="quick-log">${game.history.slice(0, 25).map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('') || statePanel('empty', 'Подій ще немає', '', '', true)}</div></section>`
     : '';
@@ -1655,11 +2208,58 @@ function moderatorSideHtml({ includeProtocol = true } = {}) {
 }
 
 function observerSideHtml() {
-  return `<section class="card card-pad"><div class="section-title section-heading">${titleHelp('h3', 'Публічна інформація', 'Тут не показуються ролі й нічні результати. Вкладка синхронізується з екраном ведучого в межах одного браузера.')}</div>${nominationChipsObserver()}</section>`;
+  const game = app.game;
+  const chat = gameChatForGame(game.id);
+  const joined = Boolean(chat?.participantUids.includes(app.authUser?.uid));
+  const allowed = canJoinActiveGameChat(app.authUser, game);
+  const chatAction = allowed
+    ? `<button class="btn ${joined ? 'secondary' : 'primary'} wide" type="button" data-action="open-app-game-chat" data-id="${esc(game.id)}" ${app.chatBusy ? 'disabled' : ''}>${discussionIcon()} ${app.chatBusy ? 'Підключаємо…' : joined ? 'Відкрити чат гри' : 'Приєднатися до чату'}</button>`
+    : '<button class="btn secondary wide" type="button" disabled>Чат недоступний під час гри</button>';
+  const chatCopy = allowed
+    ? 'Авторизовані глядачі та гравці, які вже вибули, можуть обговорювати гру наживо.'
+    : 'Ви ще активний гравець за столом. Доступ відкриється після вибуття або завершення гри.';
+  return `<section class="card card-pad"><div class="section-title section-heading">${titleHelp('h3', 'Публічна інформація', 'Тут не показуються ролі й нічні результати. Вкладка синхронізується з екраном ведучого в межах одного браузера.')}</div>${nominationChipsObserver()}</section><section class="card card-pad observer-chat-card"><div class="section-title section-heading"><div><span class="eyebrow">Наживо</span><h3>Чат гри</h3><p>${chatCopy}</p></div>${joined ? '<span class="badge green">Приєднано</span>' : ''}</div>${chatAction}</section>`;
 }
 
 function nominationChipsObserver() {
   return app.game.nominations.length ? `<div class="nom-list">${app.game.nominations.map(number => `<span class="badge red">№${number} ${esc(seatByNo(number)?.name)}</span>`).join('')}</div>` : '<span class="muted">Немає кандидатів</span>';
+}
+
+function formatSignedRatingPoints(value = 0) {
+  const points = Number(value) || 0;
+  if (!points) return '0';
+  return `${points > 0 ? '+' : '−'}${formatRatingPoints(Math.abs(points))}`;
+}
+
+function ratingBreakdownHtml(score) {
+  const items = [
+    `<span>Результат <b>${formatSignedRatingPoints(score.base)}</b></span>`,
+    score.bestMoveBonus ? `<span>Кращий хід <b>${formatSignedRatingPoints(score.bestMoveBonus)}</b></span>` : '',
+    score.actionPenalty ? `<span>Штраф <b>${formatSignedRatingPoints(score.actionPenalty)}</b></span>` : '',
+    score.disqualificationPenalty ? `<span>Дискваліфікація <b>${formatSignedRatingPoints(score.disqualificationPenalty)}</b></span>` : ''
+  ].filter(Boolean);
+  return items.join('');
+}
+
+function ratingAdjustmentsHtml(seat, { showFinal = false } = {}) {
+  const selectedPenalty = Number(seat.ratingPenalty) || 0;
+  const disqualified = seat.disqualified === true;
+  const score = showFinal ? mafiaGamePoints(app.game, seat) : null;
+  const penaltyChoices = [
+    { value: 0, label: 'Без штрафу' },
+    { value: FIIM_RATING_RULES.actionPenaltyLow, label: '−0,3' },
+    { value: FIIM_RATING_RULES.actionPenaltyHigh, label: '−0,5' }
+  ];
+  return `<section class="rating-adjustments" aria-label="Рейтингові коригування"><div class="rating-adjustments-head"><div><b>Рейтингові коригування</b><small>Оберіть штраф за негативний вплив на гру.</small></div>${showFinal ? `<span class="rating-adjustments-final"><small>Фінальний бал</small><strong>${formatRatingPoints(score.points)}</strong></span>` : ''}</div><div class="rating-penalty-options" role="group" aria-label="Штрафні бали">${penaltyChoices.map(choice => `<button class="rating-penalty-choice ${selectedPenalty === choice.value ? 'selected' : ''}" type="button" data-action="set-rating-penalty" data-seat="${seat.number}" data-penalty="${choice.value}" aria-pressed="${selectedPenalty === choice.value}">${choice.label}</button>`).join('')}</div><label class="toggle-row rating-disqualification-toggle"><span><b>Дискваліфікація</b><small>Окремий прапорець незалежно від причини вибуття · −0,8 бала.</small></span><input type="checkbox" data-action="toggle-disqualification" data-seat="${seat.number}" ${disqualified ? 'checked' : ''} aria-label="Дискваліфікація гравця №${seat.number}"></label></section>`;
+}
+
+function gameScoresHtml(game, { editable = false, embedded = false } = {}) {
+  if (game?.status !== 'finished' || !['red', 'black', 'draw'].includes(game.winner)) return '';
+  const rows = (game.seats || []).map(seat => {
+    const score = mafiaGamePoints(game, seat);
+    return `<article class="game-score-row"><div class="game-score-player"><span class="game-score-seat">№${seat.number}</span><div><b>${esc(seat.name)}</b><small>${esc(roleLabel(seat.role))}</small></div></div><div class="game-score-breakdown">${ratingBreakdownHtml(score)}</div><div class="game-score-final"><span>Фінальний бал</span><b>${formatRatingPoints(score.points)}</b></div>${editable ? `<button class="btn small secondary game-score-edit" type="button" data-action="seat-menu" data-seat="${seat.number}">Змінити</button>` : ''}</article>`;
+  }).join('');
+  return `<section class="${embedded ? 'game-score-panel embedded' : 'card card-pad game-score-panel'}"><div class="section-title section-heading"><div><span class="eyebrow">Рейтинг гри</span><h2>Фінальні бали гравців</h2><p>Результат, «Кращий хід» і дисциплінарні коригування показані окремо.</p></div></div><div class="game-score-list">${rows}</div></section>`;
 }
 
 function winnerView(observer = false) {
@@ -1667,7 +2267,13 @@ function winnerView(observer = false) {
   const draw = app.game.winner === 'draw';
   const title = draw ? 'Гру завершено нічиєю' : red ? 'Перемога мирного міста' : 'Перемога чорної команди';
   const detail = draw ? 'Результат зафіксовано без переможця.' : red ? 'Усі гравці чорної команди вибули.' : 'Чорна команда досягла паритету з містом.';
-  return `<main class="page"><section class="card winner">${draw ? '<div class="winner-draw-mark" aria-hidden="true">＝</div>' : roleSignal(red ? 'citizen' : 'mafia', 'winner-signal', title)}<div class="eyebrow">Фінал гри</div><h1>${title}</h1><p class="muted">${detail}</p>${observer ? '' : `<div class="actions" style="justify-content:center">${app.undo.length ? '<button class="btn secondary" data-action="undo">↶ Скасувати результат</button>' : ''}<button class="btn secondary" data-action="copy-protocol">Копіювати протокол</button><button class="btn primary" data-action="rematch">Реванш</button><button class="btn secondary" data-nav="home">На головну</button></div>`}</section></main>`;
+  const discuss = discussionButtonForGame(app.game, 'primary');
+  const actions = observer
+    ? discuss
+      ? `<div class="actions winner-actions" style="justify-content:center">${discuss}<button class="btn secondary" data-nav="home">На головну</button></div>`
+      : ''
+    : `<div class="actions winner-actions" style="justify-content:center">${app.undo.length ? '<button class="btn secondary" data-action="undo">↶ Скасувати результат</button>' : ''}<button class="btn secondary" data-action="copy-protocol">Копіювати протокол</button>${discuss}<button class="btn primary" data-action="rematch">Реванш</button><button class="btn secondary" data-nav="home">На головну</button></div>`;
+  return `<main class="page winner-page"><section class="card winner">${draw ? '<div class="winner-draw-mark" aria-hidden="true">＝</div>' : roleSignal(red ? 'citizen' : 'mafia', 'winner-signal', title)}<div class="eyebrow">Фінал гри</div><h1>${title}</h1><p class="muted">${detail}</p>${actions}</section>${gameScoresHtml(app.game, { editable: !observer && canManageGame(app.game) })}</main>`;
 }
 
 function playerModalHtml() {
@@ -1689,21 +2295,51 @@ function playerModalHtml() {
   </form></div>`;
 }
 
+function telegramProfileEditorHtml(profile) {
+  const username = normalizeTelegramUsername(profile.telegramUsername);
+  const verified = profile.telegramVerified === true && Boolean(profile.telegramUserId) && Boolean(profile.telegramLinkedAt);
+  const busy = ['loading', 'connecting'].includes(app.telegramLink.status);
+  const automaticReady = app.telegramLink.status === 'ready';
+  const automaticTitle = app.telegramLink.status === 'loading'
+    ? 'Готуємо Telegram Login…'
+    : app.telegramLink.status === 'connecting'
+      ? 'Підключаємо Telegram…'
+      : automaticReady
+        ? 'Синхронізувати з Telegram'
+        : 'Підготувати підключення Telegram';
+  const linkedIdentity = verified
+    ? `<div class="telegram-linked-identity">${profile.telegramPhotoURL
+      ? `<img src="${esc(profile.telegramPhotoURL)}" alt="Фото Telegram" referrerpolicy="no-referrer">`
+      : `<span class="telegram-linked-avatar">${telegramIcon()}</span>`}<div><b>${esc(profile.telegramDisplayName || (username ? `@${username}` : 'Telegram'))}</b>${username ? `<a href="https://t.me/${esc(username)}" target="_blank" rel="noopener noreferrer">@${esc(username)}</a>` : '<span>Username не вказано в Telegram</span>'}</div><span class="badge green">Підтверджено</span></div>`
+    : username
+      ? `<div class="telegram-manual-status"><span class="badge gold">Введено вручну</span><a href="https://t.me/${esc(username)}" target="_blank" rel="noopener noreferrer">t.me/${esc(username)}</a></div>`
+      : '';
+  const status = app.telegramLink.error
+    ? `<p class="telegram-link-status danger-text" role="status">${esc(app.telegramLink.error)} · username можна ввести вручну.</p>`
+    : app.telegramLink.status === 'loading'
+      ? '<p class="telegram-link-status" role="status">Готуємо безпечне підключення…</p>'
+      : app.telegramLink.status === 'ready'
+        ? '<p class="telegram-link-status" role="status">Натисніть іконку Telegram, щоб підтвердити профіль.</p>'
+        : '';
+  return `<div class="field telegram-profile-field"><label for="host-telegram-username">${help('Telegram', 'Підключення через Telegram підтверджує профіль. Введений вручну @username зберігається як контакт без підтвердження.')}</label><div class="telegram-profile-input-row"><input id="host-telegram-username" class="input" name="telegramUsername" data-input="telegram-username" value="${esc(username)}" maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="@username або t.me/username"><button class="icon-btn telegram-connect-btn ${verified ? 'connected' : ''}" type="button" data-action="connect-telegram-profile" aria-label="${esc(automaticTitle)}" title="${esc(automaticTitle)}" ${busy ? 'disabled' : ''}>${telegramIcon()}</button>${verified || username ? `<button class="icon-btn telegram-disconnect-btn" type="button" data-action="disconnect-telegram-profile" aria-label="Від’єднати Telegram" title="Очистити Telegram">×</button>` : ''}</div>${linkedIdentity}${status}</div>`;
+}
+
 function hostProfileModalHtml() {
   const profile = { ...(app.hostProfile || {}), ...(app.modal?.profileDraft || {}) };
   const photo = profile.avatar || app.authUser?.googlePhotoURL || '';
   const photoDraftChanged = Boolean(app.modal?.profileDraft && Object.hasOwn(app.modal.profileDraft, 'avatar') && profile.avatar !== app.hostProfile?.avatar);
   const photoSyncStatus = photoDraftChanged ? 'pending' : app.profilePhotoSync.status;
   return `<div class="modal-backdrop host-profile-backdrop" data-action="close-modal"><form class="card modal host-profile-modal" data-form="host-profile" aria-modal="true" role="dialog" tabindex="-1">
-    <div class="section-title section-heading">${titleHelp('h2', 'Мій профіль Enjoy', 'Ці дані допоможуть ведучим знайти вас і додати на стіл. Власний аватар стискається локально; видалення власного фото повертає фотографію Google.')}<div class="profile-modal-title-actions"><button class="icon-btn profile-stats-shortcut" type="button" data-action="open-player-stats" data-id="google_${esc(app.authUser?.uid || '')}" aria-label="Моя статистика" title="Моя статистика">${playerStatsIcon()}</button><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div></div>
+    <div class="section-title section-heading">${titleHelp('h2', 'Мій профіль', 'Ці дані допоможуть ведучим знайти вас і додати на стіл. Власний аватар стискається локально; видалення власного фото повертає фотографію Google.')}<div class="profile-modal-title-actions"><button class="icon-btn profile-stats-shortcut" type="button" data-action="open-player-stats" data-id="google_${esc(app.authUser?.uid || '')}" aria-label="Моя статистика" title="Моя статистика">${playerStatsIcon()}</button><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div></div>
     <div class="avatar-editor">${avatar({ name: profile.displayName || app.authUser?.googleName, avatar: photo }, 'large')}<div><div class="avatar-source-actions"><label class="btn primary" for="host-avatar-camera">${cameraIcon()}<span>Зробити фото</span></label><input id="host-avatar-camera" class="visually-hidden" type="file" accept="image/*" capture="environment" data-input="host-avatar-camera"><label class="btn secondary" for="host-avatar-gallery">Обрати з галереї</label><input id="host-avatar-gallery" class="visually-hidden" type="file" accept="image/*" data-input="host-avatar-gallery">${app.authUser?.googlePhotoURL && profile.avatar ? '<button class="btn secondary" type="button" data-action="host-use-google-photo">Фото Google</button>' : ''}</div>${profilePhotoSyncHtml(Boolean(profile.avatar), photoSyncStatus)}</div></div>
     <div class="stack">
-      <div class="field"><label for="host-display-name">Ім’я для відображення *</label><input id="host-display-name" class="input" name="displayName" value="${esc(profile.displayName || app.authUser?.googleName || '')}" maxlength="60" required></div>
-      <div class="field"><label for="host-nickname">Нікнейм</label><input id="host-nickname" class="input" name="nickname" value="${esc(profile.nickname || '')}" maxlength="40"></div>
-      <div class="field"><label for="host-club">Клуб або організація</label><input id="host-club" class="input" name="club" value="${esc(profile.club || '')}" maxlength="100"></div>
+      <div class="field"><label for="host-display-name">Ім’я *</label><input id="host-display-name" class="input" name="displayName" value="${esc(profile.displayName || app.authUser?.googleName || '')}" maxlength="60" autocomplete="name" required></div>
+      <div class="field"><label for="host-nickname">Нікнейм</label><input id="host-nickname" class="input" name="nickname" value="${esc(profile.nickname || '')}" maxlength="40" autocomplete="nickname" aria-describedby="host-nickname-hint"><small id="host-nickname-hint" class="field-hint">Якщо заповнений, використовуватиметься як основне ім’я гравця під час гри.</small></div>
+      ${profileClubPickerHtml(profile)}
       <div class="field"><label for="host-description">Про себе</label><textarea id="host-description" class="textarea" name="description" maxlength="600" placeholder="Досвід ведення, улюблена кава…">${esc(profile.description || '')}</textarea></div>
       <label class="toggle-row profile-visibility"><span>${help('Показувати мене в каталозі Enjoy', 'Ім’я, нік, клуб, опис і вибраний аватар бачитимуть лише авторизовані користувачі.')}</span><input type="checkbox" name="discoverable" ${profile.discoverable !== false ? 'checked' : ''}></label>
       <div class="field"><span class="field-label">${help('Мова застосунку', 'Оберіть мову інтерфейсу. Налаштування зберігається на цьому пристрої.')}</span>${languagePickerHtml()}</div>
+      ${telegramProfileEditorHtml(profile)}
       <div class="field"><span class="field-label">Google-акаунт</span><div class="identity-field"><span>${esc(app.authUser?.email || '')}</span><div class="identity-actions"><span class="badge green">Підтверджено</span><button class="icon-btn account-delete-btn" type="button" data-action="delete-account" aria-label="Видалити профіль" title="Видалити профіль"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/></svg></button></div></div></div>
     </div>
     <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Скасувати</button><button class="btn primary" type="submit">Зберегти профіль</button></div>
@@ -1749,17 +2385,19 @@ function playerStatsModalHtml() {
   const player = playerId === `google_${app.authUser?.uid || ''}` ? ownProfilePlayer() : playerById(playerId);
   if (!player) return `<div class="modal-backdrop" data-action="close-modal"><div class="card modal player-stats-modal" role="dialog" aria-modal="true"><div class="section-title"><h2>Профіль не знайдено</h2><button class="icon-btn" data-action="close-modal" aria-label="Закрити">×</button></div></div></div>`;
   const stats = personalPlayerStats(finishedGames(), player.id);
+  const scoredHistory = stats.history.map(item => ({ ...item, score: mafiaGamePoints(item.game, item.seat) }));
+  const ratingTotal = Math.round((scoredHistory.reduce((sum, item) => sum + item.score.points, 0) + Number.EPSILON) * 10) / 10;
   const canRate = Boolean(player.cloudUid && player.cloudUid === app.authUser?.uid);
   const backAction = app.modal.returnModal ? 'back-to-profile' : 'close-modal';
-  const history = stats.history.length
-    ? `<div class="personal-game-list">${stats.history.map(({ game, seat, won }) => {
+  const history = scoredHistory.length
+    ? `<div class="personal-game-list">${scoredHistory.map(({ game, seat, won, score }) => {
       const result = game.winner === 'draw' ? 'Нічия' : won ? 'Перемога' : 'Поразка';
-      return `<article class="personal-game-card"><div class="personal-game-head"><div><h3>${esc(game.title)}</h3><p>${formatDate(game.endedAt || game.updatedAt, true)} · місце ${seat.number} · ${esc(roleLabel(seat.role))}</p></div><span class="badge ${won ? 'green' : game.winner === 'draw' ? 'gold' : 'red'}">${result}</span></div>${canRate ? gameFeedbackControls(game, app.gameFeedback[game.id]) : ''}<button class="btn small secondary personal-protocol-button" type="button" data-action="view-protocol" data-id="${esc(game.id)}">Протокол</button></article>`;
+      return `<article class="personal-game-card"><div class="personal-game-head"><div><h3>${esc(game.title)}</h3><p>${formatDate(game.endedAt || game.updatedAt, true)} · місце ${seat.number} · ${esc(roleLabel(seat.role))}</p></div><div class="personal-game-result"><span class="badge ${won ? 'green' : game.winner === 'draw' ? 'gold' : 'red'}">${result}</span><span class="personal-game-points"><small>Бал за гру</small><b>${formatRatingPoints(score.points)}</b></span></div></div><div class="personal-game-score-breakdown" aria-label="Розрахунок бала за гру">${ratingBreakdownHtml(score)}</div>${canRate ? gameFeedbackControls(game, app.gameFeedback[game.id]) : ''}<button class="btn small secondary personal-protocol-button" type="button" data-action="view-protocol" data-id="${esc(game.id)}">Протокол</button></article>`;
     }).join('')}</div>`
     : statePanel('empty', 'Ігор у профілі ще немає', 'Історія з’явиться, коли цей профіль буде додано до завершеної гри.');
   return `<div class="modal-backdrop player-stats-backdrop" data-action="close-modal"><div class="card modal player-stats-modal" role="dialog" aria-modal="true" aria-labelledby="player-stats-title" tabindex="-1">
     <div class="section-title section-heading"><div class="player-stats-title">${avatar(player, 'large')}<div><span class="eyebrow">Персональна статистика</span><h2 id="player-stats-title">${esc(preferredPlayerName(player))}</h2></div></div><button class="icon-btn" type="button" data-action="${backAction}" aria-label="${app.modal.returnModal ? 'Повернутися до профілю' : 'Закрити'}">${app.modal.returnModal ? backChevronIcon() : '×'}</button></div>
-    <section class="stat-grid personal-stat-grid"><article class="stat-card"><b>${stats.games}</b><span>ігор</span></article><article class="stat-card"><b>${stats.wins}</b><span>перемог</span></article><article class="stat-card"><b>${stats.winRate}%</b><span>результативність</span></article><article class="stat-card"><b>${esc(stats.favoriteRole ? roleLabel(stats.favoriteRole) : '—')}</b><span>часта роль</span></article></section>
+    <section class="stat-grid personal-stat-grid"><article class="stat-card"><b>${stats.games}</b><span>ігор</span></article><article class="stat-card"><b>${stats.wins}</b><span>перемог</span></article><article class="stat-card"><b>${stats.winRate}%</b><span>результативність</span></article><article class="stat-card personal-role-stat"><b>${esc(stats.favoriteRole ? roleLabel(stats.favoriteRole) : '—')}</b><span>часта роль</span></article><article class="stat-card personal-rating-stat"><b>${formatRatingPoints(ratingTotal)}</b><span>рейтингових балів</span></article></section>
     ${canRate ? `<p class="privacy-note feedback-privacy-note">Ваш вибір бачите тільки ви. Іншим учасникам доступне лише спільне зведення після трьох оцінок.</p>` : ''}
     <div class="personal-history-title"><h3>Історія ігор</h3><span>${stats.games}</span></div>
     ${history}
@@ -1789,21 +2427,23 @@ function playerLinkOfferModalHtml() {
 function seatModalHtml() {
   const seat = seatByNo(app.modal.seat);
   const role = roleOf(seat);
-  const canNominate = app.game.phase === 'day' && app.game.subphase === 'speeches' && seat.status === 'alive' && currentSpeaker()?.number !== seat.number && !app.game.nominations.includes(seat.number);
+  const finished = app.game.status === 'finished';
+  const canNominate = nominationIsAllowed(app.game, seat.number, currentSpeaker()?.number);
   return `<div class="modal-backdrop" data-action="close-modal"><div class="card modal game-modal seat-control-modal ${seat.status === 'alive' ? 'seat-alive-modal' : 'seat-dead-modal'}" aria-modal="true" role="dialog" aria-label="Керування гравцем на місці ${seat.number}">
     <button class="icon-btn modal-close" type="button" data-action="close-modal" aria-label="Закрити">×</button>
     <div class="seat-sheet-head ${seat.status === 'alive' ? 'alive' : 'dead'}"><div class="seat-sheet-number"><span>Місце</span><strong>${seat.number}</strong></div><div class="seat-sheet-player">${avatar({ ...(seat.profileId ? playerById(seat.profileId) : {}), name: seat.name }, '')}<div class="seat-sheet-copy"><h2>${esc(seat.name)}</h2><span class="badge ${seat.status === 'alive' ? 'green' : ''}">${seat.status === 'alive' ? 'За столом' : 'Вибув'}</span></div></div></div>
     <div class="divider"></div>
     <div class="list"><div class="list-row"><span class="muted">Фоли</span><b>${seat.faults} / 4</b></div>${app.game.showSecrets ? `<div class="list-row"><span class="muted">Роль</span><b>${role?.symbol} ${role?.label}</b></div>` : ''}${seat.eliminatedReason ? `<div class="list-row"><span class="muted">Причина вибуття</span><b>${esc(seat.eliminatedReason)}</b></div>` : ''}</div>
     <div class="divider"></div>
-    <div class="seat-action-grid"><button class="btn" data-action="add-fault" data-seat="${seat.number}" ${seat.status === 'alive' && seat.faults < 4 ? '' : 'disabled'}>+ Фол</button><button class="btn" data-action="remove-fault" data-seat="${seat.number}" ${seat.faults ? '' : 'disabled'}>− Фол</button><button class="btn primary" data-action="nominate" data-seat="${seat.number}" ${canNominate ? '' : 'disabled'}>Виставити</button>${seat.status === 'alive' ? `<button class="btn danger" data-action="manual-eliminate" data-seat="${seat.number}">Вивести</button>` : '<button class="btn" data-action="restore-seat">Повернути</button>'}</div>
+    ${ratingAdjustmentsHtml(seat, { showFinal: finished })}
+    ${finished ? '' : `<div class="divider"></div><div class="seat-action-grid"><button class="btn" data-action="add-fault" data-seat="${seat.number}" ${seat.status === 'alive' && seat.faults < 4 ? '' : 'disabled'}>+ Фол</button><button class="btn" data-action="remove-fault" data-seat="${seat.number}" ${seat.faults ? '' : 'disabled'}>− Фол</button><button class="btn primary" data-action="nominate" data-seat="${seat.number}" ${canNominate ? '' : 'disabled'}>Виставити</button>${seat.status === 'alive' ? `<button class="btn danger" data-action="manual-eliminate" data-seat="${seat.number}">Вивести</button>` : '<button class="btn" data-action="restore-seat">Повернути</button>'}</div>`}
     <div class="modal-actions"><button class="btn primary" data-action="close-modal">Готово</button></div>
   </div></div>`;
 }
 
 function protocolModalHtml() {
   const game = gameById(app.modal.gameId) || app.game;
-  return `<div class="modal-backdrop protocol-backdrop" data-action="close-modal"><div class="card modal game-modal protocol-modal" aria-modal="true" role="dialog" tabindex="-1"><div class="section-title section-heading game-dialog-head"><div><span class="eyebrow">Історія подій</span><h2>Протокол гри</h2><p>${esc(game.title)} · ${formatDate(game.startedAt, true)}</p></div><button class="icon-btn" data-action="close-modal" aria-label="Закрити">×</button></div><div class="quick-log protocol-log">${game.history.slice().reverse().map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('')}</div><div class="modal-actions"><button class="btn secondary" data-action="copy-protocol" data-id="${game.id}">Копіювати</button><button class="btn primary" data-action="close-modal">Закрити</button></div></div></div>`;
+  return `<div class="modal-backdrop protocol-backdrop" data-action="close-modal"><div class="card modal game-modal protocol-modal" aria-modal="true" role="dialog" tabindex="-1"><div class="section-title section-heading game-dialog-head"><div><span class="eyebrow">Історія подій</span><h2>Протокол гри</h2><p>${esc(game.title)} · ${formatDate(game.startedAt, true)}</p></div><button class="icon-btn" data-action="close-modal" aria-label="Закрити">×</button></div>${gameScoresHtml(game, { embedded: true })}<div class="quick-log protocol-log">${game.history.slice().reverse().map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('')}</div><div class="modal-actions"><button class="btn secondary" data-action="copy-protocol" data-id="${game.id}">Копіювати</button><button class="btn primary" data-action="close-modal">Закрити</button></div></div></div>`;
 }
 
 function confirmModalHtml() {
@@ -1811,9 +2451,9 @@ function confirmModalHtml() {
 }
 
 function gameSettingsModalHtml() {
-  const settings = app.game.settings;
+  const settings = { ...app.game.settings, ...(app.modal.settingsDraft || {}) };
   const labels = {
-    speech: 'Промова, сек', tieSpeech: 'Автокатастрофа, сек', lastWord: 'Останнє слово, сек',
+    speech: 'Промова, сек', tieSpeech: 'Попіл, сек', lastWord: 'Останнє слово, сек',
     nightCheck: 'Нічна дія, сек', mafiaMeet: 'Знайомство мафії, сек',
     sheriffMark: 'Позначення Шерифа, сек', freeSeating: 'Вільна посадка, сек', bestMove: 'Кращий хід, сек'
   };
@@ -2058,12 +2698,90 @@ function hostTransferModalHtml() {
       <div class="modal-actions"><button class="btn danger" type="button" data-action="cancel-host-transfer" ${app.hostTransfers.busy ? 'disabled' : ''}>Скасувати передачу</button><button class="btn secondary" type="button" data-action="close-modal">Закрити</button></div>
     </div></div>`;
   }
-  const candidates = hostTransferCandidates();
+  const search = String(app.modal.search || '');
+  const allCandidates = hostTransferCandidates();
+  const candidates = search ? hostTransferCandidates(search) : allCandidates;
   return `<div class="modal-backdrop host-transfer-backdrop" data-action="close-modal"><div class="card modal host-transfer-modal" role="dialog" aria-modal="true" aria-labelledby="host-transfer-title" tabindex="-1">
     <div class="game-dialog-head"><div><span class="eyebrow">Панель ведучого</span><h2 id="host-transfer-title">Передати ведення</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div>
-    <p class="game-dialog-copy">Оберіть авторизованого учасника за столом. Він має підтвердити запит на своєму пристрої.</p>
-    ${candidates.length ? `<div class="host-transfer-candidates">${candidates.map(candidate => `<button class="host-transfer-candidate" type="button" data-action="request-host-transfer" data-uid="${esc(candidate.uid)}"><span class="host-transfer-seat">${candidate.seatNumber}</span>${avatar({ name: candidate.name, avatar: candidate.avatar }, 'small')}<span><b>${esc(candidate.name)}</b><small>Авторизований учасник</small></span><span class="host-transfer-chevron" aria-hidden="true">›</span></button>`).join('')}</div>` : statePanel('empty', 'Немає доступного нового ведучого', 'Передати ведення можна учаснику за столом, який увійшов через Google.')}
+    <p class="game-dialog-copy">Оберіть будь-якого авторизованого користувача. Участь у поточній грі не обов’язкова; користувач має підтвердити запит на своєму пристрої.</p>
+    <div class="host-transfer-search"><input class="input" type="search" data-input="host-transfer-search" value="${esc(search)}" placeholder="Пошук за ім’ям, ніком або клубом" aria-label="Пошук користувача" autocomplete="off"></div>
+    ${candidates.length ? `<div class="host-transfer-candidates">${candidates.map(candidate => `<button class="host-transfer-candidate" type="button" data-action="request-host-transfer" data-uid="${esc(candidate.uid)}">${avatar({ name: candidate.name, avatar: candidate.avatar }, 'small')}<span><b>${esc(candidate.name)}</b><small>${esc(candidate.nickname && candidate.displayName ? candidate.displayName : candidate.club || 'Авторизований користувач')}</small></span><span class="host-transfer-chevron" aria-hidden="true">›</span></button>`).join('')}</div>` : allCandidates.length ? statePanel('empty', 'Нікого не знайдено', 'Спробуйте змінити пошуковий запит.') : statePanel('empty', 'Немає доступного нового ведучого', 'У каталозі немає іншого авторизованого користувача.')}
     <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Закрити</button></div>
+  </div></div>`;
+}
+
+function venueModalHtml() {
+  const venue = app.modal?.venue || {};
+  const status = app.modal?.googleStatus
+    ? `<p class="venue-google-status ${app.modal.googleStatusTone === 'error' ? 'error' : ''}" role="status">${esc(app.modal.googleStatus)}</p>`
+    : '<p class="venue-google-status">Повне посилання Google Maps може підставити назву або адресу, якщо вони містяться в самому посиланні.</p>';
+  return `<div class="modal-backdrop" data-action="close-modal"><form class="card modal venue-modal" data-form="venue" role="dialog" aria-modal="true" aria-labelledby="venue-modal-title">
+    <div class="section-title section-heading"><div><span class="eyebrow">Спільний каталог</span><h2 id="venue-modal-title">Нове місце / клуб</h2></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити" ${app.venueBusy ? 'disabled' : ''}>×</button></div>
+    <p>Після збереження місце зможуть знайти й обрати всі авторизовані користувачі.</p>
+    <div class="stack venue-form-fields">
+      <div class="field"><label for="venue-name">Назва *</label><input id="venue-name" class="input" name="name" data-venue-field="name" value="${esc(venue.name)}" maxlength="60" required autocomplete="organization"></div>
+      <div class="field"><label for="venue-google-url">Google Maps</label><div class="venue-map-row"><input id="venue-google-url" class="input" type="url" name="googleMapsUrl" data-venue-field="googleMapsUrl" data-input="venue-google-maps-url" value="${esc(venue.googleMapsUrl)}" maxlength="2048" placeholder="https://maps.app.goo.gl/…" inputmode="url"><button class="btn small secondary" type="button" data-action="fill-venue-from-google">Підставити</button></div>${status}</div>
+      <div class="field"><label for="venue-address">Адреса</label><input id="venue-address" class="input" name="address" data-venue-field="address" value="${esc(venue.address)}" maxlength="300" autocomplete="street-address" placeholder="Можна ввести вручну"></div>
+      <div class="field"><label for="venue-phone">Телефон</label><input id="venue-phone" class="input" type="tel" name="phone" data-venue-field="phone" value="${esc(venue.phone)}" maxlength="40" autocomplete="tel" placeholder="+380…"></div>
+      <div class="field"><label for="venue-website">Сайт</label><input id="venue-website" class="input" type="url" name="website" data-venue-field="website" value="${esc(venue.website)}" maxlength="2048" inputmode="url" placeholder="https://…"></div>
+    </div>
+    <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal" ${app.venueBusy ? 'disabled' : ''}>Скасувати</button><button class="btn primary" type="submit" ${app.venueBusy ? 'disabled' : ''}>${app.venueBusy ? 'Зберігаємо…' : 'Зберегти місце'}</button></div>
+  </form></div>`;
+}
+
+function discussionModalHtml() {
+  const game = gameById(app.modal.gameId) || (app.game?.id === app.modal.gameId ? app.game : null);
+  if (!game) return `<div class="modal-backdrop" data-action="close-modal"><div class="card modal game-dialog-modal" role="dialog" aria-modal="true"><div class="section-title"><h2>Гру не знайдено</h2><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div></div></div>`;
+  const chat = gameChatForGame(game.id);
+  const participants = authorizedGameParticipantUids(app.authUser, game);
+  const authorizedSeats = authorizedGameSeats(game).length;
+  const guests = Math.max(0, (game.seats || []).length - authorizedSeats);
+  const telegram = telegramDiscussionLinks(game, appShareUrl());
+  const appChatStatus = chat
+    ? `<span class="badge green">Готовий · ${chat.participantUids.length} учасн.</span>`
+    : app.gameChatsState.status === 'error'
+      ? '<span class="badge red">Потрібне повторення</span>'
+      : '<span class="badge gold">Створюється…</span>';
+  return `<div class="modal-backdrop discussion-backdrop" data-action="close-modal"><div class="card modal discussion-modal" role="dialog" aria-modal="true" aria-labelledby="discussion-title" tabindex="-1">
+    <div class="section-title section-heading"><div><span class="eyebrow">Гру завершено</span><h2 id="discussion-title">Де обговорити гру?</h2><p>${esc(game.title)} · ${formatDate(game.endedAt || game.updatedAt, true)}</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div>
+    <div class="discussion-choice-grid">
+      <article class="discussion-choice app-chat-choice"><div class="discussion-choice-head"><span class="discussion-choice-icon">${discussionIcon()}</span><div><h3>Чат у Mafia Enjoy</h3>${appChatStatus}</div></div><p>Створений разом із грою. Після фіналу всі авторизовані учасники столу вже мають доступ; приєднані глядачі залишаються в чаті.</p><div class="discussion-participant-note"><b>${participants.length}</b> авторизованих профілів${guests ? ` · ${guests} гостей без доступу` : ''}</div><button class="btn primary wide" type="button" data-action="open-app-game-chat" data-id="${esc(game.id)}" ${app.chatBusy ? 'disabled' : ''}>${app.chatBusy ? 'Готуємо чат…' : chat ? 'Відкрити чат' : 'Спробувати ще раз'}</button></article>
+      <article class="discussion-choice telegram-choice"><div class="discussion-choice-head"><span class="discussion-choice-icon">${telegramIcon()}</span><div><h3>Група в Telegram</h3><span class="badge">Окремий чат</span></div></div><p>Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.</p><div class="discussion-telegram-actions"><a class="btn primary wide" href="${esc(telegram.createGroup)}">Створити групу в Telegram</a><a class="btn secondary wide" href="${esc(telegram.share)}" target="_blank" rel="noopener noreferrer">Надіслати посилання через Telegram</a></div></article>
+    </div>
+    <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Закрити</button></div>
+  </div></div>`;
+}
+
+function formatChatMessageTime(value) {
+  const date = new Date(Number(value) || 0);
+  if (!Number.isFinite(date.getTime())) return '';
+  const today = new Date();
+  const sameDay = date.toDateString() === today.toDateString();
+  return new Intl.DateTimeFormat(languageLocale(app.settings.language), sameDay
+    ? { hour: '2-digit', minute: '2-digit' }
+    : { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+function gameChatModalHtml() {
+  const chat = gameChatById(app.modal.chatId);
+  if (!chat) return `<div class="modal-backdrop" data-action="close-modal"><div class="card modal game-chat-modal" role="dialog" aria-modal="true"><div class="section-title"><h2>Чат недоступний</h2><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div><p>Оновіть список обговорень і спробуйте ще раз.</p></div></div>`;
+  let messages;
+  if (app.chatMessagesState.status === 'loading' || app.chatMessagesState.status === 'idle') {
+    messages = statePanel('loading', 'Відкриваємо розмову…', '', '', true);
+  } else if (app.chatMessagesState.status === 'error') {
+    messages = statePanel('error', 'Повідомлення недоступні', app.chatMessagesState.error, '<button class="btn small secondary" data-action="retry-game-chat-messages">Повторити</button>', true);
+  } else if (!app.chatMessages.length) {
+    messages = statePanel('empty', 'Розмова ще порожня', 'Напишіть перше повідомлення про цю гру.', '', true);
+  } else {
+    messages = app.chatMessages.map(message => {
+      const own = message.senderUid === app.authUser?.uid;
+      return `<article class="chat-message ${own ? 'own' : ''} ${message.pending ? 'pending' : ''}"><div class="chat-message-meta"><b>${esc(message.senderName)}</b><time>${esc(formatChatMessageTime(message.createdAt))}${message.pending ? ' · надсилається' : ''}</time></div><p>${esc(message.text)}</p></article>`;
+    }).join('');
+  }
+  return `<div class="modal-backdrop game-chat-backdrop" data-action="close-modal"><div class="card modal game-chat-modal" role="dialog" aria-modal="true" aria-labelledby="game-chat-title" tabindex="-1">
+    <div class="section-title section-heading game-chat-head"><div><span class="eyebrow">${chat.status === 'active' ? 'Чат гри · наживо' : 'Обговорення гри'}</span><h2 id="game-chat-title">${esc(chat.gameTitle)}</h2><p>${chat.status === 'active' ? `Розпочато ${formatDate(chat.startedAt, true)}` : formatDate(chat.endedAt, true)}${chat.venue ? ` · ${esc(chat.venue)}` : ''} · ${chat.participantUids.length} учасн.</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div>
+    <div class="game-chat-messages" data-chat-messages role="log" aria-live="polite">${messages}</div>
+    <form class="game-chat-composer" data-form="game-chat-message"><div class="game-chat-emotion-bar" role="group" aria-label="Емоції для повідомлення">${GAME_CHAT_EMOTIONS.map(item => `<button class="game-chat-emotion-btn" type="button" data-action="insert-chat-emotion" data-value="${item.key}" aria-label="${esc(item.label)}" title="${esc(item.label)}" ${app.chatBusy ? 'disabled' : ''}><span aria-hidden="true">${item.icon}</span></button>`).join('')}</div><label class="sr-only" for="game-chat-message">Повідомлення</label><textarea id="game-chat-message" class="textarea" data-input="game-chat-message" maxlength="1000" rows="2" placeholder="Напишіть повідомлення…" ${app.chatBusy ? 'disabled' : ''}>${esc(app.chatDraft)}</textarea><button class="btn primary" type="submit" ${app.chatBusy || !app.chatDraft.trim() ? 'disabled' : ''}>${app.chatBusy ? 'Надсилаємо…' : 'Надіслати'}</button></form>
   </div></div>`;
 }
 
@@ -2084,19 +2802,118 @@ function modalHtml() {
   if (app.modal.type === 'delete-account') return deleteAccountModalHtml();
   if (app.modal.type === 'media') return mediaModalHtml();
   if (app.modal.type === 'order') return orderModalHtml();
+  if (app.modal.type === 'venue') return venueModalHtml();
+  if (app.modal.type === 'discussion') return discussionModalHtml();
+  if (app.modal.type === 'game-chat') return gameChatModalHtml();
   if (app.modal.type === 'ios-install') return iosInstallModalHtml();
   if (app.modal.type.startsWith('host-transfer')) return hostTransferModalHtml();
   if (app.modal.type === 'winner') return `<div class="modal-backdrop"><div class="card modal game-modal decision-modal" role="dialog" aria-modal="true"><div class="game-dialog-head"><div><span class="eyebrow">Завершення гри</span>${titleHelp('h2', 'Результат гри', 'Ручне завершення потрібне для нестандартної ситуації, нічиєї або рішення судді.')}</div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div><p class="game-dialog-copy">Оберіть результат. Він одразу потрапить до протоколу та статистики.</p><div class="winner-choice-grid"><button class="btn primary winner-choice" data-action="finish-red"><span>●</span><strong>Мирне місто</strong><small>Червона команда</small></button><button class="btn danger winner-choice" data-action="finish-black"><span>◆</span><strong>Мафія</strong><small>Чорна команда</small></button><button class="btn secondary winner-choice winner-draw-choice" data-action="finish-draw"><span>＝</span><strong>Нічия</strong><small>Без переможця</small></button></div><div class="modal-actions"><button class="btn secondary" data-action="close-modal">Скасувати</button></div></div></div>`;
   return '';
 }
 
+const RENDER_FOCUS_ATTRIBUTES = Object.freeze([
+  'id', 'name', 'data-input', 'data-action', 'data-draft', 'data-draft-setting',
+  'data-seat-name', 'data-seat-profile', 'data-id', 'data-seat', 'data-panel',
+  'data-value', 'data-music-cue', 'data-theme-choice', 'data-language'
+]);
+
+function modalRenderKey(modal = app.modal) {
+  if (!modal?.type) return '';
+  const identity = modal.chatId || modal.gameId || modal.playerId || modal.player?.id || modal.seat || '';
+  return `${modal.type}:${identity || 'current'}`;
+}
+
+function renderFocusSelector(element) {
+  if (!(element instanceof Element)) return '';
+  const attributes = RENDER_FOCUS_ATTRIBUTES
+    .filter(attribute => element.hasAttribute(attribute))
+    .map(attribute => `[${attribute}="${String(element.getAttribute(attribute)).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`)
+    .join('');
+  return attributes ? `${element.localName}${attributes}` : '';
+}
+
+function captureRenderUiState(nextModalKey) {
+  const sameRoute = renderedRoute === app.route;
+  const sameModal = renderedModalKey === nextModalKey;
+  const activeElement = document.activeElement;
+  const activeRoot = modalRoot.contains(activeElement) ? 'modal' : appRoot.contains(activeElement) ? 'app' : '';
+  const canRestoreFocus = activeRoot === 'modal' ? sameModal && Boolean(nextModalKey) : activeRoot === 'app' ? sameRoute && !nextModalKey : false;
+  const focusedControl = canRestoreFocus ? {
+    root: activeRoot,
+    selector: renderFocusSelector(activeElement),
+    value: 'value' in activeElement ? activeElement.value : undefined,
+    checked: 'checked' in activeElement ? activeElement.checked : undefined,
+    selectionStart: typeof activeElement.selectionStart === 'number' ? activeElement.selectionStart : null,
+    selectionEnd: typeof activeElement.selectionEnd === 'number' ? activeElement.selectionEnd : null
+  } : null;
+  const dialog = sameModal && nextModalKey ? modalRoot.querySelector('.modal') : null;
+  const chatMessages = sameModal && nextModalKey ? modalRoot.querySelector('[data-chat-messages]') : null;
+  return {
+    sameRoute,
+    sameModal,
+    pageX: sameRoute ? window.scrollX : 0,
+    pageY: sameRoute ? window.scrollY : 0,
+    dialogScrollLeft: dialog?.scrollLeft || 0,
+    dialogScrollTop: dialog?.scrollTop || 0,
+    chatScroll: chatMessages ? {
+      top: chatMessages.scrollTop,
+      nearBottom: chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 48
+    } : null,
+    focusedControl
+  };
+}
+
+function restoreRenderUiState(state, revision, nextModalKey) {
+  const activeDialog = modalRoot.querySelector('.modal');
+  if (activeDialog) {
+    if (!activeDialog.hasAttribute('tabindex')) activeDialog.setAttribute('tabindex', '-1');
+    if (state.sameModal) {
+      activeDialog.scrollLeft = state.dialogScrollLeft;
+      activeDialog.scrollTop = state.dialogScrollTop;
+    } else {
+      activeDialog.scrollTop = 0;
+    }
+  }
+
+  const focusState = state.focusedControl;
+  const focusRoot = focusState?.root === 'modal' ? modalRoot : appRoot;
+  const focusTarget = focusState?.selector ? focusRoot.querySelector(focusState.selector) : null;
+  if (focusTarget) {
+    if (focusState.value !== undefined && 'value' in focusTarget) focusTarget.value = focusState.value;
+    if (focusState.checked !== undefined && 'checked' in focusTarget) focusTarget.checked = focusState.checked;
+    focusTarget.focus({ preventScroll: true });
+    if (focusState.selectionStart !== null && typeof focusTarget.setSelectionRange === 'function') {
+      focusTarget.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);
+    }
+  } else if (activeDialog && (!state.sameModal || !focusState?.selector)) {
+    activeDialog.focus({ preventScroll: true });
+  }
+
+  if (activeDialog && state.sameModal) activeDialog.scrollTop = state.dialogScrollTop;
+  requestAnimationFrame(() => {
+    if (revision !== renderRevision) return;
+    if (state.sameRoute) window.scrollTo({ left: state.pageX, top: state.pageY, behavior: 'instant' });
+    const messages = modalRoot.querySelector('[data-chat-messages]');
+    if (!messages || modalRenderKey() !== nextModalKey) return;
+    if (!state.sameModal || !state.chatScroll?.nearBottom) {
+      messages.scrollTop = state.sameModal && state.chatScroll ? state.chatScroll.top : messages.scrollHeight;
+    } else {
+      messages.scrollTop = messages.scrollHeight;
+    }
+  });
+}
+
 function render() {
+  passiveRenderPending = false;
+  const revision = ++renderRevision;
   if (app.route !== 'observer') syncObserverTimer();
   if (!app.authReady) {
     appRoot.innerHTML = authLoadingView();
     modalRoot.innerHTML = '';
     localizeDom(appRoot, app.settings.language);
     appRoot.setAttribute('aria-busy', 'true');
+    renderedRoute = app.route;
+    renderedModalKey = '';
     return;
   }
   if (!app.authConfigured) {
@@ -2104,6 +2921,8 @@ function render() {
     modalRoot.innerHTML = '';
     localizeDom(appRoot, app.settings.language);
     appRoot.setAttribute('aria-busy', 'false');
+    renderedRoute = app.route;
+    renderedModalKey = '';
     return;
   }
   if (!app.authUser) {
@@ -2111,10 +2930,14 @@ function render() {
     modalRoot.innerHTML = '';
     localizeDom(appRoot, app.settings.language);
     appRoot.setAttribute('aria-busy', 'false');
+    renderedRoute = app.route;
+    renderedModalKey = '';
     return;
   }
   showIncomingHostTransfer();
   showPlayerLinkOffer();
+  const nextModalKey = modalRenderKey();
+  const uiState = captureRenderUiState(nextModalKey);
   const observer = app.route === 'observer' || Boolean(app.game?.publicOnly) || (app.route === 'game' && !canManageGame(app.game));
   let content = '';
   if (app.route === 'home') content = homeView();
@@ -2128,15 +2951,13 @@ function render() {
   modalRoot.innerHTML = modalHtml();
   localizeDom(appRoot, app.settings.language);
   localizeDom(modalRoot, app.settings.language);
-  const activeDialog = modalRoot.querySelector('.modal');
-  if (activeDialog) {
-    if (!activeDialog.hasAttribute('tabindex')) activeDialog.setAttribute('tabindex', '-1');
-    activeDialog.scrollTop = 0;
-    activeDialog.focus({ preventScroll: true });
-  }
+  restoreRenderUiState(uiState, revision, nextModalKey);
+  renderedRoute = app.route;
+  renderedModalKey = nextModalKey;
   appRoot.setAttribute('aria-busy', 'false');
   syncObserverTimer();
   if (['game', 'reveal'].includes(app.route)) requestAnimationFrame(requestGameWakeLock);
+  queueAutomaticMusicSync();
 }
 
 function showTooltip(button) {
@@ -2190,20 +3011,21 @@ function createGameFromDraft() {
       avatar: profile?.avatar || profile?.avatarPreset || fallbackAvatars.get(setupAvatarKey(draftSeat, profile)) || ANIMAL_AVATARS[index % ANIMAL_AVATARS.length],
       role: dealMode === 'automatic' ? roles[index] : null,
       status: 'alive', faults: 0, nominatedBy: null, noVote: false,
-      restrictionDay: null, shortSpeechDay: null, eliminatedReason: ''
+      restrictionDay: null, shortSpeechDay: null, eliminatedReason: '',
+      ratingPenalty: 0, disqualified: false
     };
   });
   const startedAt = new Date();
   const timestamp = startedAt.toISOString();
   const title = app.draft.autoTitle !== false
-    ? defaultGameTitle(startedAt)
+    ? defaultGameTitle(startedAt, app.draft.venue)
     : app.draft.title.trim() || 'Гра в Мафію';
   return {
     id: uid('game'), title, venue: app.draft.venue.trim(), notes: app.draft.notes.trim(),
     ownerUid: app.authUser?.uid || '', hostName: String(app.hostProfile?.nickname || '').trim() || app.hostProfile?.displayName || app.authUser?.googleName || 'Ведучий',
     createdAt: timestamp, startedAt: timestamp, updatedAt: timestamp, endedAt: null,
     status: 'active', phase: 'reveal', subphase: '', day: 1, winner: null, durationSeconds: 0,
-    settings: { ...app.draft.settings, dealMode }, seats, revealIndex: 0, revealOpen: false,
+    settings: { ...app.draft.settings, dealMode, music: normalizeGameMusicSettings(app.draft.settings.music) }, seats, revealIndex: 0, revealOpen: false,
     ...(dealMode === 'number' ? { roleDeal: createNumberRoleDeal(roleKeys) } : {}),
     zeroNight: { step: 0 },
     speakerIndex: 0, speakerOrder: seats.map(seat => seat.number), nominations: [],
@@ -2219,7 +3041,11 @@ function createGameFromDraft() {
 function publicGame(game) {
   if (!game) return null;
   const clean = clone(game);
-  clean.seats.forEach(seat => { delete seat.role; delete seat.profileId; delete seat.cloudUid; });
+  clean.seats.forEach(seat => {
+    if (clean.status !== 'finished') delete seat.role;
+    delete seat.profileId;
+    delete seat.cloudUid;
+  });
   delete clean.roleDeal;
   clean.history = clean.history.filter(event => !event.secret);
   clean.night = { step: clean.night.step, target: clean.night.step >= 4 ? clean.night.target : null };
@@ -2242,10 +3068,24 @@ function queueActiveGamePublish(game) {
       const [gameId, pending] = pendingActiveGames.entries().next().value;
       pendingActiveGames.delete(gameId);
       try {
+        if (activeGameChatMembershipSyncs.has(gameId)) {
+          await ensureActiveGameChat(pending);
+          activeGameChatMembershipSyncs.delete(gameId);
+          ensuredActiveGameChats.add(gameId);
+        }
         await Promise.all([
           saveActiveCommunityGame(app.authUser, app.hostProfile, pending),
           saveActiveGameBackup(app.authUser, pending)
         ]);
+        if (!ensuredActiveGameChats.has(gameId)) {
+          try {
+            await ensureActiveGameChat(pending);
+            ensuredActiveGameChats.add(gameId);
+          } catch (error) {
+            app.gameChatsState = { status: 'error', error: error?.message || 'Не вдалося автоматично створити чат гри' };
+            console.error(error);
+          }
+        }
       } catch (error) {
         pendingActiveGames.set(gameId, pending);
         app.cloudArchive = { status: 'error', error: cloudArchiveError(error), fromCache: false };
@@ -2364,6 +3204,21 @@ function stopTimer() {
   app.wakeLock = null;
 }
 
+async function persistRatingAdjustment(message) {
+  addLog(message);
+  await saveGame();
+  let syncError = null;
+  if (app.game.status === 'finished') {
+    try { await publishFinishedGame(app.game); }
+    catch (error) {
+      syncError = error;
+      app.cloudArchive = { status: 'error', error: cloudArchiveError(error), fromCache: false };
+    }
+  }
+  render();
+  toast(syncError ? 'Зміни збережено на пристрої · синхронізацію буде повторено' : 'Рейтингове коригування збережено');
+}
+
 function requestGameWakeLock() {
   if (!['game', 'reveal'].includes(app.route) || document.hidden || app.wakeLock) return;
   navigator.wakeLock?.request('screen').then(lock => {
@@ -2476,9 +3331,9 @@ async function nominate(number) {
   const target = seatByNo(number);
   const speaker = currentSpeaker();
   if (!target || target.status !== 'alive' || !speaker) return;
-  if (target.number === speaker.number) return toast('Себе виставляти не можна');
   if (app.game.nominations.includes(number)) return toast('Гравця вже виставлено');
   if (app.game.seats.some(seat => seat.nominatedBy === speaker.number)) return toast('Поточний гравець уже зробив номінацію');
+  if (!nominationIsAllowed(app.game, number, speaker.number)) return;
   pushUndo();
   app.game.nominations.push(number);
   target.nominatedBy = speaker.number;
@@ -2566,7 +3421,7 @@ async function finishVote() {
     app.game.phase = 'tieSpeech';
     app.game.speakerIndex = 0;
     setTimer(app.game.settings.tieSpeech, 'tie');
-    addLog(`Автокатастрофа: ${resolution.tied.map(number => `№${number}`).join(', ')}.`);
+    addLog(`Попіл: ${resolution.tied.map(number => `№${number}`).join(', ')}.`);
   }
   await saveGame(); render();
 }
@@ -2591,7 +3446,7 @@ async function finishAllTie() {
   if (app.game.vote.yes > app.game.vote.no) {
     const numbers = [...app.game.vote.tied];
     addLog(`Більшість за вихід усіх: ${numbers.map(number => `№${number}`).join(', ')}.`);
-    numbers.forEach(number => eliminateSeatOnly(number, 'автокатастрофа'));
+    numbers.forEach(number => eliminateSeatOnly(number, 'попіл'));
     app.game.pendingWinner = victoryForSeats(app.game.seats);
     app.game.phase = 'lastWord';
     app.game.lastWordSeat = numbers.shift();
@@ -2848,13 +3703,38 @@ function captureHostProfileDraft() {
   const form = document.querySelector('[data-form="host-profile"]');
   if (!form || app.modal?.type !== 'host-profile') return;
   const data = new FormData(form);
+  const current = { ...(app.hostProfile || {}), ...(app.modal.profileDraft || {}) };
+  const enteredTelegram = normalizeTelegramUsername(data.get('telegramUsername'));
+  const telegram = enteredTelegram === normalizeTelegramUsername(current.telegramUsername)
+    ? {
+      telegramUsername: current.telegramUsername || '',
+      telegramUserId: current.telegramUserId || '',
+      telegramDisplayName: current.telegramDisplayName || '',
+      telegramPhotoURL: current.telegramPhotoURL || '',
+      telegramVerified: current.telegramVerified === true && Boolean(current.telegramUserId) && Boolean(current.telegramLinkedAt),
+      telegramLinkedAt: current.telegramLinkedAt || ''
+    }
+    : telegramManualProfile(enteredTelegram);
   app.modal.profileDraft = {
     ...(app.modal.profileDraft || {}),
     displayName: String(data.get('displayName') || ''),
     nickname: String(data.get('nickname') || ''),
     club: String(data.get('club') || ''),
     description: String(data.get('description') || ''),
-    discoverable: data.get('discoverable') === 'on'
+    discoverable: data.get('discoverable') === 'on',
+    ...telegram
+  };
+}
+
+function captureGameSettingsDraft() {
+  const form = document.querySelector('[data-form="game-settings"]');
+  if (!form || app.modal?.type !== 'game-settings') return;
+  const data = new FormData(form);
+  app.modal.settingsDraft = {
+    ...(app.modal.settingsDraft || {}),
+    ...Object.fromEntries(['speech', 'tieSpeech', 'lastWord', 'nightCheck', 'mafiaMeet', 'sheriffMark', 'freeSeating', 'bestMove']
+      .map(key => [key, Math.max(5, Math.min(180, Number(data.get(key)) || DEFAULT_SETTINGS[key]))])),
+    penaltyMode: data.get('penaltyMode') === 'club' ? 'club' : 'tournament'
   };
 }
 
@@ -2923,6 +3803,9 @@ async function savePlayer(form) {
 async function loadHostProfile() {
   const stored = await getSetting('hostProfile', null);
   const timestamp = nowIso();
+  const profileSyncState = stored?.profileSyncState === 'pending'
+    ? 'pending'
+    : stored?.profileSyncState === 'synced' ? 'synced' : stored ? 'cached' : 'bootstrap';
   app.hostProfile = {
     uid: app.authUser.uid,
     email: app.authUser.email,
@@ -2933,21 +3816,63 @@ async function loadHostProfile() {
     club: stored?.club || '',
     description: stored?.description || '',
     avatar: stored?.avatar || '',
+    telegramUsername: normalizeTelegramUsername(stored?.telegramUsername),
+    telegramUserId: stored?.telegramVerified === true ? String(stored?.telegramUserId || '') : '',
+    telegramDisplayName: stored?.telegramVerified === true ? String(stored?.telegramDisplayName || '') : '',
+    telegramPhotoURL: stored?.telegramVerified === true ? String(stored?.telegramPhotoURL || '') : '',
+    telegramVerified: stored?.telegramVerified === true && Boolean(stored?.telegramUserId) && Boolean(stored?.telegramLinkedAt),
+    telegramLinkedAt: stored?.telegramVerified === true ? String(stored?.telegramLinkedAt || '') : '',
     discoverable: stored?.discoverable !== false,
     createdAt: stored?.createdAt || timestamp,
-    updatedAt: stored?.updatedAt || timestamp
+    updatedAt: stored?.updatedAt || timestamp,
+    profileSyncState
   };
   app.profilePhotoSync = { status: app.hostProfile.avatar ? 'pending' : 'idle' };
-  if (!stored || stored.email !== app.authUser.email || stored.googleName !== app.authUser.googleName || stored.googlePhotoURL !== app.authUser.googlePhotoURL) {
+  if (!stored || stored.email !== app.authUser.email || stored.googleName !== app.authUser.googleName || stored.googlePhotoURL !== app.authUser.googlePhotoURL || stored.profileSyncState !== profileSyncState) {
     await setSetting('hostProfile', app.hostProfile);
   }
-  return Boolean(stored);
 }
 
 function cloudDirectoryError(error) {
   if (error?.code === 'permission-denied') return 'Немає доступу до каталогу. Перевірте Google-вхід.';
   if (!navigator.onLine || error?.code === 'unavailable') return 'Немає мережі: показано збережені локальні профілі.';
   return 'Не вдалося синхронізувати каталог Enjoy.';
+}
+
+function venueDirectoryError(error) {
+  if (error?.code === 'permission-denied') return 'Немає доступу до каталогу місць. Перевірте Google-вхід.';
+  if (!navigator.onLine || error?.code === 'unavailable') return 'Немає мережі: нові місця тимчасово недоступні.';
+  return 'Не вдалося синхронізувати каталог місць.';
+}
+
+async function connectVenueDirectory() {
+  if (!app.authUser) return;
+  if (LOCAL_AUTH_TEST) {
+    app.venueDirectory = { status: 'online', error: '', fromCache: false };
+    return;
+  }
+  if (venueDirectoryPromise) return venueDirectoryPromise;
+  app.venueDirectory = { status: 'loading', error: '', fromCache: false };
+  renderPassiveCloudUpdate();
+  venueDirectoryPromise = subscribeCommunityVenues((venues, metadata) => {
+    app.venues = venues;
+    app.venueDirectory = {
+      status: metadata.fromCache && !navigator.onLine ? 'offline' : 'online',
+      error: '',
+      fromCache: metadata.fromCache
+    };
+    renderPassiveCloudUpdate();
+  }, error => {
+    venueDirectoryPromise = null;
+    app.venueDirectory = { status: 'error', error: venueDirectoryError(error), fromCache: false };
+    renderPassiveCloudUpdate();
+  });
+  try { await venueDirectoryPromise; }
+  catch (error) {
+    venueDirectoryPromise = null;
+    app.venueDirectory = { status: 'error', error: venueDirectoryError(error), fromCache: false };
+    renderPassiveCloudUpdate();
+  }
 }
 
 function stopProfilePresence() {
@@ -2973,15 +3898,17 @@ function startProfilePresence() {
   }, PROFILE_PRESENCE_HEARTBEAT_MS);
 }
 
-async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
+async function connectCloudDirectory() {
   if (!app.authUser || LOCAL_AUTH_TEST) return;
   if (cloudDirectoryPromise) return cloudDirectoryPromise;
   app.cloudDirectory = { status: 'loading', error: '', fromCache: false };
   if (app.hostProfile?.avatar) app.profilePhotoSync = { status: 'syncing' };
   renderPassiveCloudUpdate();
   cloudDirectoryPromise = (async () => {
-    const remote = await reconcileOwnCommunityProfile(app.authUser, app.hostProfile, { hasLocalProfile });
-    if (remote && (!hasLocalProfile || String(remote.profileUpdatedAt || '') > String(app.hostProfile.updatedAt || ''))) {
+    const profileUpdatedAtBeforeSync = app.hostProfile?.updatedAt || '';
+    const remote = await reconcileOwnCommunityProfile(app.authUser, app.hostProfile);
+    const profileChangedDuringSync = (app.hostProfile?.updatedAt || '') !== profileUpdatedAtBeforeSync;
+    if (remote && !profileChangedDuringSync) {
       app.hostProfile = {
         ...app.hostProfile,
         displayName: remote.displayName || app.hostProfile.displayName,
@@ -2989,8 +3916,15 @@ async function connectCloudDirectory({ hasLocalProfile = true } = {}) {
         club: remote.club || '',
         description: remote.description || '',
         avatar: remote.photoDataURL || '',
+        telegramUsername: remote.telegramUsername || '',
+        telegramUserId: remote.telegramUserId || '',
+        telegramDisplayName: remote.telegramDisplayName || '',
+        telegramPhotoURL: remote.telegramPhotoURL || '',
+        telegramVerified: remote.telegramVerified === true,
+        telegramLinkedAt: remote.telegramLinkedAt || '',
         discoverable: remote.discoverable !== false,
-        updatedAt: remote.profileUpdatedAt || app.hostProfile.updatedAt
+        updatedAt: remote.profileUpdatedAt || app.hostProfile.updatedAt,
+        profileSyncState: 'synced'
       };
       await setSetting('hostProfile', app.hostProfile);
     }
@@ -3208,16 +4142,175 @@ function renderPassiveCloudUpdate() {
     && app.game
     && !app.game.publicOnly
     && canManageGame(app.game);
-  if (!hostingOwnGame) render();
+  if (hostingOwnGame) return;
+  const activeElement = document.activeElement;
+  const editing = activeElement instanceof Element
+    && (activeElement.matches('input, textarea, select, [contenteditable="true"]') || activeElement.isContentEditable)
+    && (appRoot.contains(activeElement) || modalRoot.contains(activeElement));
+  if (editing) {
+    passiveRenderPending = true;
+    return;
+  }
+  render();
 }
 
 async function publishFinishedGame(game) {
-  if (!app.authUser || LOCAL_AUTH_TEST || game?.status !== 'finished') return false;
+  if (!app.authUser || game?.status !== 'finished') return false;
+  if (LOCAL_AUTH_TEST) {
+    await ensureFinishedGameChat(game);
+    return false;
+  }
   await flushActiveGamePublish(game.id);
   const saved = await saveFinishedCommunityGame(app.authUser, app.hostProfile, game);
+  try {
+    await ensureFinishedGameChat(game);
+  } catch (error) {
+    app.gameChatsState = { status: 'error', error: error?.message || 'Не вдалося автоматично створити чат гри' };
+    console.error(error);
+  }
   await deleteActiveCommunityGame(app.authUser, game.id);
   await deleteActiveGameBackup(app.authUser, game.id);
   return saved;
+}
+
+function upsertGameChat(chat) {
+  app.gameChats = [chat, ...app.gameChats.filter(item => item.id !== chat.id)]
+    .sort((left, right) => String(right.endedAt || right.startedAt).localeCompare(String(left.endedAt || left.startedAt)));
+}
+
+async function ensureActiveGameChat(game) {
+  if (!app.authUser || game?.status !== 'active') return null;
+  const chat = LOCAL_AUTH_TEST
+    ? { ...createGameChatDocument(app.authUser, app.hostProfile, game), createdAt: Date.now() }
+    : await ensureGameChat(app.authUser, app.hostProfile, game);
+  upsertGameChat(chat);
+  app.gameChatsState = { status: 'online', error: '' };
+  return chat;
+}
+
+async function ensureFinishedGameChat(game) {
+  if (!app.authUser || game?.status !== 'finished') return null;
+  const chat = LOCAL_AUTH_TEST
+    ? { ...createGameChatDocument(app.authUser, app.hostProfile, game), createdAt: Date.now() }
+    : await ensureGameChat(app.authUser, app.hostProfile, game);
+  upsertGameChat(chat);
+  ensuredActiveGameChats.delete(game.id);
+  activeGameChatMembershipSyncs.delete(game.id);
+  app.gameChatsState = { status: 'online', error: '' };
+  return chat;
+}
+
+async function connectGameChats() {
+  if (!app.authUser) return;
+  if (LOCAL_AUTH_TEST) {
+    app.gameChatsState = { status: 'online', error: '' };
+    return;
+  }
+  if (gameChatsPromise) return gameChatsPromise;
+  app.gameChatsState = { status: 'loading', error: '' };
+  renderPassiveCloudUpdate();
+  gameChatsPromise = subscribeGameChats(app.authUser, chats => {
+    app.gameChats = chats;
+    app.gameChatsState = { status: 'online', error: '' };
+    renderPassiveCloudUpdate();
+  }, error => {
+    gameChatsPromise = null;
+    app.gameChatsState = { status: 'error', error: error?.message || 'Не вдалося завантажити обговорення ігор' };
+    renderPassiveCloudUpdate();
+  });
+  return gameChatsPromise;
+}
+
+function reconnectGameChats() {
+  stopGameChats();
+  gameChatsPromise = null;
+  return connectGameChats();
+}
+
+async function connectGameChatMessages(chatId) {
+  app.chatMessages = [];
+  app.chatMessagesState = { status: 'loading', error: '' };
+  render();
+  if (LOCAL_AUTH_TEST) {
+    app.chatMessagesState = { status: 'online', error: '' };
+    render();
+    return;
+  }
+  await subscribeGameChatMessages(app.authUser, chatId, messages => {
+    app.chatMessages = messages;
+    app.chatMessagesState = { status: 'online', error: '' };
+    if (app.modal?.type === 'game-chat' && app.modal.chatId === chatId) render();
+  }, error => {
+    app.chatMessagesState = { status: 'error', error: error?.message || 'Не вдалося завантажити повідомлення' };
+    if (app.modal?.type === 'game-chat' && app.modal.chatId === chatId) render();
+  });
+}
+
+async function openGameChat(chat) {
+  if (!chat || !chat.participantUids.includes(app.authUser?.uid)) return toast('Цей чат доступний лише учасникам гри');
+  stopGameChatMessages();
+  app.chatDraft = '';
+  app.chatMessages = [];
+  app.chatMessagesState = { status: 'loading', error: '' };
+  app.modal = { type: 'game-chat', chatId: chat.id };
+  render();
+  await connectGameChatMessages(chat.id);
+}
+
+async function openAppGameChat(gameId) {
+  let chat = gameChatForGame(gameId);
+  const game = gameById(gameId) || (app.game?.id === gameId ? app.game : null);
+  if (!game) return toast('Гру не знайдено');
+  if (game.status === 'active' && !canJoinActiveGameChat(app.authUser, game)) {
+    return toast('Активні гравці отримають доступ до чату після вибуття або завершення гри');
+  }
+  if (!chat || !chat.participantUids.includes(app.authUser?.uid)) {
+    app.chatBusy = true;
+    render();
+    try {
+      if (canManageGame(game)) {
+        chat = game.status === 'active' ? await ensureActiveGameChat(game) : await ensureFinishedGameChat(game);
+      } else if (LOCAL_AUTH_TEST) {
+        chat = { ...createGameChatDocument(app.authUser, app.hostProfile, game), participantUids: [app.authUser.uid], createdAt: Date.now() };
+        upsertGameChat(chat);
+      } else {
+        chat = await joinGameChat(app.authUser, game.id);
+        upsertGameChat(chat);
+      }
+    } catch (error) {
+      toast(error?.message || 'Не вдалося приєднатися до чату гри');
+    } finally {
+      app.chatBusy = false;
+      render();
+    }
+  }
+  if (chat) await openGameChat(chat);
+}
+
+async function sendCurrentGameChatMessage() {
+  const chat = app.modal?.type === 'game-chat' ? gameChatById(app.modal.chatId) : null;
+  const text = app.chatDraft.trim();
+  if (!chat || !text || app.chatBusy) return;
+  app.chatBusy = true;
+  render();
+  try {
+    if (LOCAL_AUTH_TEST) {
+      app.chatMessages.push({
+        id: uid('message'), gameId: chat.gameId, senderUid: app.authUser.uid,
+        senderName: String(app.hostProfile?.nickname || app.hostProfile?.displayName || app.authUser.googleName || 'Гравець'),
+        text: text.slice(0, 1000), createdAt: Date.now(), pending: false
+      });
+      app.chatMessagesState = { status: 'online', error: '' };
+    } else {
+      await sendGameChatMessage(app.authUser, app.hostProfile, chat.id, text);
+    }
+    app.chatDraft = '';
+  } catch (error) {
+    toast(error?.message || 'Не вдалося надіслати повідомлення');
+  } finally {
+    app.chatBusy = false;
+    render();
+  }
 }
 
 function localActiveGameCandidates({ includePendingDeletes = false } = {}) {
@@ -3468,6 +4561,7 @@ async function flushPendingActiveGameDeletes() {
   const remaining = [];
   for (const gameId of app.pendingActiveGameDeletes) {
     try {
+      try { await deleteGameChat(app.authUser, gameId); } catch { /* Older games might not have a chat. */ }
       await deleteActiveCommunityGame(app.authUser, gameId);
       app.cloudGames = app.cloudGames.filter(game => !(game.id === gameId && game.status === 'active'));
     } catch (error) {
@@ -3484,6 +4578,7 @@ async function cleanUpCanceledActiveGame(user, gameId) {
   try {
     await flushActiveGamePublish(gameId);
     if (!navigator.onLine) return;
+    try { await deleteGameChat(user, gameId); } catch { /* The live game still has to be canceled. */ }
     await deleteActiveCommunityGame(user, gameId);
     await deleteActiveGameBackup(user, gameId);
     await forgetActiveGameDelete(gameId);
@@ -3497,6 +4592,8 @@ async function cancelActiveGame(game) {
   if (!canManageGame(game)) throw new Error('Скасувати гру може лише її ведучий');
   if (app.game?.id === game.id) stopTimer();
   pendingActiveGames.delete(game.id);
+  ensuredActiveGameChats.delete(game.id);
+  activeGameChatMembershipSyncs.delete(game.id);
   const cleanupUser = app.authUser;
   if (!LOCAL_AUTH_TEST) await rememberActiveGameDelete(game.id);
 
@@ -3508,6 +4605,8 @@ async function cancelActiveGame(game) {
   if (app.localGames.some(item => item.id === game.id)) await deleteOne('games', game.id);
   app.localGames = app.localGames.filter(item => item.id !== game.id);
   app.cloudGames = app.cloudGames.filter(item => item.id !== game.id);
+  app.gameChats = app.gameChats.filter(chat => chat.gameId !== game.id);
+  if (app.modal?.type === 'game-chat' && app.modal.chatId === game.id) app.modal = null;
   if (app.game?.id === game.id) app.game = null;
   app.undo = [];
   mergeGameSources();
@@ -3562,26 +4661,85 @@ async function deleteCurrentAppAccount() {
   toast('Профіль Mafia видалено');
 }
 
+async function prepareTelegramProfileLink() {
+  if (app.modal?.type !== 'host-profile' || ['loading', 'connecting'].includes(app.telegramLink.status)) return;
+  app.telegramLink = { status: 'loading', error: '', prepared: null };
+  render();
+  try {
+    const idToken = LOCAL_AUTH_TEST ? '' : await getFirebaseIdToken();
+    const prepared = await prepareTelegramProfileConnection({ idToken, testMode: LOCAL_AUTH_TEST });
+    if (app.modal?.type !== 'host-profile') return;
+    app.telegramLink = { status: 'ready', error: '', prepared };
+    render();
+  } catch (error) {
+    if (app.modal?.type !== 'host-profile') return;
+    app.telegramLink = { status: 'error', error: error?.message || 'Не вдалося підготувати Telegram Login', prepared: null };
+    render();
+  }
+}
+
+async function connectTelegramProfile() {
+  if (app.modal?.type !== 'host-profile' || app.telegramLink.status === 'connecting') return;
+  if (app.telegramLink.status !== 'ready' || !app.telegramLink.prepared) {
+    await prepareTelegramProfileLink();
+    if (app.telegramLink.status === 'ready') toast('Telegram Login готовий · натисніть іконку ще раз');
+    return;
+  }
+  captureHostProfileDraft();
+  const pending = connectPreparedTelegramProfile(app.telegramLink.prepared, { language: app.settings.language });
+  app.telegramLink = { ...app.telegramLink, status: 'connecting', error: '' };
+  render();
+  try {
+    const profile = await pending;
+    if (app.modal?.type !== 'host-profile') return;
+    app.modal.profileDraft = { ...(app.modal.profileDraft || {}), ...profile };
+    app.telegramLink = { status: 'connected', error: '', prepared: null };
+    render();
+    toast('Telegram-акаунт підтверджено · збережіть профіль');
+  } catch (error) {
+    if (app.modal?.type !== 'host-profile') return;
+    app.telegramLink = { status: 'error', error: error?.message || 'Не вдалося підключити Telegram', prepared: null };
+    render();
+  }
+}
+
 async function saveHostProfile(form) {
   if (profileIsInActiveGame(`google_${app.authUser?.uid || ''}`)) {
     return toast('Завершіть поточну гру перед редагуванням профілю');
   }
   const data = new FormData(form);
   const displayName = String(data.get('displayName') || '').trim();
-  if (!displayName) return toast('Вкажіть ім’я ведучого');
+  if (!displayName) return toast('Вкажіть ім’я');
+  const nickname = String(data.get('nickname') || '').trim();
+  const telegramInput = String(data.get('telegramUsername') || '').trim();
+  const normalizedTelegramUsername = normalizeTelegramUsername(telegramInput);
+  if (telegramInput && !normalizedTelegramUsername) return toast('Вкажіть коректний Telegram username: від 5 до 32 літер, цифр або _');
+  const currentTelegram = { ...(app.hostProfile || {}), ...(app.modal?.profileDraft || {}) };
+  const telegram = normalizedTelegramUsername === normalizeTelegramUsername(currentTelegram.telegramUsername)
+    ? {
+      telegramUsername: normalizedTelegramUsername,
+      telegramUserId: currentTelegram.telegramVerified ? String(currentTelegram.telegramUserId || '') : '',
+      telegramDisplayName: currentTelegram.telegramVerified ? String(currentTelegram.telegramDisplayName || '') : '',
+      telegramPhotoURL: currentTelegram.telegramVerified ? String(currentTelegram.telegramPhotoURL || '') : '',
+      telegramVerified: currentTelegram.telegramVerified === true && Boolean(currentTelegram.telegramUserId) && Boolean(currentTelegram.telegramLinkedAt),
+      telegramLinkedAt: currentTelegram.telegramVerified ? String(currentTelegram.telegramLinkedAt || '') : ''
+    }
+    : telegramManualProfile(normalizedTelegramUsername);
   app.hostProfile = {
     ...app.hostProfile,
     uid: app.authUser.uid,
     email: app.authUser.email,
     displayName,
-    nickname: String(data.get('nickname') || '').trim(),
+    nickname,
     club: String(data.get('club') || '').trim(),
     description: String(data.get('description') || '').trim(),
+    ...telegram,
     avatar: app.modal?.profileDraft && Object.hasOwn(app.modal.profileDraft, 'avatar')
       ? app.modal.profileDraft.avatar
       : app.hostProfile.avatar || '',
     discoverable: data.get('discoverable') === 'on',
-    updatedAt: nowIso()
+    updatedAt: nowIso(),
+    profileSyncState: 'pending'
   };
   await setSetting('hostProfile', app.hostProfile);
   app.profilePhotoSync = { status: app.hostProfile.avatar ? 'syncing' : 'idle' };
@@ -3594,12 +4752,93 @@ async function saveHostProfile(form) {
       app.cloudDirectory = { status: 'error', error: cloudDirectoryError(error), fromCache: false };
     }
   }
+  if (cloudSaved) {
+    app.hostProfile = { ...app.hostProfile, profileSyncState: 'synced' };
+    await setSetting('hostProfile', app.hostProfile);
+  }
   app.profilePhotoSync = {
     status: app.hostProfile.avatar ? (cloudSaved ? 'synced' : 'error') : 'idle'
   };
+  app.telegramLink = { status: 'idle', error: '', prepared: null };
   app.modal = null;
   render();
   toast(cloudSaved ? 'Профіль Enjoy синхронізовано' : 'Збережено локально; хмарна синхронізація не вдалася');
+}
+
+function applyGoogleMapsSuggestion() {
+  if (app.modal?.type !== 'venue') return;
+  const venue = app.modal.venue || {};
+  const suggestion = googleMapsVenueSuggestion(venue.googleMapsUrl);
+  if (!suggestion.valid) {
+    app.modal.googleStatus = venue.googleMapsUrl
+      ? 'Перевірте посилання: потрібна HTTPS-адреса Google Maps.'
+      : 'Спочатку вставте посилання Google Maps.';
+    app.modal.googleStatusTone = 'error';
+    render();
+    return;
+  }
+  app.modal.venue = {
+    ...venue,
+    googleMapsUrl: suggestion.url,
+    name: venue.name || suggestion.name,
+    address: venue.address || suggestion.address
+  };
+  app.modal.googleStatusTone = '';
+  if (suggestion.name || suggestion.address) {
+    app.modal.googleStatus = 'Дані з посилання підставлено. Перевірте їх перед збереженням.';
+  } else if (suggestion.short) {
+    app.modal.googleStatus = 'Коротке посилання збережеться, але адресу з нього без Google Places API прочитати неможливо — введіть її вручну.';
+  } else {
+    app.modal.googleStatus = 'Посилання збережеться. Назва й адреса в ньому не закодовані, тому введіть їх вручну.';
+  }
+  render();
+}
+
+async function saveVenueForm(form) {
+  if (app.venueBusy || app.modal?.type !== 'venue') return;
+  const returnModal = app.modal.returnModal ? clone(app.modal.returnModal) : null;
+  const source = app.modal.source || (returnModal ? 'profile' : 'setup');
+  const data = new FormData(form);
+  const venue = {
+    name: data.get('name'),
+    googleMapsUrl: data.get('googleMapsUrl'),
+    address: data.get('address'),
+    phone: data.get('phone'),
+    website: data.get('website')
+  };
+  app.venueBusy = true;
+  app.modal.venue = venue;
+  render();
+  try {
+    const saved = LOCAL_AUTH_TEST
+      ? createCommunityVenueFields(app.authUser, app.hostProfile, venue, uid('venue'))
+      : await saveCommunityVenue(app.authUser, app.hostProfile, venue);
+    app.venues = [saved, ...app.venues.filter(item => item.id !== saved.id)];
+    app.venueBusy = false;
+    if (returnModal?.type === 'host-profile') {
+      app.modal = returnModal;
+      app.modal.profileDraft = {
+        ...(app.modal.profileDraft || {}),
+        club: saved.name,
+        clubSearch: saved.name,
+        clubPickerOpen: false,
+        clubSearchDirty: false
+      };
+    } else if (source === 'settings') {
+      app.modal = null;
+      app.panelExpanded.settingsVenues = true;
+    } else {
+      app.modal = null;
+      setDraftVenue(saved);
+      if (app.draft) app.draft.venuePickerOpen = true;
+    }
+    render();
+    toast(`Місце «${saved.name}» додано`);
+  } catch (error) {
+    app.venueBusy = false;
+    render();
+    toast(error?.message || 'Не вдалося зберегти місце');
+  }
 }
 
 function protocolText(game = app.game) {
@@ -3611,7 +4850,14 @@ function protocolText(game = app.game) {
     `Початок: ${formatDate(game.startedAt, true)}`,
     `Переможець: ${winner}`,
     '',
-    ...game.seats.map(seat => `№${seat.number} ${seat.name} — ${roleOf(seat)?.label || '—'} — ${seat.status === 'alive' ? 'за столом' : `вибув (${seat.eliminatedReason || '—'})`}`),
+    ...game.seats.map(seat => {
+      const score = mafiaGamePoints(game, seat);
+      const adjustments = [
+        score.actionPenalty ? `штраф ${formatSignedRatingPoints(score.actionPenalty)}` : '',
+        score.disqualificationPenalty ? `дискваліфікація ${formatSignedRatingPoints(score.disqualificationPenalty)}` : ''
+      ].filter(Boolean);
+      return `№${seat.number} ${seat.name} — ${roleOf(seat)?.label || '—'} — ${seat.status === 'alive' ? 'за столом' : `вибув (${seat.eliminatedReason || '—'})`} — фінальний бал ${formatRatingPoints(score.points)}${adjustments.length ? ` (${adjustments.join(', ')})` : ''}`;
+    }),
     '', 'ПОДІЇ:',
     ...game.history.slice().reverse().map(event => `${event.time} — ${event.text}`)
   ].join('\n');
@@ -3630,12 +4876,37 @@ async function copyText(text, success = 'Скопійовано') {
   toast(success);
 }
 
+function appShareUrl() {
+  const url = new URL('./', document.baseURI);
+  url.search = '';
+  url.hash = '';
+  return url.href;
+}
+
+async function shareApp() {
+  const shareData = {
+    title: document.title || 'Mafia Enjoy',
+    text: 'Mafia Enjoy — застосунок для ведення гри в спортивну «Мафію».',
+    url: appShareUrl()
+  };
+  if (typeof navigator.share === 'function') {
+    try {
+      await navigator.share(shareData);
+      return;
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+    }
+  }
+  await copyText(shareData.url, 'Посилання на Mafia Enjoy скопійовано');
+}
+
 const GUARDED_GAME_ACTIONS = new Set([
   'start-game', 'confirm-number-role', 'reveal-next', 'zero-night-sheriff', 'zero-night-free-seating', 'zero-to-day',
   'timer-toggle', 'next-speaker', 'back-to-speeches', 'start-vote', 'finish-vote',
   'next-tie-speaker', 'finish-all-tie', 'finish-last-word', 'finish-best-move', 'skip-best-move',
   'night-next', 'night-miss', 'night-shot-done', 'night-check-done', 'night-skip-check', 'wake-city',
   'add-fault', 'remove-fault', 'nominate', 'remove-nomination', 'manual-eliminate', 'restore-seat',
+  'set-rating-penalty', 'toggle-disqualification',
   'undo', 'finish-red', 'finish-black', 'finish-draw'
 ]);
 
@@ -3689,7 +4960,18 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'retry-auth') {
     location.reload();
   } else if (action === 'edit-host-profile') {
-    app.modal = { type: 'host-profile' }; render();
+    app.telegramLink = { status: 'idle', error: '', prepared: null };
+    app.modal = { type: 'host-profile' };
+    render();
+    void prepareTelegramProfileLink();
+  } else if (action === 'connect-telegram-profile') {
+    await connectTelegramProfile();
+  } else if (action === 'disconnect-telegram-profile') {
+    if (app.modal?.type !== 'host-profile') return;
+    captureHostProfileDraft();
+    app.modal.profileDraft = { ...(app.modal.profileDraft || {}), ...telegramManualProfile('') };
+    render();
+    toast('Telegram від’єднано · збережіть профіль');
   } else if (action === 'open-player-avatar') {
     const playerId = element.dataset.id;
     if (!playerById(playerId)) return toast('Профіль не знайдено');
@@ -3778,24 +5060,75 @@ async function handleAction(action, element, sourceEvent) {
     if (app.modal?.type === 'media') app.modal.view = 'bluetooth';
     render();
   } else if (action === 'media-play') {
-    await playMusic();
+    automaticMusicPaused = false;
+    automaticMusicBlockedCue = '';
+    await playMusic({ automatic: app.media.automatic });
   } else if (action === 'media-pause') {
     pauseMusic();
   } else if (action === 'media-clear') {
-    clearMusicTrack();
+    const wasAutomatic = app.media.automatic;
+    if (wasAutomatic) pauseMusic();
+    else clearMusicTrack();
     render();
-    toast('Аудіофайл прибрано');
+    toast(wasAutomatic ? 'Музику призупинено до наступної сцени' : 'Аудіофайл прибрано');
   } else if (action === 'bluetooth-request') {
     if (app.modal?.type === 'media') app.modal.view = 'bluetooth';
     await requestBluetoothDevice();
   } else if (action === 'cloud-refresh') {
     stopCommunityProfiles();
-    await connectCloudDirectory({ hasLocalProfile: true });
+    await connectCloudDirectory();
   } else if (action === 'cloud-games-refresh') {
     app.gameFeedbackSummaries = {};
     const published = await publishLocalActiveGamesNow();
     await reconnectCloudArchive();
     toast(published ? `Активну гру опубліковано · ${published}` : 'Список ігор оновлено');
+  } else if (action === 'game-chats-refresh') {
+    await reconnectGameChats();
+    await syncLocalFinishedGames();
+  } else if (action === 'open-game-discussion') {
+    const game = gameById(element.dataset.id) || (app.game?.id === element.dataset.id ? app.game : null);
+    if (!game || game.status !== 'finished') return toast('Обговорення доступне після завершення гри');
+    if (!canManageGame(game) && !gameChatForGame(game.id)) return toast('Обговорення доступне лише учасникам цієї гри');
+    app.modal = { type: 'discussion', gameId: game.id };
+    render();
+    if (!gameChatForGame(game.id) && canManageGame(game)) {
+      app.chatBusy = true;
+      render();
+      try {
+        await ensureFinishedGameChat(game);
+      } catch (error) {
+        app.gameChatsState = { status: 'error', error: error?.message || 'Не вдалося створити чат гри' };
+      } finally {
+        app.chatBusy = false;
+        render();
+      }
+    }
+  } else if (action === 'open-app-game-chat') {
+    await openAppGameChat(element.dataset.id);
+  } else if (action === 'open-game-chat') {
+    const chat = gameChatById(element.dataset.id);
+    if (!chat) return toast('Чат не знайдено');
+    await openGameChat(chat);
+  } else if (action === 'retry-game-chat-messages') {
+    if (app.modal?.type === 'game-chat') await connectGameChatMessages(app.modal.chatId);
+  } else if (action === 'insert-chat-emotion') {
+    if (app.modal?.type !== 'game-chat' || app.chatBusy) return;
+    const composer = modalRoot.querySelector('[data-input="game-chat-message"]');
+    if (!composer) return;
+    const result = insertGameChatEmotion(
+      app.chatDraft,
+      element.dataset.value,
+      composer.selectionStart,
+      composer.selectionEnd,
+      composer.maxLength
+    );
+    if (!result.inserted) return;
+    app.chatDraft = result.text;
+    composer.value = result.text;
+    const submit = composer.closest('form')?.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = !app.chatDraft.trim();
+    composer.focus({ preventScroll: true });
+    composer.setSelectionRange(result.caret, result.caret);
   } else if (action === 'host-use-google-photo') {
     captureHostProfileDraft();
     app.modal.profileDraft = { ...(app.modal.profileDraft || {}), avatar: '' };
@@ -3817,9 +5150,13 @@ async function handleAction(action, element, sourceEvent) {
     try {
       await acceptPlayerLink(app.authUser, offer.id);
       if (!app.hostProfile.nickname && offer.nickname) {
-        app.hostProfile = { ...app.hostProfile, nickname: offer.nickname, updatedAt: nowIso() };
+        app.hostProfile = { ...app.hostProfile, nickname: offer.nickname, updatedAt: nowIso(), profileSyncState: 'pending' };
         await setSetting('hostProfile', app.hostProfile);
-        try { await saveOwnCommunityProfile(app.authUser, app.hostProfile); } catch { /* The link itself is already confirmed. */ }
+        try {
+          await saveOwnCommunityProfile(app.authUser, app.hostProfile);
+          app.hostProfile = { ...app.hostProfile, profileSyncState: 'synced' };
+          await setSetting('hostProfile', app.hostProfile);
+        } catch { /* The pending profile will retry when the directory reconnects. */ }
       }
       app.playerLinkOffers.shift();
       app.playerLinkBusy = false;
@@ -3837,6 +5174,8 @@ async function handleAction(action, element, sourceEvent) {
     app.playerLinkBusy = false;
     app.modal = null;
     render();
+  } else if (action === 'share-app') {
+    await shareApp();
   } else if (action === 'install') {
     const mode = currentPwaInstallMode();
     if (mode === 'ios-guide') {
@@ -3868,6 +5207,94 @@ async function handleAction(action, element, sourceEvent) {
     if (!app.draft) app.draft = createDraft();
     else fillDraftSeatsFromQueue();
     navigate('setup');
+  } else if (action === 'select-game-venue') {
+    const venue = availableVenues().find(item => item.id === element.dataset.id);
+    if (!venue) return toast('Місце не знайдено');
+    setDraftVenue(venue);
+    render();
+  } else if (action === 'use-custom-game-venue') {
+    const name = String(app.draft?.venueSearch || '').trim();
+    if (!name) return;
+    setDraftVenue({ id: '', name });
+    render();
+  } else if (action === 'open-venue-create') {
+    const query = String(app.draft?.venueSearch || '').trim();
+    const exact = availableVenues().some(venue => venue.name.toLocaleLowerCase('uk') === query.toLocaleLowerCase('uk'));
+    app.modal = {
+      type: 'venue',
+      venue: { name: exact ? '' : query, googleMapsUrl: '', address: '', phone: '', website: '' },
+      googleStatus: '',
+      googleStatusTone: '',
+      source: 'setup'
+    };
+    render();
+  } else if (action === 'open-settings-venue-create') {
+    app.modal = {
+      type: 'venue',
+      venue: { name: '', googleMapsUrl: '', address: '', phone: '', website: '' },
+      googleStatus: '',
+      googleStatusTone: '',
+      source: 'settings'
+    };
+    render();
+  } else if (action === 'delete-venue') {
+    if (!canAdministerVenues()) return toast('Видаляти місця може лише адміністратор');
+    const venue = app.venues.find(item => item.id === element.dataset.id);
+    if (!venue) return toast('Це місце не можна видалити');
+    app.modal = {
+      type: 'confirm',
+      title: 'Видалити місце?',
+      text: `«${venue.name}» зникне зі спільного каталогу. Уже завершені й активні ігри залишаться без змін.`,
+      confirmLabel: 'Видалити місце',
+      confirm: { kind: 'venue', id: venue.id, name: venue.name }
+    };
+    render();
+  } else if (action === 'retry-venue-directory') {
+    await connectVenueDirectory();
+  } else if (action === 'select-profile-club') {
+    if (app.modal?.type !== 'host-profile') return;
+    const venue = availableVenues().find(item => item.id === element.dataset.id);
+    if (!venue) return toast('Місце не знайдено');
+    captureHostProfileDraft();
+    app.modal.profileDraft = {
+      ...(app.modal.profileDraft || {}),
+      club: venue.name,
+      clubSearch: venue.name,
+      clubPickerOpen: false,
+      clubSearchDirty: false
+    };
+    render();
+  } else if (action === 'use-custom-profile-club') {
+    if (app.modal?.type !== 'host-profile') return;
+    captureHostProfileDraft();
+    const name = String(app.modal.profileDraft?.clubSearch || app.modal.profileDraft?.club || '').trim();
+    if (!name) return;
+    app.modal.profileDraft = {
+      ...(app.modal.profileDraft || {}),
+      club: name,
+      clubSearch: name,
+      clubPickerOpen: false,
+      clubSearchDirty: false
+    };
+    render();
+  } else if (action === 'open-profile-club-create') {
+    if (app.modal?.type !== 'host-profile') return;
+    captureHostProfileDraft();
+    const query = String(app.modal.profileDraft?.clubSearch || app.modal.profileDraft?.club || '').trim();
+    const exact = availableVenues().some(venue => venue.name.toLocaleLowerCase('uk') === query.toLocaleLowerCase('uk'));
+    const returnModal = clone(app.modal);
+    returnModal.profileDraft = { ...(returnModal.profileDraft || {}), clubPickerOpen: false };
+    app.modal = {
+      type: 'venue',
+      venue: { name: exact ? '' : query, googleMapsUrl: '', address: '', phone: '', website: '' },
+      googleStatus: '',
+      googleStatusTone: '',
+      source: 'profile',
+      returnModal
+    };
+    render();
+  } else if (action === 'fill-venue-from-google') {
+    applyGoogleMapsSuggestion();
   } else if (action === 'new-player') {
     app.modal = { type: 'player', player: { name: '', nickname: '', contact: '', notes: '', avatar: '' } }; render();
   } else if (action === 'edit-player') {
@@ -3897,6 +5324,26 @@ async function handleAction(action, element, sourceEvent) {
     render();
   } else if (action === 'confirm-action') {
     const confirm = app.modal.confirm;
+    if (confirm.kind === 'venue') {
+      if (!canAdministerVenues()) { app.modal = null; render(); return toast('Видаляти місця може лише адміністратор'); }
+      try {
+        if (!LOCAL_AUTH_TEST) await deleteCommunityVenue(app.authUser, confirm.id);
+      } catch (error) {
+        app.modal = null;
+        render();
+        return toast(error?.message || 'Не вдалося видалити місце');
+      }
+      app.venues = app.venues.filter(venue => venue.id !== confirm.id);
+      if (app.draft?.venueId === confirm.id) {
+        app.draft.venueId = '';
+        app.draft.venueSearch = app.draft.venue;
+      }
+      app.panelExpanded.settingsVenues = true;
+      app.modal = null;
+      render();
+      toast(`Місце «${confirm.name}» видалено`);
+      return;
+    }
     if (confirm.kind === 'player') {
       if (profileIsInActiveGame(confirm.id)) { app.modal = null; render(); return toast('Профіль не можна видалити до завершення гри'); }
       if (!LOCAL_AUTH_TEST && app.authUser) {
@@ -3928,16 +5375,27 @@ async function handleAction(action, element, sourceEvent) {
     app.modal = null; await refreshData(); render(); toast('Видалено');
   } else if (action === 'close-modal') {
     if (element.classList.contains('modal-backdrop') && element !== sourceEvent?.target) return;
-    app.modal = null; render();
+    if (app.modal?.type === 'venue' && app.venueBusy) return;
+    if (app.modal?.type === 'game-chat') {
+      stopGameChatMessages();
+      app.chatMessages = [];
+      app.chatMessagesState = { status: 'idle', error: '' };
+      app.chatDraft = '';
+    }
+    const closingHostProfile = app.modal?.type === 'host-profile';
+    const returnModal = app.modal?.type === 'venue' ? app.modal.returnModal : null;
+    app.modal = returnModal || null;
+    if (closingHostProfile) app.telegramLink = { status: 'idle', error: '', prepared: null };
+    render();
   } else if (action === 'open-host-transfer') {
     if (!app.game || app.game.status !== 'active' || !canManageGame(app.game)) return toast('Передача доступна лише поточному ведучому');
-    app.modal = { type: outgoingHostTransfer(app.game.id) ? 'host-transfer-waiting' : 'host-transfer-select' };
+    app.modal = { type: outgoingHostTransfer(app.game.id) ? 'host-transfer-waiting' : 'host-transfer-select', search: '' };
     render();
   } else if (action === 'request-host-transfer') {
     if (!app.game || !canManageGame(app.game) || app.hostTransfers.busy) return;
     if (LOCAL_AUTH_TEST) return toast('Для передачі потрібні два авторизовані пристрої');
     const recipient = hostTransferCandidates().find(candidate => candidate.uid === element.dataset.uid);
-    if (!recipient) return toast('Цей учасник недоступний для передачі');
+    if (!recipient) return toast('Цей користувач недоступний для передачі');
     app.hostTransfers.busy = true;
     render();
     try {
@@ -4036,7 +5494,31 @@ async function handleAction(action, element, sourceEvent) {
       toast(error?.message || 'Не вдалося прийняти ведення');
     }
   } else if (action === 'game-settings') {
-    app.modal = { type: 'game-settings' }; render();
+    app.modal = { type: 'game-settings', settingsDraft: { ...app.game.settings } }; render();
+  } else if (action === 'toggle-draft-music') {
+    if (!app.draft) return;
+    app.draft.settings.music = normalizeGameMusicSettings(app.draft.settings.music);
+    app.draft.settings.music.enabled = !app.draft.settings.music.enabled;
+    render();
+  } else if (action === 'preview-setup-music') {
+    await previewSetupMusic(element.dataset.musicCue);
+  } else if (action === 'pause-setup-music') {
+    if (app.media.playing && app.media.cue === element.dataset.musicCue) pauseMusic();
+  } else if (action === 'choose-setup-music-file') {
+    const cue = element.dataset.musicCue;
+    if (!GAME_MUSIC_CUES.some(item => item.id === cue)) return;
+    document.querySelector(`[data-input="setup-music-file"][data-music-cue="${cue}"]`)?.click();
+  } else if (action === 'set-stats-period') {
+    const period = element.dataset.statsPeriod;
+    if (!['all', '30d', '90d', '365d'].includes(period) || app.statsPeriod === period) return;
+    app.statsPeriod = period;
+    render();
+    requestAnimationFrame(() => document.querySelector(`[data-stats-period="${period}"]`)?.focus());
+  } else if (action === 'previous-game-calendar-month' || action === 'next-game-calendar-month') {
+    const offset = action === 'previous-game-calendar-month' ? -1 : 1;
+    app.gameCalendarMonth = shiftGameCalendarMonth(app.gameCalendarMonth, offset);
+    render();
+    requestAnimationFrame(() => document.querySelector(`[data-action="${action}"]`)?.focus());
   } else if (action === 'toggle-panel') {
     const panel = element.dataset.panel;
     if (Object.hasOwn(app.panelExpanded, panel)) {
@@ -4085,6 +5567,16 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'shuffle-seats') {
     const shuffledSeats = shuffled(app.draft.seats.map(seat => ({ profileId: seat.profileId, name: seat.name, autoGuestName: seat.autoGuestName })));
     app.draft.seats.forEach((seat, index) => Object.assign(seat, shuffledSeats[index])); render();
+  } else if (action === 'clear-setup-seats') {
+    if (!app.draft) return;
+    app.draft.seats = app.draft.seats.map(seat => ({
+      number: seat.number,
+      profileId: '',
+      name: '',
+      autoGuestName: false
+    }));
+    render();
+    toast('Розсадку очищено');
   } else if (action === 'start-game') {
     const existingActiveGame = activeGames().find(game => !game.publicOnly && canManageGame(game));
     if (existingActiveGame) return toast(`Спочатку завершіть активну гру «${existingActiveGame.title}»`);
@@ -4092,8 +5584,9 @@ async function handleAction(action, element, sourceEvent) {
     const selected = app.draft.seats.map(seat => seat.profileId).filter(Boolean);
     if (new Set(selected).size !== selected.length) return toast('Один профіль не можна посадити двічі');
     const devicePreferences = { theme: app.settings.theme, sound: app.settings.sound, haptics: app.settings.haptics };
-    app.game = createGameFromDraft(); app.settings = { ...app.game.settings, ...devicePreferences }; app.undo = [];
+    app.game = createGameFromDraft(); app.settings = { ...app.game.settings, music: normalizeGameMusicSettings(app.game.settings.music), ...devicePreferences }; app.undo = [];
     app.panelExpanded.moderatorPanel = false;
+    void syncAutomaticMusic();
     await setSetting('appSettings', app.settings); await saveGame();
     const gameId = app.game.id;
     app.nextGameQueue = consumeSeatedPlayers(app.nextGameQueue, app.game.seats);
@@ -4185,20 +5678,36 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'next-speaker') await nextSpeaker();
   else if (action === 'back-to-speeches') { app.game.subphase = 'speeches'; app.game.speakerIndex = Math.max(0, app.game.speakerOrder.length - 1); setTimer(timerBase(), 'speech'); await saveGame(); render(); }
   else if (action === 'seat-menu') { app.modal = { type: 'seat', seat: number }; render(); }
+  else if (action === 'set-rating-penalty') {
+    if (!canManageGame(app.game)) return toast('Рейтинг може коригувати лише ведучий гри');
+    const seat = seatByNo(number);
+    const penalty = Number(element.dataset.penalty);
+    if (!seat || ![0, FIIM_RATING_RULES.actionPenaltyLow, FIIM_RATING_RULES.actionPenaltyHigh].includes(penalty)) return;
+    if ((Number(seat.ratingPenalty) || 0) === penalty) return;
+    seat.ratingPenalty = penalty;
+    await persistRatingAdjustment(`Рейтинговий штраф №${number}: ${penalty ? formatSignedRatingPoints(penalty) : 'скасовано'}.`);
+  }
+  else if (action === 'toggle-disqualification') {
+    if (!canManageGame(app.game)) return toast('Дискваліфікацію може позначити лише ведучий гри');
+    const seat = seatByNo(number);
+    if (!seat) return;
+    seat.disqualified = !seat.disqualified;
+    await persistRatingAdjustment(`Дискваліфікацію №${number} ${seat.disqualified ? 'позначено' : 'скасовано'}.`);
+  }
   else if (action === 'add-fault') {
     const seat = seatByNo(number); pushUndo(); seat.faults = Math.min(4, seat.faults + 1); addLog(`№${number} отримує ${seat.faults}-й фол.`);
     const speaking = app.game.phase === 'day' && app.game.subphase === 'speeches' && currentSpeaker()?.number === number;
     if (app.game.settings.penaltyMode === 'club' && seat.faults === 2) seat.shortSpeechDay = app.game.day + (speaking ? 1 : 0);
     if (app.game.settings.penaltyMode === 'club' && seat.faults === 3) seat.noVote = true;
     if (app.game.settings.penaltyMode === 'tournament' && seat.faults === 3) seat.restrictionDay = app.game.day + (speaking ? 1 : 0);
-    if (seat.faults === 4) { eliminateSeatOnly(number, '4-й фол'); app.modal = null; await checkVictory(); }
+    if (seat.faults === 4) { seat.disqualified = true; eliminateSeatOnly(number, '4-й фол'); app.modal = null; await checkVictory(); }
     await saveGame(); vibrate(); render();
   } else if (action === 'remove-fault') {
     const seat = seatByNo(number); pushUndo(); seat.faults = Math.max(0, seat.faults - 1); if (seat.faults < 3) { seat.noVote = false; seat.restrictionDay = null; } if (seat.faults < 2) seat.shortSpeechDay = null; addLog(`Фол №${number} скориговано: ${seat.faults}.`); await saveGame(); render();
   } else if (action === 'nominate') await nominate(number);
   else if (action === 'remove-nomination') await removeNomination(number);
   else if (action === 'manual-eliminate') { pushUndo(); app.modal = null; await eliminate(number, 'рішення ведучого', false); }
-  else if (action === 'restore-seat') { const seat = seatByNo(app.modal.seat); pushUndo(); seat.status = 'alive'; seat.eliminatedReason = ''; addLog(`№${seat.number} повернуто за стіл ведучим.`); app.modal = null; await saveGame(); render(); }
+  else if (action === 'restore-seat') { const seat = seatByNo(app.modal.seat); pushUndo(); seat.status = 'alive'; seat.eliminatedReason = ''; addLog(`№${seat.number} повернуто за стіл ведучим.`); app.modal = null; ensuredActiveGameChats.delete(app.game.id); activeGameChatMembershipSyncs.add(app.game.id); await saveGame(); render(); }
   else if (action === 'start-vote') await startVote();
   else if (action === 'vote-plus' || action === 'vote-minus') { adjustVote(number, action === 'vote-plus' ? 1 : -1); await saveGame(); render(); }
   else if (action === 'fill-remainder') { fillRemainder(); await saveGame(); render(); }
@@ -4254,6 +5763,8 @@ async function handleAction(action, element, sourceEvent) {
     stopTimer();
     app.game = normalizeGameState(app.undo.pop(), DEFAULT_SETTINGS, { closeReveal: true });
     if (finishedGameId) await removeFinishedResultForReopen(finishedGameId);
+    ensuredActiveGameChats.delete(app.game.id);
+    if (!finishedGameId) activeGameChatMembershipSyncs.add(app.game.id);
     await saveGame(); render(); toast(finishedGameId ? 'Результат скасовано · гру відновлено' : 'Останню дію скасовано');
   } else if (action === 'copy-protocol') await copyText(protocolText(element.dataset.id ? gameById(element.dataset.id) : app.game), 'Протокол скопійовано');
   else if (action === 'view-protocol') { app.modal = { type: 'protocol', gameId: element.dataset.id }; render(); }
@@ -4265,7 +5776,17 @@ async function handleAction(action, element, sourceEvent) {
     await finishGame(action === 'finish-red' ? 'red' : action === 'finish-black' ? 'black' : 'draw');
   }
   else if (action === 'rematch') {
-    const previous = app.game; app.draft = createDraft(); app.draft.title = `${previous.title} · реванш`; app.draft.autoTitle = false; app.draft.venue = previous.venue; app.draft.seats = previous.seats.map(seat => ({ number: seat.number, profileId: seat.profileId || '', name: seat.name, autoGuestName: false })); navigate('setup');
+    const previous = app.game;
+    const previousVenue = availableVenues().find(venue => venue.name.toLocaleLowerCase('uk') === String(previous.venue || '').trim().toLocaleLowerCase('uk'));
+    app.draft = createDraft();
+    app.draft.title = `${previous.title} · реванш`;
+    app.draft.autoTitle = false;
+    app.draft.venue = previous.venue;
+    app.draft.venueId = previousVenue?.id || '';
+    app.draft.venueSearch = previous.venue;
+    app.draft.venuePickerOpen = false;
+    app.draft.seats = previous.seats.map(seat => ({ number: seat.number, profileId: seat.profileId || '', name: seat.name, autoGuestName: false }));
+    navigate('setup');
   } else if (action === 'setting-sound' || action === 'setting-haptics') {
     const key = action === 'setting-sound' ? 'sound' : 'haptics'; app.settings[key] = !app.settings[key]; await setSetting('appSettings', app.settings); render();
   } else if (action === 'set-theme') {
@@ -4300,12 +5821,55 @@ async function handleAction(action, element, sourceEvent) {
 }
 
 async function handleInput(element) {
-  if (element.dataset.input === 'player-search') {
+  if (element.dataset.input === 'game-chat-message') {
+    app.chatDraft = element.value.slice(0, 1000);
+    const submit = element.closest('form')?.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = !app.chatDraft.trim() || app.chatBusy;
+  } else if (element.dataset.input === 'player-search') {
     app.search = element.value;
     render();
     const search = $('[data-input="player-search"]');
     search?.focus();
     search?.setSelectionRange(app.search.length, app.search.length);
+  } else if (element.dataset.input === 'host-transfer-search') {
+    if (app.modal?.type !== 'host-transfer-select') return;
+    app.modal.search = element.value;
+    render();
+    const search = $('[data-input="host-transfer-search"]');
+    search?.focus();
+    search?.setSelectionRange(app.modal.search.length, app.modal.search.length);
+  } else if (element.dataset.input === 'venue-search') {
+    if (!app.draft) return;
+    app.draft.venueSearch = element.value;
+    app.draft.venue = element.value.trim();
+    app.draft.venueId = '';
+    app.draft.venuePickerOpen = true;
+    if (app.draft.autoTitle !== false) app.draft.title = defaultGameTitle(new Date(), app.draft.venue);
+    render();
+    focusVenueSearch();
+  } else if (element.dataset.input === 'profile-club-search') {
+    if (app.modal?.type !== 'host-profile') return;
+    const query = element.value;
+    captureHostProfileDraft();
+    app.modal.profileDraft = {
+      ...(app.modal.profileDraft || {}),
+      club: query.trim(),
+      clubSearch: query,
+      clubPickerOpen: true,
+      clubSearchDirty: true
+    };
+    render();
+    focusProfileClubSearch();
+  } else if (element.dataset.input === 'telegram-username' && app.modal?.type === 'host-profile') {
+    const current = { ...(app.hostProfile || {}), ...(app.modal.profileDraft || {}) };
+    const username = normalizeTelegramUsername(element.value);
+    if (username !== normalizeTelegramUsername(current.telegramUsername)) {
+      app.modal.profileDraft = { ...(app.modal.profileDraft || {}), ...telegramManualProfile(element.value) };
+      element.closest('.telegram-profile-field')?.querySelector('.telegram-linked-identity')?.remove();
+      element.closest('.telegram-profile-field')?.querySelector('.telegram-connect-btn')?.classList.remove('connected');
+    }
+  } else if (element.dataset.venueField && app.modal?.type === 'venue') {
+    app.modal.venue = { ...(app.modal.venue || {}), [element.dataset.venueField]: element.value };
   } else if (element.dataset.draft) {
     app.draft[element.dataset.draft] = element.value;
     if (element.dataset.draft === 'title') app.draft.autoTitle = false;
@@ -4321,10 +5885,28 @@ async function handleInput(element) {
       seat.autoGuestName = false;
     }
   }
+  const formType = element.closest?.('[data-form]')?.dataset.form;
+  if (formType === 'host-profile') captureHostProfileDraft();
+  else if (formType === 'player') captureManualPlayerDraft();
+  else if (formType === 'game-settings') captureGameSettingsDraft();
 }
 
 async function handleChange(element) {
-  if (element.dataset.seatProfile) {
+  if (element.dataset.input === 'venue-google-maps-url' && app.modal?.type === 'venue') {
+    applyGoogleMapsSuggestion();
+  } else if (element.dataset.input === 'setup-music-choice' && app.draft) {
+    const cue = element.dataset.musicCue;
+    if (!GAME_MUSIC_CUES.some(item => item.id === cue)) return;
+    app.draft.settings.music = normalizeGameMusicSettings({
+      ...app.draft.settings.music,
+      [cue]: element.value
+    });
+    if (app.draft.settings.music[cue] === customMusicChoice(cue) && !setupMusicFiles.has(cue)) {
+      element.closest('[data-music-cue-card]')?.querySelector('[data-input="setup-music-file"]')?.click();
+      return;
+    }
+    render();
+  } else if (element.dataset.seatProfile) {
     const seat = app.draft.seats.find(item => item.number === Number(element.dataset.seatProfile));
     if (!seat) return;
     const alreadySeated = element.value && app.draft.seats.some(item => item.number !== seat.number && item.profileId === element.value);
@@ -4346,6 +5928,7 @@ async function handleChange(element) {
   } else if (['avatar-camera', 'avatar-gallery'].includes(element.dataset.input) && element.files?.[0]) {
     try {
       toast(element.dataset.input === 'avatar-camera' ? 'Обробляю знімок…' : 'Обробляю фото…');
+      captureManualPlayerDraft();
       app.modal.player.avatar = await compressImage(element.files[0]);
       app.modal.player.avatarPreset = '';
       render();
@@ -4364,7 +5947,13 @@ async function handleChange(element) {
     } catch (error) { toast(error.message); }
   } else if (element.dataset.input === 'music-file' && element.files?.[0]) {
     selectMusicFile(element.files[0]);
+  } else if (element.dataset.input === 'setup-music-file' && element.files?.[0] && app.draft) {
+    setupMusicFile(element.dataset.musicCue, element.files[0]);
   }
+  const formType = element.closest?.('[data-form]')?.dataset.form;
+  if (formType === 'host-profile') captureHostProfileDraft();
+  else if (formType === 'player') captureManualPlayerDraft();
+  else if (formType === 'game-settings') captureGameSettingsDraft();
 }
 
 async function checkLegacyMigration() {
@@ -4390,12 +5979,14 @@ async function activateAuthenticatedUser(user) {
     app.authBusy = false;
     useDatabaseForUser(user.uid);
     await openDatabase();
-    const hasLocalProfile = await loadAppData();
+    await loadAppData();
     await checkLegacyMigration();
     render();
     await Promise.all([
-      connectCloudDirectory({ hasLocalProfile }),
+      connectCloudDirectory(),
       connectCloudArchive(),
+      connectGameChats(),
+      connectVenueDirectory(),
       connectPlayerLinks(),
       connectHostTransfers()
     ]);
@@ -4415,17 +6006,29 @@ function clearAuthenticatedState() {
   clearInterval(app.observerTimerHandle);
   app.observerTimerHandle = null;
   clearMusicTrack();
+  clearSetupMusicFiles();
+  automaticMusicCue = '';
+  automaticMusicPaused = false;
+  automaticMusicBlockedCue = '';
+  automaticMusicPlayPendingCue = '';
   clearDriveAccess();
   stopCommunityProfiles();
   stopCommunityGames();
+  stopCommunityVenues();
   stopGameHostTransfers();
+  stopGameChatMessages();
+  stopGameChats();
   stopPlayerLinks();
   stopProfilePresence();
   cloudDirectoryPromise = null;
   cloudArchivePromise = null;
+  venueDirectoryPromise = null;
+  gameChatsPromise = null;
   cloudArchiveMigrationStarted = false;
   pendingActiveGames.clear();
   activeGameRecoveryAttempts.clear();
+  ensuredActiveGameChats.clear();
+  activeGameChatMembershipSyncs.clear();
   handledHostTransfers.clear();
   if (activeGamePublishRetryHandle) clearTimeout(activeGamePublishRetryHandle);
   activeGamePublishRetryHandle = null;
@@ -4434,6 +6037,7 @@ function clearAuthenticatedState() {
   app.authUser = null;
   app.hostProfile = null;
   app.profilePhotoSync = { status: 'idle' };
+  app.telegramLink = { status: 'idle', error: '', prepared: null };
   app.gameFeedback = {};
   app.gameFeedbackSummaries = {};
   app.localPlayers = [];
@@ -4448,6 +6052,12 @@ function clearAuthenticatedState() {
   app.accountDeleteBusy = false;
   app.pendingActiveGameDeletes = [];
   app.hostTransfers = { incoming: [], outgoing: [], busy: false, error: '' };
+  app.gameChats = [];
+  app.gameChatsState = { status: 'idle', error: '' };
+  app.chatMessages = [];
+  app.chatMessagesState = { status: 'idle', error: '' };
+  app.chatDraft = '';
+  app.chatBusy = false;
   app.games = [];
   app.nextGameQueue = [];
   app.game = null;
@@ -4457,18 +6067,32 @@ function clearAuthenticatedState() {
   app.authBusy = false;
   app.cloudDirectory = { status: 'idle', error: '', fromCache: false };
   app.cloudArchive = { status: 'idle', error: '', fromCache: false };
+  app.venues = [];
+  app.venueDirectory = { status: 'idle', error: '', fromCache: false };
+  app.venueBusy = false;
 }
 
 async function loadAppData() {
-  const hasLocalProfile = Boolean(await getSetting('hostProfile', null));
   app.players = [];
   app.localPlayers = [];
   app.localGames = [];
   app.deletedGameIds = [];
   app.games = [];
+  app.gameChats = [];
+  app.gameChatsState = { status: 'idle', error: '' };
+  app.chatMessages = [];
+  app.chatMessagesState = { status: 'idle', error: '' };
+  app.chatDraft = '';
+  app.chatBusy = false;
   app.game = null;
   app.draft = null;
-  app.settings = { ...DEFAULT_SETTINGS, ...(await getSetting('appSettings', {})) };
+  const storedSettings = await getSetting('appSettings', {});
+  app.settings = { ...DEFAULT_SETTINGS, ...storedSettings };
+  app.settings.music = migrateGameMusicSettings(app.settings.music, storedSettings.musicDefaultsVersion);
+  app.settings.musicDefaultsVersion = GAME_MUSIC_DEFAULTS_VERSION;
+  if (Number(storedSettings.musicDefaultsVersion || 0) < GAME_MUSIC_DEFAULTS_VERSION) {
+    await setSetting('appSettings', app.settings);
+  }
   app.settings.theme = applyTheme(app.settings.theme);
   app.settings.language = applyLanguage(app.settings.language);
   app.nextGameQueue = normalizeLineup(await getSetting('nextGameQueue', []));
@@ -4482,10 +6106,15 @@ async function loadAppData() {
   if (route.id) app.game = await getOne('games', route.id) || app.game;
   if (!app.game) app.game = activeGames()[0] || null;
   if (app.game) app.game = normalizeGameState(app.game, DEFAULT_SETTINGS, { closeReveal: true });
-  return hasLocalProfile;
 }
 
 async function onRouteChange() {
+  if (app.modal?.type === 'game-chat') {
+    stopGameChatMessages();
+    app.chatMessages = [];
+    app.chatMessagesState = { status: 'idle', error: '' };
+    app.chatDraft = '';
+  }
   if (app.route === 'reveal' && app.game?.revealOpen) app.game.revealOpen = false;
   const moderatorTimerWasRunning = Boolean(app.route !== 'observer' && app.game?.timer?.running && !app.game.publicOnly && canManageGame(app.game));
   if (moderatorTimerWasRunning) {
@@ -4529,13 +6158,42 @@ document.addEventListener('click', async event => {
 
 document.addEventListener('input', event => handleInput(event.target));
 document.addEventListener('change', event => handleChange(event.target));
+document.addEventListener('focusout', () => {
+  if (!passiveRenderPending) return;
+  setTimeout(() => {
+    if (!passiveRenderPending) return;
+    const activeElement = document.activeElement;
+    const stillEditing = activeElement instanceof Element
+      && (activeElement.matches('input, textarea, select, [contenteditable="true"]') || activeElement.isContentEditable)
+      && (appRoot.contains(activeElement) || modalRoot.contains(activeElement));
+    if (!stillEditing) renderPassiveCloudUpdate();
+  }, 0);
+});
+document.addEventListener('focusin', event => {
+  if (event.target.dataset.input === 'venue-search' && app.draft && !app.draft.venuePickerOpen) {
+    app.draft.venuePickerOpen = true;
+    render();
+    focusVenueSearch();
+  } else if (event.target.dataset.input === 'profile-club-search' && app.modal?.type === 'host-profile' && !app.modal.profileDraft?.clubPickerOpen) {
+    captureHostProfileDraft();
+    app.modal.profileDraft = { ...(app.modal.profileDraft || {}), clubPickerOpen: true };
+    render();
+    focusProfileClubSearch();
+  }
+});
 document.addEventListener('submit', async event => {
-  if (event.target.dataset.form === 'player') {
+  if (event.target.dataset.form === 'game-chat-message') {
+    event.preventDefault();
+    await sendCurrentGameChatMessage();
+  } else if (event.target.dataset.form === 'player') {
     event.preventDefault();
     await savePlayer(event.target);
   } else if (event.target.dataset.form === 'host-profile') {
     event.preventDefault();
     await saveHostProfile(event.target);
+  } else if (event.target.dataset.form === 'venue') {
+    event.preventDefault();
+    await saveVenueForm(event.target);
   } else if (event.target.dataset.form === 'game-settings') {
     event.preventDefault();
     const data = new FormData(event.target);
@@ -4551,7 +6209,19 @@ document.addEventListener('submit', async event => {
   }
 });
 document.addEventListener('keydown', async event => {
-  if (event.key === 'Escape' && (app.modal || app.tooltip) && !app.accountDeleteBusy) { app.modal = null; closeOverlays(); render(); }
+  if (event.key === 'Escape' && (app.modal || app.tooltip) && !app.accountDeleteBusy) {
+    const closingHostProfile = app.modal?.type === 'host-profile';
+    if (app.modal?.type === 'game-chat') {
+      stopGameChatMessages();
+      app.chatMessages = [];
+      app.chatMessagesState = { status: 'idle', error: '' };
+      app.chatDraft = '';
+    }
+    app.modal = app.modal?.type === 'venue' && app.modal.returnModal ? app.modal.returnModal : null;
+    if (closingHostProfile) app.telegramLink = { status: 'idle', error: '', prepared: null };
+    closeOverlays();
+    render();
+  }
   if (app.route === 'game' && !app.modal && event.code === 'Space' && ['day', 'tieSpeech', 'lastWord'].includes(app.game?.phase)) {
     event.preventDefault();
     app.game.timer.running ? stopTimer() : startTimer();
@@ -4569,8 +6239,10 @@ window.addEventListener('appinstalled', () => {
 window.matchMedia?.('(display-mode: standalone)').addEventListener?.('change', () => render());
 window.addEventListener('online', () => {
   toast('Інтернет-з’єднання відновлено');
-  if (app.authUser && app.cloudDirectory.status === 'error') connectCloudDirectory({ hasLocalProfile: true });
+  if (app.authUser && app.cloudDirectory.status === 'error') connectCloudDirectory();
   if (app.authUser && ['error', 'offline'].includes(app.cloudArchive.status)) reconnectCloudArchive();
+  if (app.authUser && app.gameChatsState.status === 'error') reconnectGameChats();
+  if (app.authUser && ['error', 'offline'].includes(app.venueDirectory.status)) connectVenueDirectory();
   if (app.authUser) syncLocalActiveGames();
   if (app.authUser) syncSharedManualPlayers().catch(() => {});
   if (app.authUser) connectPlayerLinks().catch(() => {});
@@ -4615,7 +6287,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=161', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register(`./sw.js?v=${PWA_VERSION}`, { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

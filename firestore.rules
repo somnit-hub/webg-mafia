@@ -16,6 +16,11 @@ service cloud.firestore {
         && request.auth.token.email_verified == true;
     }
 
+    function isCommunityAdmin() {
+      return hasVerifiedEmail()
+        && request.auth.token.email == 'somnit3d@gmail.com';
+    }
+
     function validPrivateActiveGame(uid, gameId) {
       return request.resource.data.keys().hasOnly([
           'id', 'ownerUid', 'gameUpdatedAt', 'stateJson', 'schemaVersion', 'updatedAt'
@@ -85,7 +90,9 @@ service cloud.firestore {
     function validMember(uid) {
       return request.resource.data.keys().hasOnly([
           'uid', 'communityId', 'displayName', 'nickname', 'club',
-          'description', 'photoURL', 'photoDataURL', 'discoverable', 'profileUpdatedAt',
+          'description', 'photoURL', 'photoDataURL',
+          'telegramUsername', 'telegramUserId', 'telegramDisplayName', 'telegramPhotoURL',
+          'telegramVerified', 'telegramLinkedAt', 'discoverable', 'profileUpdatedAt',
           'schemaVersion', 'createdAt', 'updatedAt', 'lastSeenAt'
         ])
         && request.resource.data.uid == uid
@@ -107,6 +114,31 @@ service cloud.firestore {
         && request.resource.data.photoDataURL.size() <= 350000
         && (request.resource.data.photoDataURL == ''
           || request.resource.data.photoDataURL.matches('^data:image/(webp|jpeg|png);base64,.*$'))
+        && request.resource.data.telegramUsername is string
+        && request.resource.data.telegramUsername.size() <= 32
+        && (request.resource.data.telegramUsername == ''
+          || request.resource.data.telegramUsername.matches('^[a-zA-Z0-9_]{5,32}$'))
+        && request.resource.data.telegramUserId is string
+        && request.resource.data.telegramUserId.size() <= 32
+        && (request.resource.data.telegramUserId == ''
+          || request.resource.data.telegramUserId.matches('^[0-9]{1,32}$'))
+        && request.resource.data.telegramDisplayName is string
+        && request.resource.data.telegramDisplayName.size() <= 80
+        && request.resource.data.telegramPhotoURL is string
+        && request.resource.data.telegramPhotoURL.size() <= 2048
+        && (request.resource.data.telegramPhotoURL == ''
+          || request.resource.data.telegramPhotoURL.matches('^https://.*$'))
+        && request.resource.data.telegramVerified is bool
+        && request.resource.data.telegramLinkedAt is string
+        && request.resource.data.telegramLinkedAt.size() <= 40
+        && ((request.resource.data.telegramVerified == true
+            && request.resource.data.telegramUserId.size() > 0
+            && request.resource.data.telegramLinkedAt.size() > 0)
+          || (request.resource.data.telegramVerified == false
+            && request.resource.data.telegramUserId == ''
+            && request.resource.data.telegramDisplayName == ''
+            && request.resource.data.telegramPhotoURL == ''
+            && request.resource.data.telegramLinkedAt == ''))
         && request.resource.data.discoverable is bool
         && request.resource.data.profileUpdatedAt is string
         && request.resource.data.profileUpdatedAt.size() <= 40
@@ -114,6 +146,39 @@ service cloud.firestore {
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp
         && request.resource.data.lastSeenAt is timestamp;
+    }
+
+    function validVenue(venueId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'communityId', 'name', 'googleMapsUrl', 'address', 'phone', 'website',
+          'createdByUid', 'createdByName', 'schemaVersion', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.id == venueId
+        && request.resource.data.communityId == 'enjoy'
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.googleMapsUrl is string
+        && request.resource.data.googleMapsUrl.size() <= 2048
+        && (request.resource.data.googleMapsUrl == ''
+          || request.resource.data.googleMapsUrl.matches('^https://(([^/]+[.])?google[.](com|[a-z]{2,3}|(com|co)[.][a-z]{2})|maps[.]app[.]goo[.]gl|goo[.]gl)/.*'))
+        && request.resource.data.address is string
+        && request.resource.data.address.size() <= 300
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 40
+        && request.resource.data.website is string
+        && request.resource.data.website.size() <= 2048
+        && (request.resource.data.website == ''
+          || request.resource.data.website.matches('^https?://.*'))
+        && request.resource.data.createdByUid is string
+        && request.resource.data.createdByUid.size() > 0
+        && request.resource.data.createdByUid.size() <= 128
+        && request.resource.data.createdByName is string
+        && request.resource.data.createdByName.size() > 0
+        && request.resource.data.createdByName.size() <= 60
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
     }
 
     function validManualPlayer(playerId) {
@@ -162,7 +227,7 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly([
           'id', 'communityId', 'ownerUid', 'hostName', 'title', 'venue',
           'startedAt', 'endedAt', 'gameUpdatedAt', 'status', 'winner',
-          'durationSeconds', 'day', 'seats', 'history', 'schemaVersion',
+          'durationSeconds', 'day', 'participantUids', 'seats', 'bestMove', 'history', 'schemaVersion',
           'createdAt', 'updatedAt'
         ])
         && request.resource.data.id == gameId
@@ -192,14 +257,139 @@ service cloud.firestore {
         && request.resource.data.day is int
         && request.resource.data.day >= 1
         && request.resource.data.day <= 100
+        && request.resource.data.participantUids is list
+        && request.resource.data.participantUids.size() > 0
+        && request.resource.data.participantUids.size() <= 11
+        && request.resource.data.participantUids.hasAll([uid])
         && request.resource.data.seats is list
         && request.resource.data.seats.size() == 10
+        && (!request.resource.data.keys().hasAny(['bestMove'])
+          || (request.resource.data.bestMove is map
+            && request.resource.data.bestMove.keys().hasOnly(['seat', 'selected'])
+            && request.resource.data.bestMove.seat is int
+            && request.resource.data.bestMove.seat >= 0
+            && request.resource.data.bestMove.seat <= 10
+            && validSeatNumbers(request.resource.data.bestMove.selected)
+            && request.resource.data.bestMove.selected.size() <= 3))
         && request.resource.data.history is list
         && request.resource.data.history.size() <= 500
         && request.resource.data.schemaVersion == 1
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp
         && !exists(/databases/$(database)/documents/communities/enjoy/gameDeletions/$(gameId));
+    }
+
+    function gameChatIsFinished(chat) {
+      return chat.status == 'finished'
+        || (!chat.keys().hasAny(['status']) && chat.endedAt is string && chat.endedAt.size() > 0);
+    }
+
+    function activeGameChatSourceIsValid(gameId) {
+      return request.resource.data.status == 'active'
+        && request.resource.data.endedAt == ''
+        && exists(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId))
+        && get(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId)).data.ownerUid == request.auth.uid
+        && !request.resource.data.participantUids.hasAny(
+          get(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId)).data.activePlayerUids
+        )
+        && request.resource.data.startedAt
+          == get(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId)).data.startedAt;
+    }
+
+    function finishedGameChatSourceIsValid(gameId) {
+      return request.resource.data.status == 'finished'
+        && request.resource.data.endedAt.size() > 0
+        && exists(/databases/$(database)/documents/communities/enjoy/games/$(gameId))
+        && get(/databases/$(database)/documents/communities/enjoy/games/$(gameId)).data.ownerUid == request.auth.uid
+        && request.resource.data.participantUids.hasAll(
+          get(/databases/$(database)/documents/communities/enjoy/games/$(gameId)).data.participantUids
+        );
+    }
+
+    function validGameChat(gameId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'gameId', 'communityId', 'ownerUid', 'hostName', 'participantUids',
+          'gameTitle', 'venue', 'status', 'startedAt', 'endedAt', 'schemaVersion', 'createdAt'
+        ])
+        && request.resource.data.id == gameId
+        && request.resource.data.gameId == gameId
+        && request.resource.data.communityId == 'enjoy'
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.hostName is string
+        && request.resource.data.hostName.size() > 0
+        && request.resource.data.hostName.size() <= 60
+        && request.resource.data.participantUids is list
+        && request.resource.data.participantUids.size() > 0
+        && request.resource.data.participantUids.size() <= 200
+        && request.resource.data.participantUids.hasAll([request.auth.uid])
+        && request.resource.data.gameTitle is string
+        && request.resource.data.gameTitle.size() > 0
+        && request.resource.data.gameTitle.size() <= 80
+        && request.resource.data.venue is string
+        && request.resource.data.venue.size() <= 100
+        && request.resource.data.status in ['active', 'finished']
+        && request.resource.data.startedAt is string
+        && request.resource.data.startedAt.size() <= 40
+        && request.resource.data.endedAt is string
+        && request.resource.data.endedAt.size() <= 40
+        && request.resource.data.schemaVersion == 2
+        && request.resource.data.createdAt is timestamp
+        && (activeGameChatSourceIsValid(gameId) || finishedGameChatSourceIsValid(gameId));
+    }
+
+    function canEnterActiveGameChat(gameId, chat) {
+      return chat.status == 'active'
+        && exists(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId))
+        && (get(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId)).data.ownerUid == request.auth.uid
+          || !(request.auth.uid in get(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId)).data.activePlayerUids));
+    }
+
+    function ownsGameChatSource(gameId) {
+      return signedIn()
+        && ((exists(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId))
+            && get(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId)).data.ownerUid == request.auth.uid)
+          || (exists(/databases/$(database)/documents/communities/enjoy/games/$(gameId))
+            && get(/databases/$(database)/documents/communities/enjoy/games/$(gameId)).data.ownerUid == request.auth.uid));
+    }
+
+    function canUseGameChat(gameId) {
+      let chat = get(/databases/$(database)/documents/communities/enjoy/gameChats/$(gameId)).data;
+      return signedIn()
+        && exists(/databases/$(database)/documents/communities/enjoy/gameChats/$(gameId))
+        && request.auth.uid in chat.participantUids;
+    }
+
+    function validGameChatJoin(gameId) {
+      return resource.data.status == 'active'
+        && canEnterActiveGameChat(gameId, resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participantUids'])
+        && request.resource.data.participantUids is list
+        && request.resource.data.participantUids.size() == resource.data.participantUids.size() + 1
+        && request.resource.data.participantUids.size() <= 200
+        && request.resource.data.participantUids.hasAll(resource.data.participantUids)
+        && request.resource.data.participantUids.hasAll([request.auth.uid])
+        && !(request.auth.uid in resource.data.participantUids);
+    }
+
+    function validGameChatMessage(gameId, messageId) {
+      return request.resource.data.keys().hasOnly([
+          'id', 'gameId', 'senderUid', 'senderName', 'text', 'clientCreatedAt',
+          'schemaVersion', 'createdAt'
+        ])
+        && request.resource.data.id == messageId
+        && request.resource.data.gameId == gameId
+        && request.resource.data.senderUid == request.auth.uid
+        && request.resource.data.senderName is string
+        && request.resource.data.senderName.size() > 0
+        && request.resource.data.senderName.size() <= 60
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1000
+        && request.resource.data.clientCreatedAt is string
+        && request.resource.data.clientCreatedAt.size() > 0
+        && request.resource.data.clientCreatedAt.size() <= 40
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt is timestamp;
     }
 
     function validGameDeletion(uid, gameId) {
@@ -223,7 +413,7 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly([
           'id', 'communityId', 'ownerUid', 'hostName', 'title', 'venue',
           'startedAt', 'gameUpdatedAt', 'status', 'phase', 'subphase', 'day',
-          'seats', 'nominations', 'tied', 'speakerIndex', 'speakerOrder',
+          'participantUids', 'activePlayerUids', 'seats', 'nominations', 'tied', 'speakerIndex', 'speakerOrder',
           'lastWordSeat', 'nightStep', 'timer', 'schemaVersion',
           'createdAt', 'updatedAt'
         ])
@@ -245,6 +435,20 @@ service cloud.firestore {
         && request.resource.data.gameUpdatedAt.size() > 0
         && request.resource.data.gameUpdatedAt.size() <= 40
         && request.resource.data.status == 'active'
+        && request.resource.data.participantUids is list
+        && request.resource.data.participantUids.size() > 0
+        && request.resource.data.participantUids.size() <= 11
+        && request.resource.data.participantUids.hasAll([uid])
+        && request.resource.data.activePlayerUids is list
+        && request.resource.data.activePlayerUids.size() <= 10
+        && request.resource.data.activePlayerUids.hasOnly(request.resource.data.participantUids)
+        && (!exists(/databases/$(database)/documents/communities/enjoy/gameChats/$(gameId))
+          || gameChatIsFinished(get(/databases/$(database)/documents/communities/enjoy/gameChats/$(gameId)).data)
+          || !request.resource.data.activePlayerUids.hasAny(
+            get(/databases/$(database)/documents/communities/enjoy/gameChats/$(gameId)).data.participantUids
+          )
+          || get(/databases/$(database)/documents/communities/enjoy/gameChats/$(gameId)).data.ownerUid
+            in request.resource.data.activePlayerUids)
         && request.resource.data.phase in [
           'reveal', 'zeroNight', 'day', 'vote', 'tieSpeech', 'tieVote',
           'allTie', 'lastWord', 'bestMove', 'night'
@@ -334,6 +538,20 @@ service cloud.firestore {
         && validMember(uid)
         && request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if owns(uid);
+    }
+
+    match /communities/enjoy/venues/{venueId} {
+      allow get, list: if signedIn();
+      allow create: if hasVerifiedEmail()
+        && request.resource.data.createdByUid == request.auth.uid
+        && validVenue(venueId);
+      allow update: if hasVerifiedEmail()
+        && resource.data.createdByUid == request.auth.uid
+        && request.resource.data.createdByUid == resource.data.createdByUid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && validVenue(venueId);
+      allow delete: if isCommunityAdmin()
+        || (signedIn() && resource.data.createdByUid == request.auth.uid);
     }
 
     match /communities/enjoy/manualPlayers/{playerId} {
@@ -436,6 +654,32 @@ service cloud.firestore {
       allow delete: if signedIn()
         && (resource.data.fromUid == request.auth.uid
           || resource.data.toUid == request.auth.uid);
+    }
+
+    match /communities/enjoy/gameChats/{gameId} {
+      allow get: if signedIn()
+        && (ownsGameChatSource(gameId)
+          || (exists(/databases/$(database)/documents/communities/enjoy/gameChats/$(gameId))
+            && (request.auth.uid in resource.data.participantUids
+              || canEnterActiveGameChat(gameId, resource.data))));
+      allow list: if signedIn()
+        && request.auth.uid in resource.data.participantUids;
+      allow create: if signedIn()
+        && validGameChat(gameId);
+      allow update: if signedIn()
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (validGameChat(gameId) || validGameChatJoin(gameId));
+      allow delete: if signedIn()
+        && (resource.data.ownerUid == request.auth.uid
+          || (exists(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId))
+            && get(/databases/$(database)/documents/communities/enjoy/liveGames/$(gameId)).data.ownerUid == request.auth.uid));
+
+      match /messages/{messageId} {
+        allow get, list: if canUseGameChat(gameId);
+        allow create: if canUseGameChat(gameId)
+          && validGameChatMessage(gameId, messageId);
+        allow update, delete: if false;
+      }
     }
 
     match /privateUsers/{uid}/activeGames/{gameId} {

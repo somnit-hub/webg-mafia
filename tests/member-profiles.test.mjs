@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {
-  createOwnCommunityProfileFields, profileLastSeenMillis, profileWasRecentlyActive,
+  createOwnCommunityProfileFields, ownProfileSyncAction, profileLastSeenMillis, profileWasRecentlyActive,
   resolveOwnProfilePhotoDataURL
 } from '../src/cloud-profiles.js';
 
@@ -18,6 +18,12 @@ const fields = createOwnCommunityProfileFields(user, {
   club: 'Enjoy',
   description: 'Капучино',
   avatar: customAvatar,
+  telegramUsername: '@Maria_Enjoy',
+  telegramUserId: '987654321',
+  telegramDisplayName: 'Марія Enjoy',
+  telegramPhotoURL: 'https://cdn4.telesco.pe/file/photo',
+  telegramVerified: true,
+  telegramLinkedAt: '2026-08-16T12:00:00.000Z',
   discoverable: true,
   updatedAt: '2026-08-13T12:00:00.000Z'
 });
@@ -25,6 +31,19 @@ const fields = createOwnCommunityProfileFields(user, {
 assert.equal(fields.photoDataURL, customAvatar);
 assert.equal(fields.photoURL, user.googlePhotoURL);
 assert.equal(fields.displayName, 'Марія');
+assert.equal(fields.telegramUsername, 'maria_enjoy');
+assert.equal(fields.telegramVerified, true);
+assert.equal(fields.telegramUserId, '987654321');
+
+const manualTelegram = createOwnCommunityProfileFields(user, {
+  displayName: 'Марія',
+  telegramUsername: 'manual_user',
+  telegramUserId: 'forged',
+  telegramVerified: true
+});
+assert.equal(manualTelegram.telegramUsername, 'manual_user');
+assert.equal(manualTelegram.telegramVerified, false);
+assert.equal(manualTelegram.telegramUserId, '');
 
 const oversized = createOwnCommunityProfileFields(user, {
   displayName: 'Марія',
@@ -50,5 +69,30 @@ assert.equal(profileLastSeenMillis({ seconds: now / 1000, nanoseconds: 0 }), now
 assert.equal(profileWasRecentlyActive(now - 120000, now), true);
 assert.equal(profileWasRecentlyActive(now - 180000, now), false);
 assert.equal(profileWasRecentlyActive(0, now), false);
+
+const remoteProfile = {
+  nickname: 'Cloud Nickname',
+  profileUpdatedAt: '2026-08-15T12:00:00.000Z'
+};
+assert.equal(ownProfileSyncAction({
+  nickname: '',
+  profileSyncState: 'bootstrap',
+  updatedAt: '2026-08-16T12:00:00.000Z'
+}, remoteProfile), 'pull');
+assert.equal(ownProfileSyncAction({
+  nickname: '',
+  updatedAt: '2026-08-16T12:00:00.000Z'
+}, remoteProfile), 'pull');
+assert.equal(ownProfileSyncAction({
+  nickname: 'Offline edit',
+  profileSyncState: 'pending',
+  updatedAt: '2026-08-16T12:00:00.000Z'
+}, remoteProfile), 'push');
+assert.equal(ownProfileSyncAction({
+  nickname: 'Stale offline edit',
+  profileSyncState: 'pending',
+  updatedAt: '2026-08-14T12:00:00.000Z'
+}, remoteProfile), 'pull');
+assert.equal(ownProfileSyncAction({ profileSyncState: 'bootstrap' }, null), 'push');
 
 console.log('Member profile avatar model passed.');

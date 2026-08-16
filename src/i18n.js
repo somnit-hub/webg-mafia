@@ -26,7 +26,7 @@ const COPY = {
     'Усі': 'Tutto',
     'гравців у базі': 'giocatori nella directory',
     'перемог міста': 'vince la città',
-    'за ігровим столом': 'alla partita table',
+    'середній час гри': 'durata media della partita',
     '+ Додати гравця': '+ Aggiungi giocatore',
     'Оновити': 'Aggiorna',
     'Наступна гра': 'Prossima partita',
@@ -36,6 +36,18 @@ const COPY = {
     'Додано ведучим': 'Aggiunto dall\'host',
     'Назва': 'Titolo',
     'Правила й таймери': 'Regole e timer',
+    'Музика гри': 'Musica di gioco',
+    'Автоматична музика': 'Musica automatica',
+    'Роздача ролей': 'Distribuzione dei ruoli',
+    'Нульова ніч': 'Notte zero',
+    'Нічні дії': 'Azioni notturne',
+    'Результат ночі': 'Esito della notte',
+    'Мелодія': 'Brano',
+    'Прослухати': 'Ascolta',
+    'Файл з пристрою': 'File dal dispositivo',
+    'Увімкнено': 'Attivo',
+    'Вимкнено': 'Disattivo',
+    'Власний файл із пристрою': 'File personale dal dispositivo',
     'Розсадка': 'Posti a sedere',
     'Перемішати місця': 'Sedili mescolati',
     '+ Новий профіль': '+ Nuovo profilo',
@@ -71,12 +83,14 @@ const COPY = {
     'Режим оглядача': 'Modalità osservatore',
     'Відкрити публічний екран': 'Visualizzazione pubblica aperta',
     'Про застосунок': 'Informazioni sull\'app',
-    'Мій профіль Enjoy': 'Il mio profilo Enjoy',
+    'Мій профіль': 'Il mio profilo',
     'Зробити фото': 'Scatta una foto',
     'Обрати з галереї': 'Scegli dalla galleria',
     'Фото Google': 'Foto Google',
-    'Ім’я для відображення *': 'Nome da visualizzare *',
+    'Ім’я *': 'Nome *',
     'Нікнейм': 'Soprannome',
+    'Якщо заповнений, використовуватиметься як основне ім’я гравця під час гри.': 'Se compilato, verrà usato come nome principale del giocatore durante la partita.',
+    'Вкажіть ім’я': 'Inserisci il nome',
     'Клуб або організація': 'Club o organizzazione',
     'Про себе': 'Su di me',
     'Показувати мене в каталозі Enjoy': 'Mostrami nella directory Enjoy',
@@ -112,7 +126,7 @@ const COPY = {
     'Усі': 'All',
     'гравців у базі': 'players in directory',
     'перемог міста': 'city wins',
-    'за ігровим столом': 'at the game table',
+    'середній час гри': 'average game duration',
     '+ Додати гравця': '+ Add player',
     'Оновити': 'Refresh',
     'Наступна гра': 'Next game',
@@ -122,6 +136,18 @@ const COPY = {
     'Додано ведучим': 'Added by host',
     'Назва': 'Title',
     'Правила й таймери': 'Rules and timers',
+    'Музика гри': 'Game music',
+    'Автоматична музика': 'Automatic music',
+    'Роздача ролей': 'Role dealing',
+    'Нульова ніч': 'Zero night',
+    'Нічні дії': 'Night actions',
+    'Результат ночі': 'Night result',
+    'Мелодія': 'Track',
+    'Прослухати': 'Preview',
+    'Файл з пристрою': 'File from device',
+    'Увімкнено': 'Enabled',
+    'Вимкнено': 'Disabled',
+    'Власний файл із пристрою': 'Custom file from device',
     'Розсадка': 'Seating',
     'Перемішати місця': 'Shuffle seats',
     '+ Новий профіль': '+ New profile',
@@ -157,12 +183,14 @@ const COPY = {
     'Режим оглядача': 'Observer mode',
     'Відкрити публічний екран': 'Open public display',
     'Про застосунок': 'About the app',
-    'Мій профіль Enjoy': 'My Enjoy profile',
+    'Мій профіль': 'My profile',
     'Зробити фото': 'Take photo',
     'Обрати з галереї': 'Choose from gallery',
     'Фото Google': 'Google photo',
-    'Ім’я для відображення *': 'Display name *',
+    'Ім’я *': 'Name *',
     'Нікнейм': 'Nickname',
+    'Якщо заповнений, використовуватиметься як основне ім’я гравця під час гри.': 'If provided, this will be used as the player’s primary name during the game.',
+    'Вкажіть ім’я': 'Enter the name',
     'Клуб або організація': 'Club or organization',
     'Про себе': 'About me',
     'Показувати мене в каталозі Enjoy': 'Show me in the Enjoy directory',
@@ -198,7 +226,7 @@ const COPY = {
     'Усі': 'Toutes',
     'гравців у базі': 'joueurs dans l’annuaire',
     'перемог міста': 'victoires de la ville',
-    'за ігровим столом': 'à la table de jeu',
+    'середній час гри': 'durée moyenne d’une partie',
     '+ Додати гравця': '+ Ajouter un joueur',
     'Оновити': 'Actualiser',
     'Наступна гра': 'Prochaine partie',
@@ -208,6 +236,18 @@ const COPY = {
     'Додано ведучим': 'Ajouté par l’animateur',
     'Назва': 'Nom',
     'Правила й таймери': 'Règles et minuteurs',
+    'Музика гри': 'Musique de la partie',
+    'Автоматична музика': 'Musique automatique',
+    'Роздача ролей': 'Distribution des rôles',
+    'Нульова ніч': 'Nuit zéro',
+    'Нічні дії': 'Actions nocturnes',
+    'Результат ночі': 'Résultat de la nuit',
+    'Мелодія': 'Morceau',
+    'Прослухати': 'Écouter',
+    'Файл з пристрою': 'Fichier de l’appareil',
+    'Увімкнено': 'Activé',
+    'Вимкнено': 'Désactivé',
+    'Власний файл із пристрою': 'Fichier personnel de l’appareil',
     'Розсадка': 'Placement',
     'Перемішати місця': 'Mélanger les places',
     '+ Новий профіль': '+ Nouveau profil',
@@ -243,12 +283,14 @@ const COPY = {
     'Режим оглядача': 'Mode observateur',
     'Відкрити публічний екран': 'Ouvrir l’écran public',
     'Про застосунок': 'À propos',
-    'Мій профіль Enjoy': 'Mon profil Enjoy',
+    'Мій профіль': 'Mon profil',
     'Зробити фото': 'Prendre une photo',
     'Обрати з галереї': 'Choisir dans la galerie',
     'Фото Google': 'Photo Google',
-    'Ім’я для відображення *': 'Nom affiché *',
+    'Ім’я *': 'Nom *',
     'Нікнейм': 'Pseudo',
+    'Якщо заповнений, використовуватиметься як основне ім’я гравця під час гри.': 'S’il est renseigné, il sera utilisé comme nom principal du joueur pendant la partie.',
+    'Вкажіть ім’я': 'Saisissez le nom',
     'Клуб або організація': 'Club ou organisation',
     'Про себе': 'À propos de moi',
     'Показувати мене в каталозі Enjoy': 'M’afficher dans l’annuaire Enjoy',
@@ -270,7 +312,7 @@ Object.assign(COPY.it, {
   'Як дістатися': 'Indicazioni', 'Місто': 'Città', 'Каталог недоступний': 'Directory non disponibileble',
   'Синхронізовано': 'Sincronizzato', 'Офлайн-кеш': 'Cache offline', 'Синхронізація…': 'Sincronizzazione…', 'Помилка': 'Errore',
   'НАСТУПНА ГРА': 'PROSSIMA partita', 'без опису': 'nessuna descrizione', 'Очікує Google': 'In attesa di Google',
-  'ПРОМОВА, СЕК': 'DISCORSO, SEC', 'АВТОКАТАСТРОФА, СЕК': 'DISCORSO DI TIE, SEZ', 'ОСТАННЄ СЛОВО, СЕК': 'ULTIMA PAROLA, SEC',
+  'ПРОМОВА, СЕК': 'DISCORSO, SEC', 'ПОПІЛ, СЕК': 'DISCORSO DI TIE, SEZ', 'ОСТАННЄ СЛОВО, СЕК': 'ULTIMA PAROLA, SEC',
   'НІЧНА ДІЯ, СЕК': 'AZIONE NOTTURNA, SEC', 'СИСТЕМА ФОЛІВ': 'SISTEMA FALLOSO', 'Турнірна': 'Torneo', 'Клубна': 'Club',
   'Інші випадкові 10': 'Un altro 10 a caso', 'Тимчасовий гравець': 'Giocatore temporaneo',
   'Шериф': 'Sceriffo', 'Дон': 'Assistente', 'Мафія': 'Mafia', 'Мирний житель': 'Cittadino',
@@ -278,7 +320,7 @@ Object.assign(COPY.it, {
   'Передайте телефон особисто': 'Consegnami il telefono di persona', 'Сховати й передати далі': 'Nascondi e trasmetti', 'Показати мою роль': 'Mostra il mio ruolo',
   'Створити гру': 'Crea corrispondenza', 'Немає гри': 'Nessuna corrispondenza',
   'Роздача ролей': 'Rivelazione del ruolo', 'Нульова ніч': 'Notte zero', 'Голосування': 'Voto',
-  'Автокатастрофа · промови': 'Cravatta · discorsi', 'Автокатастрофа · голосування': 'Pareggio · voto',
+  'Попіл · промови': 'Cravatta · discorsi', 'Попіл · голосування': 'Pareggio · voto',
   'Вихід усіх кандидатів': 'Elimina tutti i candidati', 'Останнє слово': 'L\'ultima parola', 'Гру завершено': 'partita finita',
   'Місто засинає': 'La città si addormenta', 'Мафія стріляє': 'Mafia spara', 'Дон шукає Шерифа': 'Don cerca lo sceriffo',
   'Шериф перевіряє місто': 'Lo sceriffo controlla la città', 'Місто прокидається': 'La città si sveglia', 'Чорна команда знайомиться': 'La squadra nera si incontra',
@@ -301,7 +343,7 @@ Object.assign(COPY.en, {
   'Як дістатися': 'Directions', 'Місто': 'City', 'Каталог недоступний': 'Directory unavailable',
   'Синхронізовано': 'Synchronized', 'Офлайн-кеш': 'Offline cache', 'Синхронізація…': 'Synchronizing…', 'Помилка': 'Error',
   'НАСТУПНА ГРА': 'NEXT GAME', 'без опису': 'no description', 'Очікує Google': 'Awaiting Google',
-  'ПРОМОВА, СЕК': 'SPEECH, SEC', 'АВТОКАТАСТРОФА, СЕК': 'TIE SPEECH, SEC', 'ОСТАННЄ СЛОВО, СЕК': 'LAST WORD, SEC',
+  'ПРОМОВА, СЕК': 'SPEECH, SEC', 'ПОПІЛ, СЕК': 'TIE SPEECH, SEC', 'ОСТАННЄ СЛОВО, СЕК': 'LAST WORD, SEC',
   'НІЧНА ДІЯ, СЕК': 'NIGHT ACTION, SEC', 'СИСТЕМА ФОЛІВ': 'FOUL SYSTEM', 'Турнірна': 'Tournament', 'Клубна': 'Club',
   'Інші випадкові 10': 'Another random 10', 'Тимчасовий гравець': 'Temporary player',
   'Шериф': 'Sheriff', 'Дон': 'Don', 'Мафія': 'Mafia', 'Мирний житель': 'Citizen',
@@ -309,7 +351,7 @@ Object.assign(COPY.en, {
   'Передайте телефон особисто': 'Hand the phone over in person', 'Сховати й передати далі': 'Hide and pass on', 'Показати мою роль': 'Show my role',
   'Створити гру': 'Create game', 'Немає гри': 'No game',
   'Роздача ролей': 'Role reveal', 'Нульова ніч': 'Zero night', 'Голосування': 'Voting',
-  'Автокатастрофа · промови': 'Tie · speeches', 'Автокатастрофа · голосування': 'Tie · voting',
+  'Попіл · промови': 'Tie · speeches', 'Попіл · голосування': 'Tie · voting',
   'Вихід усіх кандидатів': 'Eliminate all candidates', 'Останнє слово': 'Last word', 'Гру завершено': 'Game finished',
   'Місто засинає': 'The city falls asleep', 'Мафія стріляє': 'Mafia shoots', 'Дон шукає Шерифа': 'Don searches for the Sheriff',
   'Шериф перевіряє місто': 'Sheriff checks the city', 'Місто прокидається': 'The city wakes up', 'Чорна команда знайомиться': 'The black team meets',
@@ -332,7 +374,7 @@ Object.assign(COPY.fr, {
   'Як дістатися': 'Itinéraire', 'Місто': 'Ville', 'Каталог недоступний': 'Annuaire indisponible',
   'Синхронізовано': 'Synchronisé', 'Офлайн-кеш': 'Cache hors ligne', 'Синхронізація…': 'Synchronisation…', 'Помилка': 'Erreur',
   'НАСТУПНА ГРА': 'PROCHAINE PARTIE', 'без опису': 'sans description', 'Очікує Google': 'En attente de Google',
-  'ПРОМОВА, СЕК': 'DISCOURS, S', 'АВТОКАТАСТРОФА, СЕК': 'ÉGALITÉ, S', 'ОСТАННЄ СЛОВО, СЕК': 'DERNIER MOT, S',
+  'ПРОМОВА, СЕК': 'DISCOURS, S', 'ПОПІЛ, СЕК': 'ÉGALITÉ, S', 'ОСТАННЄ СЛОВО, СЕК': 'DERNIER MOT, S',
   'НІЧНА ДІЯ, СЕК': 'ACTION DE NUIT, S', 'СИСТЕМА ФОЛІВ': 'SYSTÈME DE FAUTES', 'Турнірна': 'Tournoi', 'Клубна': 'Club',
   'Інші випадкові 10': '10 autres au hasard', 'Тимчасовий гравець': 'Joueur temporaire',
   'Шериф': 'Shérif', 'Дон': 'Don', 'Мафія': 'Mafia', 'Мирний житель': 'Citoyen',
@@ -340,7 +382,7 @@ Object.assign(COPY.fr, {
   'Передайте телефон особисто': 'Remettez le téléphone en main propre', 'Сховати й передати далі': 'Masquer et transmettre', 'Показати мою роль': 'Afficher mon rôle',
   'Створити гру': 'Créer une partie', 'Немає гри': 'Aucune partie',
   'Роздача ролей': 'Révélation des rôles', 'Нульова ніч': 'Nuit zéro', 'Голосування': 'Vote',
-  'Автокатастрофа · промови': 'Égalité · discours', 'Автокатастрофа · голосування': 'Égalité · vote',
+  'Попіл · промови': 'Égalité · discours', 'Попіл · голосування': 'Égalité · vote',
   'Вихід усіх кандидатів': 'Sortie de tous les candidats', 'Останнє слово': 'Dernier mot', 'Гру завершено': 'Partie terminée',
   'Місто засинає': 'La ville s’endort', 'Мафія стріляє': 'La mafia tire', 'Дон шукає Шерифа': 'Le Don cherche le Shérif',
   'Шериф перевіряє місто': 'Le Shérif inspecte la ville', 'Місто прокидається': 'La ville se réveille', 'Чорна команда знайомиться': 'L’équipe noire fait connaissance',
@@ -592,7 +634,7 @@ Object.assign(COPY.fr, {
 // Curated Mafia terminology and primary interface actions.
 Object.assign(COPY.it, {
   'Ще': 'Altro', 'Mafia — головна': 'Mafia — pagina principale', 'Профіль ведучого': 'Profilo del conduttore',
-  'Продовжити': 'Continua', 'Усі': 'Tutti', 'за ігровим столом': 'al tavolo da gioco',
+  'Продовжити': 'Continua', 'Усі': 'Tutti', 'середній час гри': 'durata media della partita',
   'До розсадки': 'Vai alla disposizione', 'Очистити': 'Svuota', 'Додано ведучим': 'Aggiunto dal conduttore',
   'Розсадка': 'Disposizione', 'Перемішати місця': 'Mescola i posti', 'Роздати ролі': 'Distribuisci i ruoli',
   'Правила iMafia українською': 'Regole iMafia in ucraino', 'Міжнародний регламент ФІІМ': 'Regolamento internazionale FIIM',
@@ -602,11 +644,11 @@ Object.assign(COPY.it, {
   'Увімкнути резервну копію': 'Attiva la copia di sicurezza', 'Відкрити публічний екран': 'Apri lo schermo pubblico',
   'Google-акаунт': 'Account Google', 'Скасувати': 'Annulla', 'Закрити': 'Chiudi',
   'Каталог недоступний': 'Directory non disponibile', 'НАСТУПНА ГРА': 'PROSSIMA PARTITA',
-  'АВТОКАТАСТРОФА, СЕК': 'PAREGGIO, SEC', 'СИСТЕМА ФОЛІВ': 'SISTEMA DEI FALLI',
+  'ПОПІЛ, СЕК': 'PAREGGIO, SEC', 'СИСТЕМА ФОЛІВ': 'SISTEMA DEI FALLI',
   'Дон': 'Don', 'Передайте телефон особисто': 'Passa il telefono di persona',
   'Сховати й передати далі': 'Nascondi e passa oltre', 'Створити гру': 'Crea partita', 'Немає гри': 'Nessuna partita',
-  'Роздача ролей': 'Distribuzione dei ruoli', 'Автокатастрофа · промови': 'Pareggio · interventi',
-  'Автокатастрофа · голосування': 'Pareggio · votazione', 'Гру завершено': 'Partita terminata',
+  'Роздача ролей': 'Distribuzione dei ruoli', 'Попіл · промови': 'Pareggio · interventi',
+  'Попіл · голосування': 'Pareggio · votazione', 'Гру завершено': 'Partita terminata',
   'Старт': 'Avvia', 'Коло завершено': 'Turno completato', 'Перейти до ночі': 'Passa alla notte',
   'Поточна промова': 'Intervento attuale', 'Завершити коло': 'Termina il turno',
   'Повторне голосування': 'Nuova votazione', 'Підсумувати': 'Conferma il risultato', 'Голосувати': 'Vota',
@@ -742,10 +784,229 @@ Object.assign(COPY.fr, {
   'Mafia Enjoy встановлено': 'Mafia Enjoy est installée'
 });
 
+Object.assign(COPY.it, {
+  'Місце / клуб': 'Luogo / club', 'Пошук місця або клубу': 'Cerca luogo o club', '+ Додати': '+ Aggiungi',
+  'Нове місце / клуб': 'Nuovo luogo / club', 'Спільний каталог': 'Catalogo condiviso', 'Назва *': 'Nome *',
+  'Адреса': 'Indirizzo', 'Телефон': 'Telefono', 'Сайт': 'Sito web', 'Підставити': 'Compila',
+  'Можна ввести вручну': 'Puoi inserirlo manualmente', 'Зберегти місце': 'Salva luogo', 'Зберігаємо…': 'Salvataggio…',
+  'Місць не знайдено': 'Nessun luogo trovato', 'Лише для цієї гри, без збереження в каталозі': 'Solo per questa partita, senza salvarlo nel catalogo', 'Зберегти назву лише у профілі': 'Salva il nome solo nel profilo',
+  'Після збереження місце зможуть знайти й обрати всі авторизовані користувачі.': 'Dopo il salvataggio, tutti gli utenti autorizzati potranno trovare e scegliere questo luogo.'
+});
+Object.assign(COPY.en, {
+  'Місце / клуб': 'Venue / club', 'Пошук місця або клубу': 'Search venues or clubs', '+ Додати': '+ Add',
+  'Нове місце / клуб': 'New venue / club', 'Спільний каталог': 'Shared directory', 'Назва *': 'Name *',
+  'Адреса': 'Address', 'Телефон': 'Phone', 'Сайт': 'Website', 'Підставити': 'Fill in',
+  'Можна ввести вручну': 'You can enter it manually', 'Зберегти місце': 'Save venue', 'Зберігаємо…': 'Saving…',
+  'Місць не знайдено': 'No venues found', 'Лише для цієї гри, без збереження в каталозі': 'For this game only, without saving to the directory', 'Зберегти назву лише у профілі': 'Save the name only in the profile',
+  'Після збереження місце зможуть знайти й обрати всі авторизовані користувачі.': 'After saving, every authorized user can find and select this venue.'
+});
+Object.assign(COPY.fr, {
+  'Місце / клуб': 'Lieu / club', 'Пошук місця або клубу': 'Rechercher un lieu ou un club', '+ Додати': '+ Ajouter',
+  'Нове місце / клуб': 'Nouveau lieu / club', 'Спільний каталог': 'Catalogue partagé', 'Назва *': 'Nom *',
+  'Адреса': 'Adresse', 'Телефон': 'Téléphone', 'Сайт': 'Site web', 'Підставити': 'Préremplir',
+  'Можна ввести вручну': 'Vous pouvez la saisir manuellement', 'Зберегти місце': 'Enregistrer le lieu', 'Зберігаємо…': 'Enregistrement…',
+  'Місць не знайдено': 'Aucun lieu trouvé', 'Лише для цієї гри, без збереження в каталозі': 'Pour cette partie uniquement, sans l’enregistrer dans le catalogue', 'Зберегти назву лише у профілі': 'Enregistrer le nom uniquement dans le profil',
+  'Після збереження місце зможуть знайти й обрати всі авторизовані користувачі.': 'Après l’enregistrement, tous les utilisateurs autorisés pourront trouver et choisir ce lieu.'
+});
+
+Object.assign(COPY.it, {
+  'Місця та клуби': 'Luoghi e club', 'Спільний каталог місць': 'Catalogo condiviso dei luoghi', '+ Додати місце / клуб': '+ Aggiungi luogo / club',
+  'Новий запис додається окремо й не замінює вже створені клуби.': 'Ogni nuovo elemento viene aggiunto separatamente e non sostituisce i club esistenti.',
+  'Основне': 'Principale', 'Контакти не вказано': 'Contatti non indicati', 'Видалити місце': 'Elimina luogo',
+  'Каталог порожній': 'Il catalogo è vuoto', 'Додайте перше місце або клуб.': 'Aggiungi il primo luogo o club.',
+  'Каталог тимчасово недоступний': 'Il catalogo non è temporaneamente disponibile'
+});
+Object.assign(COPY.en, {
+  'Місця та клуби': 'Venues and clubs', 'Спільний каталог місць': 'Shared venue directory', '+ Додати місце / клуб': '+ Add venue / club',
+  'Новий запис додається окремо й не замінює вже створені клуби.': 'Each new entry is added separately and does not replace existing clubs.',
+  'Основне': 'Primary', 'Контакти не вказано': 'No contact details', 'Видалити місце': 'Delete venue',
+  'Каталог порожній': 'The directory is empty', 'Додайте перше місце або клуб.': 'Add the first venue or club.',
+  'Каталог тимчасово недоступний': 'The directory is temporarily unavailable'
+});
+Object.assign(COPY.fr, {
+  'Місця та клуби': 'Lieux et clubs', 'Спільний каталог місць': 'Catalogue partagé des lieux', '+ Додати місце / клуб': '+ Ajouter un lieu / club',
+  'Новий запис додається окремо й не замінює вже створені клуби.': 'Chaque nouvelle entrée est ajoutée séparément et ne remplace pas les clubs existants.',
+  'Основне': 'Principal', 'Контакти не вказано': 'Coordonnées non indiquées', 'Видалити місце': 'Supprimer le lieu',
+  'Каталог порожній': 'Le catalogue est vide', 'Додайте перше місце або клуб.': 'Ajoutez le premier lieu ou club.',
+  'Каталог тимчасово недоступний': 'Le catalogue est temporairement indisponible'
+});
+
+Object.assign(COPY.it, { 'Поділитися застосунком': 'Condividi l’app', 'Очистити розсадку': 'Svuota i posti' });
+Object.assign(COPY.en, { 'Поділитися застосунком': 'Share app', 'Очистити розсадку': 'Clear seating' });
+Object.assign(COPY.fr, { 'Поділитися застосунком': 'Partager l’application', 'Очистити розсадку': 'Vider le placement' });
+
+Object.assign(COPY.it, {
+  'Обговорення ігор': 'Discussioni sulle partite', 'Обговорити гру': 'Discuti la partita', 'Де обговорити гру?': 'Dove discutere la partita?',
+  'Чат у Mafia Enjoy': 'Chat in Mafia Enjoy', 'Група в Telegram': 'Gruppo Telegram', 'Окремий чат': 'Chat separata',
+  'Відкрити чат': 'Apri chat', 'Спробувати ще раз': 'Riprova', 'Готуємо чат…': 'Preparazione della chat…',
+  'Створити групу в Telegram': 'Crea un gruppo Telegram', 'Надіслати посилання через Telegram': 'Invia il link tramite Telegram',
+  'Завантажуємо чати…': 'Caricamento delle chat…', 'Чати тимчасово недоступні': 'Le chat non sono disponibili', 'Обговорень ще немає': 'Nessuna discussione',
+  'Обговорення гри': 'Discussione della partita', 'Відкриваємо розмову…': 'Apertura della conversazione…', 'Повідомлення недоступні': 'Messaggi non disponibili',
+  'Розмова ще порожня': 'La conversazione è vuota', 'Напишіть перше повідомлення про цю гру.': 'Scrivi il primo messaggio su questa partita.',
+  'Повідомлення': 'Messaggio', 'Напишіть повідомлення…': 'Scrivi un messaggio…', 'Надіслати': 'Invia', 'Надсилаємо…': 'Invio…', 'Емоції для повідомлення': 'Emozioni per il messaggio',
+  'Створюється автоматично. Ведучий і всі авторизовані учасники цього столу вже мають доступ.': 'Viene creata automaticamente. L’host e tutti i giocatori autenticati al tavolo hanno già accesso.',
+  'Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.': 'Telegram aprirà la creazione di un nuovo gruppo. Per motivi di privacy, l’app non può aggiungere i profili Google come contatti Telegram: l’host li seleziona in Telegram.'
+});
+Object.assign(COPY.en, {
+  'Обговорення ігор': 'Game discussions', 'Обговорити гру': 'Discuss game', 'Де обговорити гру?': 'Where do you want to discuss?',
+  'Чат у Mafia Enjoy': 'Chat in Mafia Enjoy', 'Група в Telegram': 'Telegram group', 'Окремий чат': 'Separate chat',
+  'Відкрити чат': 'Open chat', 'Спробувати ще раз': 'Try again', 'Готуємо чат…': 'Preparing chat…',
+  'Створити групу в Telegram': 'Create Telegram group', 'Надіслати посилання через Telegram': 'Send link via Telegram',
+  'Завантажуємо чати…': 'Loading chats…', 'Чати тимчасово недоступні': 'Chats are temporarily unavailable', 'Обговорень ще немає': 'No discussions yet',
+  'Обговорення гри': 'Game discussion', 'Відкриваємо розмову…': 'Opening conversation…', 'Повідомлення недоступні': 'Messages are unavailable',
+  'Розмова ще порожня': 'The conversation is empty', 'Напишіть перше повідомлення про цю гру.': 'Write the first message about this game.',
+  'Повідомлення': 'Message', 'Напишіть повідомлення…': 'Write a message…', 'Надіслати': 'Send', 'Надсилаємо…': 'Sending…', 'Емоції для повідомлення': 'Message emotions',
+  'Створюється автоматично. Ведучий і всі авторизовані учасники цього столу вже мають доступ.': 'It is created automatically. The host and every signed-in player at the table already have access.',
+  'Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.': 'Telegram will open the new-group flow. For privacy, the app cannot add Google profiles as Telegram contacts; the host selects them in Telegram.'
+});
+Object.assign(COPY.fr, {
+  'Обговорення ігор': 'Discussions des parties', 'Обговорити гру': 'Discuter de la partie', 'Де обговорити гру?': 'Où discuter de la partie ?',
+  'Чат у Mafia Enjoy': 'Chat dans Mafia Enjoy', 'Група в Telegram': 'Groupe Telegram', 'Окремий чат': 'Chat séparé',
+  'Відкрити чат': 'Ouvrir le chat', 'Спробувати ще раз': 'Réessayer', 'Готуємо чат…': 'Préparation du chat…',
+  'Створити групу в Telegram': 'Créer un groupe Telegram', 'Надіслати посилання через Telegram': 'Envoyer le lien via Telegram',
+  'Завантажуємо чати…': 'Chargement des chats…', 'Чати тимчасово недоступні': 'Les chats sont indisponibles', 'Обговорень ще немає': 'Aucune discussion',
+  'Обговорення гри': 'Discussion de la partie', 'Відкриваємо розмову…': 'Ouverture de la conversation…', 'Повідомлення недоступні': 'Messages indisponibles',
+  'Розмова ще порожня': 'La conversation est vide', 'Напишіть перше повідомлення про цю гру.': 'Écrivez le premier message sur cette partie.',
+  'Повідомлення': 'Message', 'Напишіть повідомлення…': 'Écrivez un message…', 'Надіслати': 'Envoyer', 'Надсилаємо…': 'Envoi…', 'Емоції для повідомлення': 'Émotions du message',
+  'Створюється автоматично. Ведучий і всі авторизовані учасники цього столу вже мають доступ.': 'Il est créé automatiquement. L’animateur et tous les joueurs connectés à la table y ont déjà accès.',
+  'Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.': 'Telegram ouvrira la création d’un groupe. Pour des raisons de confidentialité, l’app ne peut pas ajouter les profils Google comme contacts Telegram : l’animateur les sélectionne dans Telegram.'
+});
+
+Object.assign(COPY.it, {
+  'Telegram': 'Telegram', 'Введено вручну': 'Inserito manualmente', 'Telegram підключено': 'Telegram collegato',
+  'Синхронізувати з Telegram': 'Sincronizza con Telegram', 'Підготувати підключення Telegram': 'Prepara il collegamento Telegram',
+  'Готуємо Telegram Login…': 'Preparazione di Telegram Login…', 'Підключаємо Telegram…': 'Collegamento a Telegram…',
+  'Готуємо безпечне підключення…': 'Preparazione del collegamento sicuro…', 'Натисніть іконку Telegram, щоб підтвердити профіль.': 'Tocca l’icona Telegram per verificare il profilo.',
+  'Від’єднати Telegram': 'Scollega Telegram', 'Очистити Telegram': 'Cancella Telegram', 'Фото Telegram': 'Foto Telegram',
+  'Username не вказано в Telegram': 'Username non indicato in Telegram', '@username або t.me/username': '@username o t.me/username'
+});
+Object.assign(COPY.en, {
+  'Telegram': 'Telegram', 'Введено вручну': 'Entered manually', 'Telegram підключено': 'Telegram connected',
+  'Синхронізувати з Telegram': 'Sync with Telegram', 'Підготувати підключення Telegram': 'Prepare Telegram connection',
+  'Готуємо Telegram Login…': 'Preparing Telegram Login…', 'Підключаємо Telegram…': 'Connecting Telegram…',
+  'Готуємо безпечне підключення…': 'Preparing a secure connection…', 'Натисніть іконку Telegram, щоб підтвердити профіль.': 'Tap the Telegram icon to verify your profile.',
+  'Від’єднати Telegram': 'Disconnect Telegram', 'Очистити Telegram': 'Clear Telegram', 'Фото Telegram': 'Telegram photo',
+  'Username не вказано в Telegram': 'No username is set in Telegram', '@username або t.me/username': '@username or t.me/username'
+});
+Object.assign(COPY.fr, {
+  'Telegram': 'Telegram', 'Введено вручну': 'Saisi manuellement', 'Telegram підключено': 'Telegram connecté',
+  'Синхронізувати з Telegram': 'Synchroniser avec Telegram', 'Підготувати підключення Telegram': 'Préparer la connexion Telegram',
+  'Готуємо Telegram Login…': 'Préparation de Telegram Login…', 'Підключаємо Telegram…': 'Connexion à Telegram…',
+  'Готуємо безпечне підключення…': 'Préparation de la connexion sécurisée…', 'Натисніть іконку Telegram, щоб підтвердити профіль.': 'Touchez l’icône Telegram pour vérifier le profil.',
+  'Від’єднати Telegram': 'Déconnecter Telegram', 'Очистити Telegram': 'Effacer Telegram', 'Фото Telegram': 'Photo Telegram',
+  'Username не вказано в Telegram': 'Aucun nom d’utilisateur Telegram', '@username або t.me/username': '@username ou t.me/username'
+});
+
+Object.assign(COPY.it, {
+  'Рейтинг гравців': 'Classifica giocatori', 'балів': 'punti', 'Методика FIIM/MWT ↗': 'Metodo FIIM/MWT ↗',
+  'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; штраф −0,3/−0,5 за негативний вплив на гру; −0,8 за окремо позначену дискваліфікацію незалежно від причини. Фінальний бал — сума всіх цих складових. КР — сума балів останніх 100 ігор, поділена на 100.': 'Parte automatica del sistema FIIM/MWT: 1,3 punti per una vittoria, 0,3 per una sconfitta, 0 per un pareggio; +0,5/+0,7 per una miglior mossa 2/3 o 3/3; penalità −0,3/−0,5 per un impatto negativo sulla partita; −0,8 per una squalifica segnalata separatamente, indipendentemente dal motivo. Il punteggio finale è la somma di tutti questi elementi. CR è la somma dei punti delle ultime 100 partite divisa per 100.'
+});
+Object.assign(COPY.en, {
+  'Рейтинг гравців': 'Player ranking', 'балів': 'points', 'Методика FIIM/MWT ↗': 'FIIM/MWT method ↗',
+  'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; штраф −0,3/−0,5 за негативний вплив на гру; −0,8 за окремо позначену дискваліфікацію незалежно від причини. Фінальний бал — сума всіх цих складових. КР — сума балів останніх 100 ігор, поділена на 100.': 'Automated part of the FIIM/MWT system: 1.3 points for a win, 0.3 for a loss, 0 for a draw; +0.5/+0.7 for a 2/3 or 3/3 Best Move; −0.3/−0.5 for a negative impact on the game; −0.8 for a separately marked disqualification regardless of reason. The final score is the sum of all these parts. PC is the sum of points from the last 100 games divided by 100.'
+});
+Object.assign(COPY.fr, {
+  'Рейтинг гравців': 'Classement des joueurs', 'балів': 'points', 'Методика FIIM/MWT ↗': 'Méthode FIIM/MWT ↗',
+  'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; штраф −0,3/−0,5 за негативний вплив на гру; −0,8 за окремо позначену дискваліфікацію незалежно від причини. Фінальний бал — сума всіх цих складових. КР — сума балів останніх 100 ігор, поділена на 100.': 'Partie automatique du système FIIM/MWT : 1,3 point pour une victoire, 0,3 pour une défaite, 0 pour un nul ; +0,5/+0,7 pour un meilleur coup 2/3 ou 3/3 ; pénalité de −0,3/−0,5 pour un impact négatif sur la partie ; −0,8 pour une disqualification marquée séparément, quelle qu’en soit la raison. Le score final est la somme de tous ces éléments. CR est la somme des points des 100 dernières parties divisée par 100.'
+});
+
+Object.assign(COPY.it, {
+  'Період аналізу': 'Periodo di analisi', 'Період статистики': 'Periodo delle statistiche', 'Увесь час': 'Tutto il periodo',
+  '30 днів': '30 giorni', '90 днів': '90 giorni', '12 місяців': '12 mesi', 'Ключові показники': 'Indicatori chiave',
+  'нічиїх': 'pareggi', 'максимальний ігровий день': 'giornata massima di gioco', 'унікальних гравців': 'giocatori unici',
+  'Час і темп гри': 'Durata e ritmo', 'медіанний час': 'durata mediana', 'найкоротша гра': 'partita più breve',
+  'найдовша гра': 'partita più lunga', 'середній інтервал між стартами': 'intervallo medio tra gli inizi',
+  'Фази за протоколом': 'Fasi dal registro', 'Ураховано лише відрізки з повними часовими мітками': 'Sono inclusi solo gli intervalli con marcatori temporali completi',
+  'Підготовка столу': 'Preparazione del tavolo', 'від створення гри до першого дня': 'dalla creazione al primo giorno',
+  'Ігровий день': 'Giorno di gioco', 'від початку дня до оголошення ночі': 'dall’inizio del giorno all’annuncio della notte',
+  'Ніч': 'Notte', 'від оголошення ночі до наступного дня або фінішу': 'dall’annuncio della notte al giorno successivo o alla fine',
+  'Активність і динаміка': 'Attività e andamento', 'Останні 7 днів': 'Ultimi 7 giorni', 'Останні 30 днів': 'Ultimi 30 giorni',
+  'без змін': 'nessuna variazione', 'Середній фінальний день': 'Giorno finale medio', 'Найдовша пауза між стартами': 'Pausa più lunga tra gli inizi',
+  'Динаміка за 6 місяців': 'Andamento su 6 mesi', 'кількість завершених ігор': 'partite concluse',
+  'Місця, розклад і дисципліна': 'Luoghi, orari e disciplina', 'найактивніший день тижня': 'giorno più attivo',
+  'найчастіший час старту': 'fascia di inizio più frequente', 'місць / клубів': 'luoghi / club',
+  'фолів у середньому за гру': 'falli medi per partita', 'позначених дискваліфікацій': 'squalifiche segnalate',
+  'Результати за місцями': 'Risultati per luogo', 'перші 5 за кількістю ігор': 'primi 5 per numero di partite'
+});
+Object.assign(COPY.en, {
+  'Період аналізу': 'Analysis period', 'Період статистики': 'Statistics period', 'Увесь час': 'All time',
+  '30 днів': '30 days', '90 днів': '90 days', '12 місяців': '12 months', 'Ключові показники': 'Key indicators',
+  'нічиїх': 'draws', 'максимальний ігровий день': 'latest game day', 'унікальних гравців': 'unique players',
+  'Час і темп гри': 'Game time and pace', 'медіанний час': 'median duration', 'найкоротша гра': 'shortest game',
+  'найдовша гра': 'longest game', 'середній інтервал між стартами': 'average gap between starts',
+  'Фази за протоколом': 'Phases from the game log', 'Ураховано лише відрізки з повними часовими мітками': 'Only intervals with complete timestamps are included',
+  'Підготовка столу': 'Table setup', 'від створення гри до першого дня': 'from game creation to day one',
+  'Ігровий день': 'Game day', 'від початку дня до оголошення ночі': 'from the start of the day to the night announcement',
+  'Ніч': 'Night', 'від оголошення ночі до наступного дня або фінішу': 'from the night announcement to the next day or finish',
+  'Активність і динаміка': 'Activity and trends', 'Останні 7 днів': 'Last 7 days', 'Останні 30 днів': 'Last 30 days',
+  'без змін': 'no change', 'Середній фінальний день': 'Average final day', 'Найдовша пауза між стартами': 'Longest gap between starts',
+  'Динаміка за 6 місяців': 'Six-month trend', 'кількість завершених ігор': 'completed games',
+  'Місця, розклад і дисципліна': 'Venues, schedule and discipline', 'найактивніший день тижня': 'most active weekday',
+  'найчастіший час старту': 'most common start window', 'місць / клубів': 'venues / clubs',
+  'фолів у середньому за гру': 'average fouls per game', 'позначених дискваліфікацій': 'marked disqualifications',
+  'Результати за місцями': 'Results by venue', 'перші 5 за кількістю ігор': 'top 5 by game count'
+});
+Object.assign(COPY.fr, {
+  'Період аналізу': 'Période d’analyse', 'Період статистики': 'Période des statistiques', 'Увесь час': 'Toute la période',
+  '30 днів': '30 jours', '90 днів': '90 jours', '12 місяців': '12 mois', 'Ключові показники': 'Indicateurs clés',
+  'нічиїх': 'matchs nuls', 'максимальний ігровий день': 'jour de jeu maximal', 'унікальних гравців': 'joueurs uniques',
+  'Час і темп гри': 'Durée et rythme', 'медіанний час': 'durée médiane', 'найкоротша гра': 'partie la plus courte',
+  'найдовша гра': 'partie la plus longue', 'середній інтервал між стартами': 'intervalle moyen entre les débuts',
+  'Фази за протоколом': 'Phases du compte rendu', 'Ураховано лише відрізки з повними часовими мітками': 'Seuls les intervalles avec horodatage complet sont inclus',
+  'Підготовка столу': 'Préparation de la table', 'від створення гри до першого дня': 'de la création au premier jour',
+  'Ігровий день': 'Jour de jeu', 'від початку дня до оголошення ночі': 'du début du jour à l’annonce de la nuit',
+  'Ніч': 'Nuit', 'від оголошення ночі до наступного дня або фінішу': 'de l’annonce de la nuit au jour suivant ou à la fin',
+  'Активність і динаміка': 'Activité et tendances', 'Останні 7 днів': '7 derniers jours', 'Останні 30 днів': '30 derniers jours',
+  'без змін': 'sans changement', 'Середній фінальний день': 'Jour final moyen', 'Найдовша пауза між стартами': 'Plus longue pause entre les débuts',
+  'Динаміка за 6 місяців': 'Tendance sur 6 mois', 'кількість завершених ігор': 'parties terminées',
+  'Місця, розклад і дисципліна': 'Lieux, horaires et discipline', 'найактивніший день тижня': 'jour le plus actif',
+  'найчастіший час старту': 'plage de départ la plus fréquente', 'місць / клубів': 'lieux / clubs',
+  'фолів у середньому за гру': 'fautes moyennes par partie', 'позначених дискваліфікацій': 'disqualifications signalées',
+  'Результати за місцями': 'Résultats par lieu', 'перші 5 за кількістю ігор': 'top 5 par nombre de parties'
+});
+
+Object.assign(COPY.en, {
+  'Календар ігор': 'Game calendar', 'Попередній місяць': 'Previous month', 'Наступний місяць': 'Next month',
+  'Поточна версія: PWA v195.': 'Current version: PWA v195.',
+  'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'The app shell, styles, icons, and built-in music are cached for a fast start.',
+  'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'The Google session is stored on this device. Profiles and shared archives synchronize after sign-in, while local data helps the app keep working during a brief network outage.'
+});
+Object.assign(COPY.fr, {
+  'Календар ігор': 'Calendrier des parties', 'Попередній місяць': 'Mois précédent', 'Наступний місяць': 'Mois suivant',
+  'Поточна версія: PWA v195.': 'Version actuelle : PWA v195.',
+  'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'La structure de l’application, les styles, les icônes et la musique intégrée sont mis en cache pour un démarrage rapide.',
+  'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'La session Google est conservée sur cet appareil. Les profils et les archives partagées se synchronisent après la connexion, tandis que les données locales permettent de continuer lors d’une brève coupure réseau.'
+});
+Object.assign(COPY.it, {
+  'Календар ігор': 'Calendario delle partite', 'Попередній місяць': 'Mese precedente', 'Наступний місяць': 'Mese successivo',
+  'Поточна версія: PWA v195.': 'Versione attuale: PWA v195.',
+  'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'La struttura dell’app, gli stili, le icone e la musica integrata vengono memorizzati nella cache per un avvio rapido.',
+  'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'La sessione Google viene conservata su questo dispositivo. I profili e gli archivi condivisi si sincronizzano dopo l’accesso, mentre i dati locali consentono di continuare durante una breve interruzione della rete.'
+});
+
+Object.assign(COPY.en, {
+  'Система балів FIIM/MWT': 'FIIM/MWT scoring system', 'Рейтингові коригування FIIM/MWT': 'FIIM/MWT rating adjustments',
+  'Рейтингові коригування': 'Rating adjustments', 'Без штрафу': 'No penalty', 'Штраф': 'Penalty', 'Дискваліфікація': 'Disqualification',
+  'Фінальні бали гравців': 'Players’ final scores', 'Фінальний бал': 'Final score', 'Результат': 'Result', 'Кращий хід': 'Best Move',
+  'Бал за гру': 'Game score', 'рейтингових балів': 'rating points', 'Змінити': 'Edit', 'Оберіть штраф за негативний вплив на гру.': 'Choose a penalty for negatively affecting the game.'
+});
+Object.assign(COPY.fr, {
+  'Система балів FIIM/MWT': 'Système de points FIIM/MWT', 'Рейтингові коригування FIIM/MWT': 'Ajustements du classement FIIM/MWT',
+  'Рейтингові коригування': 'Ajustements du classement', 'Без штрафу': 'Sans pénalité', 'Штраф': 'Pénalité', 'Дискваліфікація': 'Disqualification',
+  'Фінальні бали гравців': 'Scores finaux des joueurs', 'Фінальний бал': 'Score final', 'Результат': 'Résultat', 'Кращий хід': 'Meilleur coup',
+  'Бал за гру': 'Score de la partie', 'рейтингових балів': 'points de classement', 'Змінити': 'Modifier', 'Оберіть штраф за негативний вплив на гру.': 'Choisissez une pénalité pour un impact négatif sur la partie.'
+});
+Object.assign(COPY.it, {
+  'Система балів FIIM/MWT': 'Sistema di punteggio FIIM/MWT', 'Рейтингові коригування FIIM/MWT': 'Correzioni della classifica FIIM/MWT',
+  'Рейтингові коригування': 'Correzioni della classifica', 'Без штрафу': 'Nessuna penalità', 'Штраф': 'Penalità', 'Дискваліфікація': 'Squalifica',
+  'Фінальні бали гравців': 'Punteggi finali dei giocatori', 'Фінальний бал': 'Punteggio finale', 'Результат': 'Risultato', 'Кращий хід': 'Miglior mossa',
+  'Бал за гру': 'Punteggio partita', 'рейтингових балів': 'punti classifica', 'Змінити': 'Modifica', 'Оберіть штраф за негативний вплив на гру.': 'Scegli una penalità per un impatto negativo sulla partita.'
+});
+
 const PATTERNS = {
-  it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+) оцінок/g, '$1 valutazioni'], [/(\d+)% перемог/g, '$1% vittorie'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
-  en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+) оцінок/g, '$1 ratings'], [/(\d+)% перемог/g, '$1% wins'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],
-  fr: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 parties'], [/(\d+) оцінок/g, '$1 évaluations'], [/(\d+)% перемог/g, '$1 % de victoires'], [/тимчасових (\d+)/g, '$1 temporaires'], [/черга (\d+)/g, 'file $1'], [/ · ведучий /g, ' · animateur '], [/(\d+) гравців за столом/g, '$1 joueurs à table'], [/(\d+)\/10 живих/g, '$1/10 en vie'], [/Екран бачить лише гравець №(\d+)/g, 'Seul le joueur n°$1 voit l’écran'], [/Змінити аватар/g, 'Changer l’avatar']]
+  it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+) оцінок/g, '$1 valutazioni'], [/(\d+)% перемог/g, '$1% vittorie'], [/(\d+) учасн\./g, '$1 partecipanti'], [/(\d+) авторизованих профілів/g, '$1 profili autenticati'], [/(\d+) гостей без доступу/g, '$1 ospiti senza accesso'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Ранг (\d+)/g, 'Posizione $1'], [/(\d+(?:[,.]\d+)?) балів/g, '$1 punti'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
+  en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+) оцінок/g, '$1 ratings'], [/(\d+)% перемог/g, '$1% wins'], [/(\d+) учасн\./g, '$1 participants'], [/(\d+) авторизованих профілів/g, '$1 signed-in profiles'], [/(\d+) гостей без доступу/g, '$1 guests without access'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Ранг (\d+)/g, 'Rank $1'], [/(\d+(?:[,.]\d+)?) балів/g, '$1 points'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],
+  fr: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 parties'], [/(\d+) оцінок/g, '$1 évaluations'], [/(\d+)% перемог/g, '$1 % de victoires'], [/(\d+) учасн\./g, '$1 participants'], [/(\d+) авторизованих профілів/g, '$1 profils connectés'], [/(\d+) гостей без доступу/g, '$1 invités sans accès'], [/тимчасових (\d+)/g, '$1 temporaires'], [/черга (\d+)/g, 'file $1'], [/ · ведучий /g, ' · animateur '], [/(\d+) гравців за столом/g, '$1 joueurs à table'], [/(\d+)\/10 живих/g, '$1/10 en vie'], [/Ранг (\d+)/g, 'Rang $1'], [/(\d+(?:[,.]\d+)?) балів/g, '$1 points'], [/Екран бачить лише гравець №(\d+)/g, 'Seul le joueur n°$1 voit l’écran'], [/Змінити аватар/g, 'Changer l’avatar']]
 };
 
 export function normalizeLanguage(value) {

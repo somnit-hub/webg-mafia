@@ -757,6 +757,24 @@ img { display: block; max-width: 100%; }
 .identity-field > span:first-child { min-width: 0; }
 .identity-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 9px; }
 .identity-actions .account-delete-btn { width: 42px; height: 42px; margin-left: 0; border-left-width: 2px; }
+.telegram-profile-input-row { min-width: 0; display: flex; align-items: stretch; gap: 7px; }
+.telegram-profile-input-row .input { min-width: 0; flex: 1 1 auto; }
+.telegram-connect-btn, .telegram-disconnect-btn { width: 44px; min-width: 44px; height: 44px; min-height: 44px; flex: 0 0 44px; }
+.telegram-connect-btn { border-color: color-mix(in srgb, #2aabee 58%, var(--line)); color: #48b7ee; background: color-mix(in srgb, #2aabee 10%, var(--control-bg)); }
+.telegram-connect-btn.connected { border-color: color-mix(in srgb, var(--green) 62%, var(--line)); color: var(--green); }
+.telegram-connect-btn .discussion-icon { width: 24px; height: 24px; }
+.telegram-disconnect-btn { border-color: #71343b; color: var(--danger); font-size: 25px; }
+.telegram-linked-identity { min-width: 0; margin-top: 7px; padding: 8px 9px; border: 1px solid color-mix(in srgb, #2aabee 42%, var(--line)); border-radius: 7px; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 9px; background: color-mix(in srgb, #2aabee 7%, var(--row-bg)); }
+.telegram-linked-identity > img, .telegram-linked-avatar { width: 38px; height: 38px; border-radius: 7px; display: grid; place-items: center; object-fit: cover; color: #48b7ee; background: var(--surface-2); }
+.telegram-linked-identity > div { min-width: 0; display: grid; gap: 2px; }
+.telegram-linked-identity b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.telegram-linked-identity a, .telegram-linked-identity > div > span, .telegram-manual-status a { color: var(--muted); font-size: 11px; text-decoration: none; overflow-wrap: anywhere; }
+.telegram-linked-identity a:hover, .telegram-manual-status a:hover { color: #48b7ee; text-decoration: underline; }
+.telegram-manual-status { margin-top: 7px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.telegram-link-status { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.telegram-profile-badge { max-width: 180px; color: #80cdf2; text-decoration: none; }
+.telegram-profile-badge .discussion-icon { width: 13px; height: 13px; flex-basis: 13px; }
+.telegram-profile-badge span { overflow: hidden; text-overflow: ellipsis; }
 .migration-stats { margin: 17px 0; }
 .migration-stats .stat-card { border: 1px solid var(--line); border-radius: 13px; background: var(--row-bg); }
 .rules-title { margin-bottom: 10px; }
@@ -1084,6 +1102,47 @@ img { display: block; max-width: 100%; }
 .modal > p { margin: 0 0 16px; color: var(--muted); line-height: 1.45; }
 .protocol-log { max-height: 55vh; overflow: auto; overscroll-behavior: contain; }
 .modal-actions { margin-top: 18px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
+.discussion-icon { width: 21px; height: 21px; flex: 0 0 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.game-chat-list { display: grid; gap: 7px; }
+.game-chat-row { min-width: 0; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--row-bg); }
+.game-chat-row-icon { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--gold) 58%, var(--line)); border-radius: 50%; color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--surface)); }
+.game-chat-row-copy { min-width: 0; }
+.game-chat-row-copy b, .game-chat-row-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-chat-row-copy span { margin-top: 3px; color: var(--muted); font-size: 11px; }
+
+.discussion-modal { width: min(820px, 100%); }
+.discussion-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.discussion-choice { min-width: 0; min-height: 330px; padding: 16px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--row-bg); }
+.discussion-choice.app-chat-choice { border-color: color-mix(in srgb, var(--gold) 58%, var(--line)); }
+.discussion-choice.telegram-choice { border-color: color-mix(in srgb, #2aabee 58%, var(--line)); }
+.discussion-choice-head { display: flex; align-items: center; gap: 11px; }
+.discussion-choice-head > div { min-width: 0; }
+.discussion-choice-head h3 { margin: 0 0 6px; font-size: 17px; }
+.discussion-choice-icon { width: 48px; height: 48px; flex: 0 0 48px; display: grid; place-items: center; border-radius: 50%; color: var(--gold); background: color-mix(in srgb, var(--gold) 12%, var(--surface)); }
+.telegram-choice .discussion-choice-icon { color: #48b7ee; background: color-mix(in srgb, #2aabee 13%, var(--surface)); }
+.discussion-choice-icon .discussion-icon { width: 27px; height: 27px; }
+.discussion-choice > p { margin: 15px 0; color: var(--muted); line-height: 1.5; }
+.discussion-participant-note { margin: auto 0 14px; padding: 10px; border-radius: 8px; color: var(--muted); background: var(--surface-2); font-size: 12px; }
+.discussion-participant-note b { color: var(--gold); font-size: 16px; }
+.discussion-telegram-actions { margin-top: auto; display: grid; gap: 8px; }
+
+.game-chat-modal { width: min(760px, 100%); height: min(82dvh, 760px); overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.game-chat-head { min-width: 0; margin-bottom: 10px; }
+.game-chat-head > div { min-width: 0; }
+.game-chat-head h2, .game-chat-head p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-chat-messages { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px; display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--surface) 78%, transparent); }
+.game-chat-messages > .ui-state { margin: auto 0; }
+.chat-message { width: min(82%, 560px); align-self: flex-start; padding: 9px 11px; border: 1px solid var(--line); border-radius: 4px 13px 13px 13px; background: var(--row-bg); }
+.chat-message.own { align-self: flex-end; border-color: color-mix(in srgb, var(--gold) 45%, var(--line)); border-radius: 13px 4px 13px 13px; background: color-mix(in srgb, var(--gold) 9%, var(--surface-2)); }
+.chat-message.pending { opacity: .7; }
+.chat-message-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--gold); font-size: 11px; }
+.chat-message-meta time { color: var(--muted); font-size: 9px; white-space: nowrap; }
+.chat-message p { margin: 4px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.42; }
+.game-chat-composer { min-width: 0; padding-top: 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.game-chat-composer .textarea { min-height: 50px; max-height: 126px; resize: vertical; }
+.game-chat-composer .btn { min-height: 50px; }
 
 .host-transfer-modal { max-width: 580px; }
 .host-transfer-callout {
@@ -2018,6 +2077,19 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .shell-header.has-cancel-game .header-media-controls { left: 46%; }
   .shell-header.has-cancel-game .header-media-btn,
   .shell-header.has-cancel-game .profile-btn.btn.small { width: 36px; min-width: 36px; height: 36px; min-height: 36px; flex-basis: 36px; }
+}
+
+@media (max-width: 700px) {
+  .discussion-choice-grid { grid-template-columns: 1fr; }
+  .discussion-choice { min-height: 0; }
+  .discussion-participant-note { margin-top: 0; }
+  .game-chat-modal { height: calc(100dvh - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom))); }
+  .game-chat-row { grid-template-columns: 36px minmax(0, 1fr) auto; padding: 8px; gap: 7px; }
+  .game-chat-row-icon { width: 36px; height: 36px; }
+  .game-chat-row .btn { min-width: 0; padding-inline: 8px; }
+  .chat-message { width: 91%; }
+  .game-chat-composer { grid-template-columns: minmax(0, 1fr) 92px; }
+  .game-chat-composer .btn { padding-inline: 8px; }
 }
 
 @keyframes game-phase-enter {

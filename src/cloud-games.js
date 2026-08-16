@@ -1,6 +1,7 @@
 import { getCommunityFirestore } from './cloud-profiles.js';
 import { ACTIVE_GAME_PHASES } from './game-engine.js';
 import { getFirebaseIdToken } from './auth.js';
+import { authorizedGameParticipantUids } from './game-chat.js';
 
 const COMMUNITY_ID = 'enjoy';
 const ACTIVE_PHASES = new Set(ACTIVE_GAME_PHASES);
@@ -363,6 +364,7 @@ export function createFinishedGameDocument(user, profile, game) {
     winner: game.winner,
     durationSeconds: integer(game.durationSeconds, 0, 31536000),
     day: integer(game.day, 1, 100),
+    participantUids: authorizedGameParticipantUids(user, game),
     seats: (game.seats || []).slice(0, 10).map(sharedSeat),
     history: (game.history || []).slice(0, 500).map(sharedEvent),
     schemaVersion: 1
@@ -383,6 +385,9 @@ function finishedGameFromSnapshot(snapshot) {
     winner: ['red', 'black', 'draw'].includes(data.winner) ? data.winner : null,
     durationSeconds: integer(data.durationSeconds, 0, 31536000),
     day: integer(data.day, 1, 100),
+    participantUids: Array.isArray(data.participantUids)
+      ? [...new Set(data.participantUids.map(value => clean(value, 128)).filter(Boolean))].slice(0, 11)
+      : [],
     seats: Array.isArray(data.seats) ? data.seats.slice(0, 10).map(sharedSeat) : [],
     history: Array.isArray(data.history) ? data.history.slice(0, 500).map(sharedEvent) : [],
     cloudOwnerUid: clean(data.ownerUid, 160),
@@ -480,9 +485,19 @@ export async function saveFinishedCommunityGame(user, profile, game) {
   const fields = createFinishedGameDocument(user, profile, game);
   const reference = gamePath(sdk, database, fields.id);
   const snapshot = await sdk.getDoc(reference);
+  const storedParticipants = snapshot.exists() && Array.isArray(snapshot.data().participantUids)
+    ? snapshot.data().participantUids
+    : [];
+  fields.participantUids = [...new Set([
+    ...storedParticipants.map(value => clean(value, 128)).filter(Boolean),
+    ...fields.participantUids
+  ])].slice(0, 11);
+  const sameParticipants = storedParticipants.length === fields.participantUids.length
+    && storedParticipants.every(uid => fields.participantUids.includes(uid));
   if (snapshot.exists()
     && snapshot.data().ownerUid === user.uid
-    && snapshot.data().gameUpdatedAt === fields.gameUpdatedAt) return false;
+    && snapshot.data().gameUpdatedAt === fields.gameUpdatedAt
+    && sameParticipants) return false;
   await sdk.setDoc(reference, {
     ...fields,
     createdAt: snapshot.exists() ? snapshot.data().createdAt : sdk.serverTimestamp(),

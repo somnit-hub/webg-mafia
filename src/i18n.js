@@ -807,10 +807,72 @@ Object.assign(COPY.it, { 'Поділитися застосунком': 'Condivi
 Object.assign(COPY.en, { 'Поділитися застосунком': 'Share app', 'Очистити розсадку': 'Clear seating' });
 Object.assign(COPY.fr, { 'Поділитися застосунком': 'Partager l’application', 'Очистити розсадку': 'Vider le placement' });
 
+Object.assign(COPY.it, {
+  'Обговорення ігор': 'Discussioni sulle partite', 'Обговорити гру': 'Discuti la partita', 'Де обговорити гру?': 'Dove discutere la partita?',
+  'Чат у Mafia Enjoy': 'Chat in Mafia Enjoy', 'Група в Telegram': 'Gruppo Telegram', 'Окремий чат': 'Chat separata',
+  'Відкрити чат': 'Apri chat', 'Спробувати ще раз': 'Riprova', 'Готуємо чат…': 'Preparazione della chat…',
+  'Створити групу в Telegram': 'Crea un gruppo Telegram', 'Надіслати посилання через Telegram': 'Invia il link tramite Telegram',
+  'Завантажуємо чати…': 'Caricamento delle chat…', 'Чати тимчасово недоступні': 'Le chat non sono disponibili', 'Обговорень ще немає': 'Nessuna discussione',
+  'Обговорення гри': 'Discussione della partita', 'Відкриваємо розмову…': 'Apertura della conversazione…', 'Повідомлення недоступні': 'Messaggi non disponibili',
+  'Розмова ще порожня': 'La conversazione è vuota', 'Напишіть перше повідомлення про цю гру.': 'Scrivi il primo messaggio su questa partita.',
+  'Повідомлення': 'Messaggio', 'Напишіть повідомлення…': 'Scrivi un messaggio…', 'Надіслати': 'Invia', 'Надсилаємо…': 'Invio…',
+  'Створюється автоматично. Ведучий і всі авторизовані учасники цього столу вже мають доступ.': 'Viene creata automaticamente. L’host e tutti i giocatori autenticati al tavolo hanno già accesso.',
+  'Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.': 'Telegram aprirà la creazione di un nuovo gruppo. Per motivi di privacy, l’app non può aggiungere i profili Google come contatti Telegram: l’host li seleziona in Telegram.'
+});
+Object.assign(COPY.en, {
+  'Обговорення ігор': 'Game discussions', 'Обговорити гру': 'Discuss game', 'Де обговорити гру?': 'Where do you want to discuss?',
+  'Чат у Mafia Enjoy': 'Chat in Mafia Enjoy', 'Група в Telegram': 'Telegram group', 'Окремий чат': 'Separate chat',
+  'Відкрити чат': 'Open chat', 'Спробувати ще раз': 'Try again', 'Готуємо чат…': 'Preparing chat…',
+  'Створити групу в Telegram': 'Create Telegram group', 'Надіслати посилання через Telegram': 'Send link via Telegram',
+  'Завантажуємо чати…': 'Loading chats…', 'Чати тимчасово недоступні': 'Chats are temporarily unavailable', 'Обговорень ще немає': 'No discussions yet',
+  'Обговорення гри': 'Game discussion', 'Відкриваємо розмову…': 'Opening conversation…', 'Повідомлення недоступні': 'Messages are unavailable',
+  'Розмова ще порожня': 'The conversation is empty', 'Напишіть перше повідомлення про цю гру.': 'Write the first message about this game.',
+  'Повідомлення': 'Message', 'Напишіть повідомлення…': 'Write a message…', 'Надіслати': 'Send', 'Надсилаємо…': 'Sending…',
+  'Створюється автоматично. Ведучий і всі авторизовані учасники цього столу вже мають доступ.': 'It is created automatically. The host and every signed-in player at the table already have access.',
+  'Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.': 'Telegram will open the new-group flow. For privacy, the app cannot add Google profiles as Telegram contacts; the host selects them in Telegram.'
+});
+Object.assign(COPY.fr, {
+  'Обговорення ігор': 'Discussions des parties', 'Обговорити гру': 'Discuter de la partie', 'Де обговорити гру?': 'Où discuter de la partie ?',
+  'Чат у Mafia Enjoy': 'Chat dans Mafia Enjoy', 'Група в Telegram': 'Groupe Telegram', 'Окремий чат': 'Chat séparé',
+  'Відкрити чат': 'Ouvrir le chat', 'Спробувати ще раз': 'Réessayer', 'Готуємо чат…': 'Préparation du chat…',
+  'Створити групу в Telegram': 'Créer un groupe Telegram', 'Надіслати посилання через Telegram': 'Envoyer le lien via Telegram',
+  'Завантажуємо чати…': 'Chargement des chats…', 'Чати тимчасово недоступні': 'Les chats sont indisponibles', 'Обговорень ще немає': 'Aucune discussion',
+  'Обговорення гри': 'Discussion de la partie', 'Відкриваємо розмову…': 'Ouverture de la conversation…', 'Повідомлення недоступні': 'Messages indisponibles',
+  'Розмова ще порожня': 'La conversation est vide', 'Напишіть перше повідомлення про цю гру.': 'Écrivez le premier message sur cette partie.',
+  'Повідомлення': 'Message', 'Напишіть повідомлення…': 'Écrivez un message…', 'Надіслати': 'Envoyer', 'Надсилаємо…': 'Envoi…',
+  'Створюється автоматично. Ведучий і всі авторизовані учасники цього столу вже мають доступ.': 'Il est créé automatiquement. L’animateur et tous les joueurs connectés à la table y ont déjà accès.',
+  'Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.': 'Telegram ouvrira la création d’un groupe. Pour des raisons de confidentialité, l’app ne peut pas ajouter les profils Google comme contacts Telegram : l’animateur les sélectionne dans Telegram.'
+});
+
+Object.assign(COPY.it, {
+  'Telegram': 'Telegram', 'Введено вручну': 'Inserito manualmente', 'Telegram підключено': 'Telegram collegato',
+  'Синхронізувати з Telegram': 'Sincronizza con Telegram', 'Підготувати підключення Telegram': 'Prepara il collegamento Telegram',
+  'Готуємо Telegram Login…': 'Preparazione di Telegram Login…', 'Підключаємо Telegram…': 'Collegamento a Telegram…',
+  'Готуємо безпечне підключення…': 'Preparazione del collegamento sicuro…', 'Натисніть іконку Telegram, щоб підтвердити профіль.': 'Tocca l’icona Telegram per verificare il profilo.',
+  'Від’єднати Telegram': 'Scollega Telegram', 'Очистити Telegram': 'Cancella Telegram', 'Фото Telegram': 'Foto Telegram',
+  'Username не вказано в Telegram': 'Username non indicato in Telegram', '@username або t.me/username': '@username o t.me/username'
+});
+Object.assign(COPY.en, {
+  'Telegram': 'Telegram', 'Введено вручну': 'Entered manually', 'Telegram підключено': 'Telegram connected',
+  'Синхронізувати з Telegram': 'Sync with Telegram', 'Підготувати підключення Telegram': 'Prepare Telegram connection',
+  'Готуємо Telegram Login…': 'Preparing Telegram Login…', 'Підключаємо Telegram…': 'Connecting Telegram…',
+  'Готуємо безпечне підключення…': 'Preparing a secure connection…', 'Натисніть іконку Telegram, щоб підтвердити профіль.': 'Tap the Telegram icon to verify your profile.',
+  'Від’єднати Telegram': 'Disconnect Telegram', 'Очистити Telegram': 'Clear Telegram', 'Фото Telegram': 'Telegram photo',
+  'Username не вказано в Telegram': 'No username is set in Telegram', '@username або t.me/username': '@username or t.me/username'
+});
+Object.assign(COPY.fr, {
+  'Telegram': 'Telegram', 'Введено вручну': 'Saisi manuellement', 'Telegram підключено': 'Telegram connecté',
+  'Синхронізувати з Telegram': 'Synchroniser avec Telegram', 'Підготувати підключення Telegram': 'Préparer la connexion Telegram',
+  'Готуємо Telegram Login…': 'Préparation de Telegram Login…', 'Підключаємо Telegram…': 'Connexion à Telegram…',
+  'Готуємо безпечне підключення…': 'Préparation de la connexion sécurisée…', 'Натисніть іконку Telegram, щоб підтвердити профіль.': 'Touchez l’icône Telegram pour vérifier le profil.',
+  'Від’єднати Telegram': 'Déconnecter Telegram', 'Очистити Telegram': 'Effacer Telegram', 'Фото Telegram': 'Photo Telegram',
+  'Username не вказано в Telegram': 'Aucun nom d’utilisateur Telegram', '@username або t.me/username': '@username ou t.me/username'
+});
+
 const PATTERNS = {
-  it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+) оцінок/g, '$1 valutazioni'], [/(\d+)% перемог/g, '$1% vittorie'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
-  en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+) оцінок/g, '$1 ratings'], [/(\d+)% перемог/g, '$1% wins'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],
-  fr: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 parties'], [/(\d+) оцінок/g, '$1 évaluations'], [/(\d+)% перемог/g, '$1 % de victoires'], [/тимчасових (\d+)/g, '$1 temporaires'], [/черга (\d+)/g, 'file $1'], [/ · ведучий /g, ' · animateur '], [/(\d+) гравців за столом/g, '$1 joueurs à table'], [/(\d+)\/10 живих/g, '$1/10 en vie'], [/Екран бачить лише гравець №(\d+)/g, 'Seul le joueur n°$1 voit l’écran'], [/Змінити аватар/g, 'Changer l’avatar']]
+  it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+) оцінок/g, '$1 valutazioni'], [/(\d+)% перемог/g, '$1% vittorie'], [/(\d+) учасн\./g, '$1 partecipanti'], [/(\d+) авторизованих профілів/g, '$1 profili autenticati'], [/(\d+) гостей без доступу/g, '$1 ospiti senza accesso'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
+  en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+) оцінок/g, '$1 ratings'], [/(\d+)% перемог/g, '$1% wins'], [/(\d+) учасн\./g, '$1 participants'], [/(\d+) авторизованих профілів/g, '$1 signed-in profiles'], [/(\d+) гостей без доступу/g, '$1 guests without access'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],
+  fr: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 parties'], [/(\d+) оцінок/g, '$1 évaluations'], [/(\d+)% перемог/g, '$1 % de victoires'], [/(\d+) учасн\./g, '$1 participants'], [/(\d+) авторизованих профілів/g, '$1 profils connectés'], [/(\d+) гостей без доступу/g, '$1 invités sans accès'], [/тимчасових (\d+)/g, '$1 temporaires'], [/черга (\d+)/g, 'file $1'], [/ · ведучий /g, ' · animateur '], [/(\d+) гравців за столом/g, '$1 joueurs à table'], [/(\d+)\/10 живих/g, '$1/10 en vie'], [/Екран бачить лише гравець №(\d+)/g, 'Seul le joueur n°$1 voit l’écran'], [/Змінити аватар/g, 'Changer l’avatar']]
 };
 
 export function normalizeLanguage(value) {

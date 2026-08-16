@@ -18,6 +18,12 @@ const fields = createOwnCommunityProfileFields(user, {
   club: 'Enjoy',
   description: 'Капучино',
   avatar: customAvatar,
+  telegramUsername: '@Maria_Enjoy',
+  telegramUserId: '987654321',
+  telegramDisplayName: 'Марія Enjoy',
+  telegramPhotoURL: 'https://cdn4.telesco.pe/file/photo',
+  telegramVerified: true,
+  telegramLinkedAt: '2026-08-16T12:00:00.000Z',
   discoverable: true,
   updatedAt: '2026-08-13T12:00:00.000Z'
 });
@@ -25,6 +31,19 @@ const fields = createOwnCommunityProfileFields(user, {
 assert.equal(fields.photoDataURL, customAvatar);
 assert.equal(fields.photoURL, user.googlePhotoURL);
 assert.equal(fields.displayName, 'Марія');
+assert.equal(fields.telegramUsername, 'maria_enjoy');
+assert.equal(fields.telegramVerified, true);
+assert.equal(fields.telegramUserId, '987654321');
+
+const manualTelegram = createOwnCommunityProfileFields(user, {
+  displayName: 'Марія',
+  telegramUsername: 'manual_user',
+  telegramUserId: 'forged',
+  telegramVerified: true
+});
+assert.equal(manualTelegram.telegramUsername, 'manual_user');
+assert.equal(manualTelegram.telegramVerified, false);
+assert.equal(manualTelegram.telegramUserId, '');
 
 const oversized = createOwnCommunityProfileFields(user, {
   displayName: 'Марія',

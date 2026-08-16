@@ -45,6 +45,7 @@ test('shared archive publishes only the finished sanitized protocol', () => {
 
   assert.equal(document.ownerUid, 'host_uid');
   assert.equal(document.hostName, 'Пан Ведучий');
+  assert.deepEqual(document.participantUids, ['host_uid', 'player']);
   assert.equal(document.seats.length, 10);
   assert.equal(document.history.length, 1);
   assert.equal(document.history[0].text, 'Шериф перевіряє №2: чорний.');

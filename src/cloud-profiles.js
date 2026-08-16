@@ -78,6 +78,32 @@ function sharedAvatarPreset(value) {
   return MANUAL_AVATAR_PRESETS.has(preset) ? preset : '';
 }
 
+function telegramUsername(value) {
+  const username = clean(value, 32).replace(/^@+/, '');
+  return /^[a-zA-Z0-9_]{5,32}$/.test(username) ? username.toLowerCase() : '';
+}
+
+function telegramPhotoURL(value) {
+  const photo = clean(value, 2048);
+  if (!photo) return '';
+  try { return new URL(photo).protocol === 'https:' ? photo : ''; }
+  catch { return ''; }
+}
+
+function telegramProfileFields(profile) {
+  const userId = clean(profile?.telegramUserId, 32);
+  const linkedAt = clean(profile?.telegramLinkedAt, 40);
+  const verified = profile?.telegramVerified === true && /^\d{1,32}$/.test(userId) && Boolean(linkedAt);
+  return {
+    telegramUsername: telegramUsername(profile?.telegramUsername),
+    telegramUserId: verified ? userId : '',
+    telegramDisplayName: verified ? clean(profile?.telegramDisplayName, 80) : '',
+    telegramPhotoURL: verified ? telegramPhotoURL(profile?.telegramPhotoURL) : '',
+    telegramVerified: verified,
+    telegramLinkedAt: verified ? linkedAt : ''
+  };
+}
+
 export function createSharedManualPlayerFields(user, hostProfile, player) {
   if (!user?.uid || !isPersistentManualPlayer(player)) throw new Error('Профіль гравця не готовий до синхронізації');
   const contact = clean(player.contact, 100);
@@ -127,6 +153,7 @@ export function createOwnCommunityProfileFields(user, profile) {
     description: clean(profile.description, 600),
     photoURL: clean(user.googlePhotoURL, 2048),
     photoDataURL: sharedAvatar(profile.avatar),
+    ...telegramProfileFields(profile),
     discoverable: profile.discoverable !== false,
     profileUpdatedAt: profile.updatedAt || new Date().toISOString(),
     schemaVersion: 1
@@ -143,6 +170,7 @@ function memberFromSnapshot(snapshot) {
     description: clean(data.description, 600),
     photoURL: clean(data.photoURL, 2048),
     photoDataURL: sharedAvatar(data.photoDataURL),
+    ...telegramProfileFields(data),
     discoverable: data.discoverable !== false,
     profileUpdatedAt: clean(data.profileUpdatedAt, 40),
     lastSeenAt: profileLastSeenMillis(data.lastSeenAt)

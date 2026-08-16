@@ -1,4 +1,4 @@
-const CACHE = 'mafia-desk-v182';
+const CACHE = 'mafia-desk-v183';
 const APP_SHELL = [
   './', './index.html', './styles.css', './manifest.webmanifest',
   './assets/logo-mafia.webp', './assets/favicon-32.png', './assets/favicon-64.png', './assets/favicon.ico',
@@ -11,7 +11,7 @@ const APP_SHELL = [
   './assets/signals/don-found-sheriff.webp', './assets/signals/don-not-sheriff.webp',
   './assets/audio/mafia-ambient.mp3', './assets/audio/mafia-2-theme.mp3',
   './assets/audio/pink-panther-night.mp3', './assets/audio/night-intro.mp3',
-  './src/app.js?v=182', './src/auth.js', './src/pwa.js', './src/cloud-profiles.js', './src/cloud-games.js?v=158', './src/cloud-venues.js', './src/venue-directory.js', './src/game-music.js', './src/game-feedback.js', './src/player-ranking.js', './src/game-chat.js?v=2', './src/telegram-profile.js?v=2', './src/game-engine.js', './src/order-service.js', './src/player-directory.js', './src/player-links.js', './src/timer.js', './src/lineup.js', './src/guest-names.js', './src/i18n.js', './src/firebase-config.js', './src/db.js', './src/google-sync.js', './src/enjoy.js'
+  './src/app.js?v=183', './src/auth.js', './src/pwa.js', './src/cloud-profiles.js', './src/cloud-games.js?v=158', './src/cloud-venues.js', './src/venue-directory.js', './src/game-music.js', './src/game-feedback.js', './src/player-ranking.js', './src/game-chat.js?v=2', './src/telegram-profile.js?v=2', './src/game-engine.js', './src/order-service.js', './src/player-directory.js', './src/player-links.js', './src/timer.js', './src/lineup.js', './src/guest-names.js', './src/i18n.js', './src/firebase-config.js', './src/db.js', './src/google-sync.js', './src/enjoy.js'
 ];
 const FIREBASE_SDK = [
   'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js',

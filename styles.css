@@ -849,6 +849,7 @@ img { display: block; max-width: 100%; }
 .panel-footer-actions { margin-top: 14px; }
 .setup-options { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .setup-music-stack { display: grid; gap: 12px; }
+.setup-music-device-controls { display: grid; gap: 8px; }
 .setup-music-toggle > span { min-width: 0; display: grid; gap: 3px; }
 .setup-music-toggle b { color: var(--text); font-size: 14px; }
 .setup-music-toggle small { color: var(--muted); font-size: 11px; line-height: 1.35; }
@@ -1341,6 +1342,14 @@ img { display: block; max-width: 100%; }
 .bar-track { height: 8px; overflow: hidden; border-radius: 99px; background: #292930; }
 .bar-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8f2c37, #d8b870); }
 .bar-value { color: var(--text); text-align: right; }
+.player-ranking-list { gap: 6px; }
+.player-ranking-row { align-items: center; gap: 12px; }
+.player-ranking-person { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.ranking-place { width: 34px; flex: 0 0 34px; color: var(--gold); font-family: var(--font-numeric); font-size: 16px; text-align: center; }
+.ranking-score { min-width: 58px; display: grid; justify-items: end; line-height: 1.05; }
+.ranking-score b { color: var(--gold); font-family: var(--font-numeric); font-size: 18px; }
+.ranking-score span { color: var(--muted); font-size: 9px; text-transform: uppercase; }
+.ranking-method-link { width: fit-content; margin-top: 9px; display: inline-flex; color: var(--gold); font-size: 11px; font-weight: 800; }
 .privacy-note { padding: 12px; border: 1px solid #38475f; border-radius: 13px; color: #c7d7f6; background: #121824; font-size: 12px; line-height: 1.45; }
 
 :root[data-theme="light"] .help { border-color: #aaa095; }
@@ -1935,6 +1944,7 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .profile-btn img.avatar { display: block; }
 
   .page { width: 100%; min-width: 0; padding: 10px 8px calc(var(--nav-h) + 13px + env(safe-area-inset-bottom)); }
+  .page.home-page, .page.players-page, .page.setup-page { padding-bottom: calc(var(--nav-h) + 102px + env(safe-area-inset-bottom)); }
   .tab-page { gap: 8px; }
   .stack { gap: 8px; }
   .grid { gap: 8px; }
@@ -1972,6 +1982,10 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .directory-status .btn { min-height: 38px; padding: 6px 8px; font-size: 15px; }
   .search-row { min-width: 0; margin-bottom: 8px; }
   .player-grid { gap: 4px; }
+  .player-ranking-row { padding-right: 8px; padding-left: 8px; gap: 7px; }
+  .player-ranking-person { gap: 6px; }
+  .ranking-place { width: 29px; flex-basis: 29px; font-size: 14px; }
+  .ranking-score { min-width: 50px; }
   .setup-grid { gap: 7px; }
   .venue-picker-row { grid-template-columns: minmax(0, 1fr) 88px; }
   .venue-add-button { min-width: 0; padding-right: 7px; padding-left: 7px; }

@@ -167,6 +167,7 @@ export function normalizeGameState(value, defaultSettings = {}, { closeReveal = 
   } else {
     delete game.roleDeal;
   }
+  const seatNumbers = new Set(game.seats.map(seat => seat.number));
   const aliveNumbers = new Set(game.seats.filter(seat => seat.status === 'alive').map(seat => seat.number));
   game.revealIndex = integer(game.revealIndex, 0, Math.max(0, game.seats.length - 1));
   game.revealOpen = closeReveal ? false : Boolean(game.revealOpen);
@@ -195,7 +196,7 @@ export function normalizeGameState(value, defaultSettings = {}, { closeReveal = 
   const bestMoveSeat = integer(game.bestMove?.seat || game.lastWordSeat, 0, 10);
   game.bestMove = {
     seat: bestMoveSeat || null,
-    selected: [...new Set((game.bestMove?.selected || []).map(Number).filter(number => aliveNumbers.has(number)))].slice(0, 3)
+    selected: [...new Set((game.bestMove?.selected || []).map(Number).filter(number => seatNumbers.has(number)))].slice(0, 3)
   };
   const timerWasRunning = Boolean(game.timer?.running);
   const timerEndsAt = Number(game.timer?.endsAt);

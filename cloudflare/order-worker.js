@@ -438,6 +438,11 @@ function liveGamePayload(source, identity) {
   const seatNumbers = value => Array.isArray(value)
     ? value.slice(0, 10).map(number => integer(number, 1, 10))
     : [];
+  const uidList = (value, maximum) => Array.isArray(value)
+    ? [...new Set(value.map(uid => clean(uid, 128)).filter(Boolean))].slice(0, maximum)
+    : [];
+  const participantUids = [...new Set([identity.uid, ...uidList(game.participantUids, 11)])].slice(0, 11);
+  const activePlayerUids = uidList(game.activePlayerUids, 10).filter(uid => uid !== identity.uid && participantUids.includes(uid));
   const timer = game.timer && typeof game.timer === 'object' ? game.timer : {};
   const startedAt = clean(game.startedAt, 40);
   const gameUpdatedAt = clean(game.gameUpdatedAt, 40);
@@ -452,6 +457,8 @@ function liveGamePayload(source, identity) {
     startedAt,
     gameUpdatedAt,
     status: 'active',
+    participantUids,
+    activePlayerUids,
     phase,
     subphase: clean(game.subphase, 40),
     day: integer(game.day, 1, 100),
@@ -488,7 +495,10 @@ async function saveLiveGame(body, identity, idToken, env) {
   const existing = await firestoreLiveGame(game.id, idToken, env);
   const existingOwnerUid = firestoreValue(existing?.fields?.ownerUid);
   if (existingOwnerUid && existingOwnerUid !== identity.uid) throw new HttpError(403, 'Ця активна гра належить іншому ведучому');
-  if (existingOwnerUid === identity.uid && firestoreValue(existing?.fields?.gameUpdatedAt) === game.gameUpdatedAt) {
+  if (existingOwnerUid === identity.uid
+    && firestoreValue(existing?.fields?.gameUpdatedAt) === game.gameUpdatedAt
+    && existing?.fields?.participantUids?.arrayValue
+    && existing?.fields?.activePlayerUids?.arrayValue) {
     return { ok: true, changed: false, gameId: game.id };
   }
   const now = new Date().toISOString();

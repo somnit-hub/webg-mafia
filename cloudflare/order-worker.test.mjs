@@ -222,6 +222,8 @@ function activeGame() {
     startedAt: '2026-08-14T18:00:00.000Z',
     gameUpdatedAt: '2026-08-14T18:01:00.000Z',
     status: 'active',
+    participantUids: ['host-1', 'player-1', 'player-2'],
+    activePlayerUids: ['player-1'],
     phase: 'day',
     subphase: 'speeches',
     day: 1,
@@ -264,6 +266,8 @@ test('active game is published through the authenticated Firestore proxy', async
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, changed: true, gameId: 'game_test_live' });
   assert.equal(writtenDocument.fields.ownerUid.stringValue, 'host-1');
+  assert.equal(writtenDocument.fields.participantUids.arrayValue.values.length, 3);
+  assert.equal(writtenDocument.fields.activePlayerUids.arrayValue.values[0].stringValue, 'player-1');
   assert.equal(writtenDocument.fields.seats.arrayValue.values.length, 10);
   assert.match(writtenDocument.fields.createdAt.timestampValue, /^2026-/);
   assert.equal(writeAuthorization, 'Bearer valid-firebase-token');

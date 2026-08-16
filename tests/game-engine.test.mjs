@@ -149,6 +149,15 @@ test('persisted game recovery closes role and check results and removes dead tar
   assert.equal(normalized.settings.bestMove, 20);
 });
 
+test('persisted Best Move keeps selected players after they leave the table', () => {
+  const state = game({ phase: 'day' });
+  state.bestMove = { seat: 5, selected: [1, 2, 3] };
+  state.seats[0].status = 'dead';
+  state.seats[1].status = 'dead';
+  const normalized = normalizeGameState(state);
+  assert.deepEqual(normalized.bestMove, { seat: 5, selected: [1, 2, 3] });
+});
+
 test('persisted number deal keeps progress but closes the role and clears a pending tap', () => {
   const state = game({
     phase: 'reveal',

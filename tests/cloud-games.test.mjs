@@ -15,6 +15,7 @@ function finishedGame() {
     winner: 'red',
     durationSeconds: 3600,
     day: 3,
+    bestMove: { seat: 1, selected: [2, 3, 4] },
     night: { target: 4, sheriffCheck: 8 },
     settings: { speech: 60 },
     seats: Array.from({ length: 10 }, (_, index) => ({
@@ -47,6 +48,7 @@ test('shared archive publishes only the finished sanitized protocol', () => {
   assert.equal(document.hostName, 'Пан Ведучий');
   assert.deepEqual(document.participantUids, ['host_uid', 'player']);
   assert.equal(document.seats.length, 10);
+  assert.deepEqual(document.bestMove, { seat: 1, selected: [2, 3, 4] });
   assert.equal(document.history.length, 1);
   assert.equal(document.history[0].text, 'Шериф перевіряє №2: чорний.');
   assert.equal('secret' in document.history[0], false);
@@ -98,6 +100,8 @@ test('live game projection contains public state without roles or night targets'
   assert.equal(document.status, 'active');
   assert.equal(document.phase, 'day');
   assert.equal(document.hostName, 'Пан Ведучий');
+  assert.deepEqual(document.participantUids, ['host_uid', 'player']);
+  assert.deepEqual(document.activePlayerUids, ['player']);
   assert.equal(document.seats.length, 10);
   assert.equal(document.seats[1].noVote, true);
   assert.equal(document.timer.endsAt, 1786622000000);

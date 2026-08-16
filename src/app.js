@@ -28,7 +28,7 @@ import {
   saveFinishedCommunityGame, deleteFinishedCommunityGame,
   requestGameHostTransfer, acceptGameHostTransfer, resolveGameHostTransfer,
   subscribeCommunityGames, stopCommunityGames, subscribeGameHostTransfers, stopGameHostTransfers
-} from './cloud-games.js?v=157';
+} from './cloud-games.js?v=158';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
   canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, nominationIsAllowed, normalizeGameState, resolveVote,
@@ -46,6 +46,7 @@ import { selectHostTransferCandidates, sortDirectoryPlayers } from './player-dir
 import {
   GAME_EMOTIONS, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
+import { mafiaPlayerRankings } from './player-ranking.js';
 import {
   createCommunityVenueFields, saveCommunityVenue, subscribeCommunityVenues, stopCommunityVenues
 } from './cloud-venues.js';
@@ -55,10 +56,10 @@ import {
   customMusicChoice, musicCueForGame, normalizeGameMusicSettings
 } from './game-music.js';
 import {
-  authorizedGameParticipantUids, createGameChatDocument, ensureGameChat,
-  sendGameChatMessage, stopGameChatMessages, stopGameChats,
+  authorizedGameParticipantUids, canJoinActiveGameChat, createGameChatDocument, deleteGameChat, ensureGameChat,
+  joinGameChat, sendGameChatMessage, stopGameChatMessages, stopGameChats,
   subscribeGameChatMessages, subscribeGameChats, telegramDiscussionLinks
-} from './game-chat.js';
+} from './game-chat.js?v=2';
 import {
   connectPreparedTelegramProfile, normalizeTelegramUsername,
   prepareTelegramProfileConnection, telegramManualProfile
@@ -249,6 +250,8 @@ let activeGamePublishRetryHandle = null;
 let profilePresenceHandle = null;
 const pendingActiveGames = new Map();
 const activeGameRecoveryAttempts = new Set();
+const ensuredActiveGameChats = new Set();
+const activeGameChatMembershipSyncs = new Set();
 const handledHostTransfers = new Set();
 const presetAvatarDataUrls = new Map();
 
@@ -284,6 +287,12 @@ function formatDuration(seconds = 0) {
   const minutes = Math.max(0, Math.round(seconds / 60));
   if (minutes < 60) return `${minutes} хв`;
   return `${Math.floor(minutes / 60)} год ${minutes % 60} хв`;
+}
+function formatRatingPoints(value = 0) {
+  return new Intl.NumberFormat(languageLocale(app.settings.language), { maximumFractionDigits: 1 }).format(Number(value) || 0);
+}
+function formatRatingCoefficient(value = 0) {
+  return new Intl.NumberFormat(languageLocale(app.settings.language), { minimumFractionDigits: 3, maximumFractionDigits: 3 }).format(Number(value) || 0);
 }
 function formatTimer(seconds) {
   const safe = Math.max(0, Number(seconds) || 0);
@@ -1262,16 +1271,16 @@ function activeGamesPanel(active, refreshAction = false, collapsibleId = '') {
 function gameChatsPanel() {
   const status = app.gameChatsState.status;
   let content = app.gameChats.length
-    ? `<div class="game-chat-list">${app.gameChats.map(chat => `<article class="game-chat-row"><div class="game-chat-row-icon" aria-hidden="true">${discussionIcon()}</div><div class="game-chat-row-copy"><b>${esc(chat.gameTitle)}</b><span>${formatDate(chat.endedAt, true)}${chat.venue ? ` · ${esc(chat.venue)}` : ''} · ${chat.participantUids.length} учасн.</span></div><button class="btn small secondary" type="button" data-action="open-game-chat" data-id="${esc(chat.id)}">Відкрити</button></article>`).join('')}</div>`
+    ? `<div class="game-chat-list">${app.gameChats.map(chat => `<article class="game-chat-row"><div class="game-chat-row-icon" aria-hidden="true">${discussionIcon()}</div><div class="game-chat-row-copy"><b>${esc(chat.gameTitle)}</b><span>${chat.status === 'active' ? 'Гра триває' : formatDate(chat.endedAt, true)}${chat.venue ? ` · ${esc(chat.venue)}` : ''} · ${chat.participantUids.length} учасн.</span></div>${chat.status === 'active' ? '<span class="badge green">Наживо</span>' : ''}<button class="btn small secondary" type="button" data-action="open-game-chat" data-id="${esc(chat.id)}">Відкрити</button></article>`).join('')}</div>`
     : status === 'loading' || status === 'idle'
-      ? statePanel('loading', 'Завантажуємо чати…', 'Тут з’являться обговорення завершених ігор.', '', true)
+      ? statePanel('loading', 'Завантажуємо чати…', 'Тут з’являться доступні обговорення активних і завершених ігор.', '', true)
       : status === 'error'
         ? statePanel('error', 'Чати тимчасово недоступні', app.gameChatsState.error, '<button class="btn small secondary" data-action="game-chats-refresh">Повторити</button>', true)
-        : statePanel('empty', 'Обговорень ще немає', 'Після завершення кожної гри чат створиться автоматично.', '', true);
+        : statePanel('empty', 'Обговорень ще немає', 'Чат створиться автоматично разом із наступною грою.', '', true);
   return collapsiblePanel(
     'homeGameChats',
     'Обговорення ігор',
-    'Внутрішній чат автоматично створюється після кожної гри для ведучого й авторизованих учасників столу.',
+    'Чат створюється разом із грою. Під час гри він доступний ведучому, глядачам і гравцям, які вже вибули.',
     content,
     'game-chats-panel',
     status === 'online' ? '<span class="badge green">Онлайн</span>' : ''
@@ -1496,6 +1505,10 @@ function setupMusicHtml() {
   app.draft.settings.music = settings;
   return `<div class="setup-music-stack">
     <div class="toggle-row setup-music-toggle"><span><b>Автоматична музика</b><small>Вмикає потрібну мелодію на відповідному етапі гри та вимикає її вдень.</small></span><button class="switch ${settings.enabled ? 'on' : ''}" type="button" data-action="toggle-draft-music" role="switch" aria-checked="${settings.enabled}" aria-label="Автоматична музика"></button></div>
+    <div class="setup-music-device-controls">
+      <div class="toggle-row setup-music-toggle"><span><b>Звукові сигнали таймера</b><small>Попереджають про завершення часу промови або іншої дії.</small></span><button class="switch ${app.settings.sound ? 'on' : ''}" type="button" data-action="setting-sound" role="switch" aria-checked="${app.settings.sound}" aria-label="Звукові сигнали таймера"></button></div>
+      <div class="toggle-row setup-music-toggle"><span><b>Вібрація важливих дій</b><small>Підтверджує ключові натискання та важливі події під час гри.</small></span><button class="switch ${app.settings.haptics ? 'on' : ''}" type="button" data-action="setting-haptics" role="switch" aria-checked="${app.settings.haptics}" aria-label="Вібрація важливих дій"></button></div>
+    </div>
     <div class="setup-music-grid">${GAME_MUSIC_CUES.map(cue => setupMusicCueHtml(cue, settings)).join('')}</div>
     <p class="privacy-note setup-music-note">Власні файли не завантажуються в мережу й доступні до закриття вкладки. Після перезавантаження застосунок тимчасово використає вбудовану мелодію, доки ви знову не оберете файл.</p>
   </div>`;
@@ -1571,22 +1584,7 @@ function aggregateStats() {
 }
 
 function sharedLeaderboard(games) {
-  const rows = new Map();
-  games.forEach(game => game.seats.forEach(seat => {
-    const key = seat.profileId || `guest:${seat.name.toLocaleLowerCase('uk')}`;
-    const known = seat.profileId ? playerById(seat.profileId) : null;
-    const row = rows.get(key) || {
-      player: known || { id: key, name: seat.name, avatar: seat.avatar || '' },
-      games: 0,
-      wins: 0,
-      winRate: 0
-    };
-    row.games += 1;
-    if (game.winner && game.winner === teamOf(seat)) row.wins += 1;
-    row.winRate = Math.round(row.wins / row.games * 100);
-    rows.set(key, row);
-  }));
-  return [...rows.values()].sort((a, b) => b.wins - a.wins || b.winRate - a.winRate || b.games - a.games).slice(0, 10);
+  return mafiaPlayerRankings(games, playerById);
 }
 
 function statsView() {
@@ -1611,7 +1609,7 @@ function statsView() {
     </section>
     <div class="grid two stats-panels">
       ${collapsiblePanel('statsRoles', 'Результативність ролей', 'Показано частку перемог команди гравця для кожної ролі.', `<div class="bar-chart">${roles.map(role => `<div class="bar-row"><span>${esc(role.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${role.rate}%"></div></div><span class="bar-value">${role.rate}%</span></div>`).join('')}</div>`)}
-      ${collapsiblePanel('statsPlayers', 'Гравці', 'Рейтинг упорядковано за кількістю перемог.', leaderboard.length ? `<div class="list">${leaderboard.map((row, index) => `<div class="list-row"><div style="display:flex;align-items:center;gap:9px"><b class="muted">${index + 1}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог</span></div></div><b>${row.wins}</b></div>`).join('')}</div>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.'))}
+      ${collapsiblePanel('statsPlayers', 'Рейтинг гравців', 'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; −0,8 за дискваліфікацію через 4-й фол. КР — сума балів останніх 100 ігор, поділена на 100.', leaderboard.length ? `<div class="list player-ranking-list">${leaderboard.map(row => `<div class="list-row player-ranking-row"><div class="player-ranking-person"><b class="ranking-place" aria-label="Ранг ${row.rank}">#${row.rank}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог · КР ${formatRatingCoefficient(row.coefficient)}</span></div></div><div class="ranking-score"><b>${formatRatingPoints(row.points)}</b><span>балів</span></div></div>`).join('')}</div><a class="ranking-method-link" href="https://fiim.world/scoring" target="_blank" rel="noopener noreferrer">Методика FIIM/MWT ↗</a>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.'))}
     </div>
     ${collapsiblePanel('statsArchiveGames', 'Спільний архів ігор', 'Протоколи, чати та анонімні оцінки синхронізуються між пристроями. Розподіл відповідей відкривається після трьох оцінок.', games.length ? `<div class="list archive-games-list">${games.map(game => `<article class="archive-game-entry">${gameRow(game)}${archiveGameFeedbackHtml(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${discussionButtonForGame(game, 'small secondary')}${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div></article>`).join('')}</div>` : statePanel('empty', 'Архів ігор порожній', 'Завершені ігри з’являться тут автоматично.'))}
   </main>`;
@@ -1989,7 +1987,7 @@ function moderatorSideHtml({ includeProtocol = true } = {}) {
   const black = game.seats.filter(seat => teamOf(seat) === 'black');
   const pendingTransfer = outgoingHostTransfer(game.id);
   const transferLabel = pendingTransfer ? `Очікує: ${pendingTransfer.toName}` : 'Передати ведення';
-  const moderatorControls = `<div class="actions moderator-actions"><button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати ролі' : 'Ролі'}</button><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button><button class="btn small ${pendingTransfer ? 'primary' : 'secondary'} host-transfer-button" data-action="open-host-transfer">${esc(transferLabel)}</button></div>${game.showSecrets ? `<div class="divider"></div><div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}<div class="divider"></div><button class="btn danger wide moderator-finish-game" data-action="end-game-manual">Завершити гру</button>`;
+  const moderatorControls = `<div class="actions moderator-actions"><button class="btn small secondary" data-action="toggle-secret">${game.showSecrets ? 'Сховати ролі' : 'Ролі'}</button><button class="btn small secondary" data-action="undo" ${app.undo.length ? '' : 'disabled'}>↶ Скасувати</button><button class="btn small secondary" data-action="game-settings">⚙ Таймери</button><button class="btn small secondary" data-action="open-app-game-chat" data-id="${esc(game.id)}">${discussionIcon()} Чат гри</button><button class="btn small ${pendingTransfer ? 'primary' : 'secondary'} host-transfer-button" data-action="open-host-transfer">${esc(transferLabel)}</button></div>${game.showSecrets ? `<div class="divider"></div><div class="nom-list">${black.map(seat => `<span class="badge">${roleOf(seat).symbol} №${seat.number} ${esc(seat.name)}</span>`).join('')}</div>` : ''}<div class="divider"></div><button class="btn danger wide moderator-finish-game" data-action="end-game-manual">Завершити гру</button>`;
   const protocol = includeProtocol
     ? `<section class="card card-pad moderator-protocol-panel"><div class="section-title section-heading"><div><h3>Протокол</h3><p>${game.history.length} подій</p></div></div><div class="quick-log">${game.history.slice(0, 25).map(event => `<div class="log-item"><time>${esc(event.time)}</time>${esc(event.text)}</div>`).join('') || statePanel('empty', 'Подій ще немає', '', '', true)}</div></section>`
     : '';
@@ -1997,7 +1995,17 @@ function moderatorSideHtml({ includeProtocol = true } = {}) {
 }
 
 function observerSideHtml() {
-  return `<section class="card card-pad"><div class="section-title section-heading">${titleHelp('h3', 'Публічна інформація', 'Тут не показуються ролі й нічні результати. Вкладка синхронізується з екраном ведучого в межах одного браузера.')}</div>${nominationChipsObserver()}</section>`;
+  const game = app.game;
+  const chat = gameChatForGame(game.id);
+  const joined = Boolean(chat?.participantUids.includes(app.authUser?.uid));
+  const allowed = canJoinActiveGameChat(app.authUser, game);
+  const chatAction = allowed
+    ? `<button class="btn ${joined ? 'secondary' : 'primary'} wide" type="button" data-action="open-app-game-chat" data-id="${esc(game.id)}" ${app.chatBusy ? 'disabled' : ''}>${discussionIcon()} ${app.chatBusy ? 'Підключаємо…' : joined ? 'Відкрити чат гри' : 'Приєднатися до чату'}</button>`
+    : '<button class="btn secondary wide" type="button" disabled>Чат недоступний під час гри</button>';
+  const chatCopy = allowed
+    ? 'Авторизовані глядачі та гравці, які вже вибули, можуть обговорювати гру наживо.'
+    : 'Ви ще активний гравець за столом. Доступ відкриється після вибуття або завершення гри.';
+  return `<section class="card card-pad"><div class="section-title section-heading">${titleHelp('h3', 'Публічна інформація', 'Тут не показуються ролі й нічні результати. Вкладка синхронізується з екраном ведучого в межах одного браузера.')}</div>${nominationChipsObserver()}</section><section class="card card-pad observer-chat-card"><div class="section-title section-heading"><div><span class="eyebrow">Наживо</span><h3>Чат гри</h3><p>${chatCopy}</p></div>${joined ? '<span class="badge green">Приєднано</span>' : ''}</div>${chatAction}</section>`;
 }
 
 function nominationChipsObserver() {
@@ -2483,7 +2491,7 @@ function discussionModalHtml() {
   return `<div class="modal-backdrop discussion-backdrop" data-action="close-modal"><div class="card modal discussion-modal" role="dialog" aria-modal="true" aria-labelledby="discussion-title" tabindex="-1">
     <div class="section-title section-heading"><div><span class="eyebrow">Гру завершено</span><h2 id="discussion-title">Де обговорити гру?</h2><p>${esc(game.title)} · ${formatDate(game.endedAt || game.updatedAt, true)}</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div>
     <div class="discussion-choice-grid">
-      <article class="discussion-choice app-chat-choice"><div class="discussion-choice-head"><span class="discussion-choice-icon">${discussionIcon()}</span><div><h3>Чат у Mafia Enjoy</h3>${appChatStatus}</div></div><p>Створюється автоматично. Ведучий і всі авторизовані учасники цього столу вже мають доступ.</p><div class="discussion-participant-note"><b>${participants.length}</b> авторизованих профілів${guests ? ` · ${guests} гостей без доступу` : ''}</div><button class="btn primary wide" type="button" data-action="open-app-game-chat" data-id="${esc(game.id)}" ${app.chatBusy ? 'disabled' : ''}>${app.chatBusy ? 'Готуємо чат…' : chat ? 'Відкрити чат' : 'Спробувати ще раз'}</button></article>
+      <article class="discussion-choice app-chat-choice"><div class="discussion-choice-head"><span class="discussion-choice-icon">${discussionIcon()}</span><div><h3>Чат у Mafia Enjoy</h3>${appChatStatus}</div></div><p>Створений разом із грою. Після фіналу всі авторизовані учасники столу вже мають доступ; приєднані глядачі залишаються в чаті.</p><div class="discussion-participant-note"><b>${participants.length}</b> авторизованих профілів${guests ? ` · ${guests} гостей без доступу` : ''}</div><button class="btn primary wide" type="button" data-action="open-app-game-chat" data-id="${esc(game.id)}" ${app.chatBusy ? 'disabled' : ''}>${app.chatBusy ? 'Готуємо чат…' : chat ? 'Відкрити чат' : 'Спробувати ще раз'}</button></article>
       <article class="discussion-choice telegram-choice"><div class="discussion-choice-head"><span class="discussion-choice-icon">${telegramIcon()}</span><div><h3>Група в Telegram</h3><span class="badge">Окремий чат</span></div></div><p>Telegram відкриє створення нової групи. З міркувань приватності застосунок не може сам додати Google-профілі як Telegram-контакти — ведучий обирає їх у Telegram.</p><div class="discussion-telegram-actions"><a class="btn primary wide" href="${esc(telegram.createGroup)}">Створити групу в Telegram</a><a class="btn secondary wide" href="${esc(telegram.share)}" target="_blank" rel="noopener noreferrer">Надіслати посилання через Telegram</a></div></article>
     </div>
     <div class="modal-actions"><button class="btn secondary" type="button" data-action="close-modal">Закрити</button></div>
@@ -2517,7 +2525,7 @@ function gameChatModalHtml() {
     }).join('');
   }
   return `<div class="modal-backdrop game-chat-backdrop" data-action="close-modal"><div class="card modal game-chat-modal" role="dialog" aria-modal="true" aria-labelledby="game-chat-title" tabindex="-1">
-    <div class="section-title section-heading game-chat-head"><div><span class="eyebrow">Обговорення гри</span><h2 id="game-chat-title">${esc(chat.gameTitle)}</h2><p>${formatDate(chat.endedAt, true)}${chat.venue ? ` · ${esc(chat.venue)}` : ''} · ${chat.participantUids.length} учасн.</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div>
+    <div class="section-title section-heading game-chat-head"><div><span class="eyebrow">${chat.status === 'active' ? 'Чат гри · наживо' : 'Обговорення гри'}</span><h2 id="game-chat-title">${esc(chat.gameTitle)}</h2><p>${chat.status === 'active' ? `Розпочато ${formatDate(chat.startedAt, true)}` : formatDate(chat.endedAt, true)}${chat.venue ? ` · ${esc(chat.venue)}` : ''} · ${chat.participantUids.length} учасн.</p></div><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити">×</button></div>
     <div class="game-chat-messages" data-chat-messages role="log" aria-live="polite">${messages}</div>
     <form class="game-chat-composer" data-form="game-chat-message"><label class="sr-only" for="game-chat-message">Повідомлення</label><textarea id="game-chat-message" class="textarea" data-input="game-chat-message" maxlength="1000" rows="2" placeholder="Напишіть повідомлення…" ${app.chatBusy ? 'disabled' : ''}>${esc(app.chatDraft)}</textarea><button class="btn primary" type="submit" ${app.chatBusy || !app.chatDraft.trim() ? 'disabled' : ''}>${app.chatBusy ? 'Надсилаємо…' : 'Надіслати'}</button></form>
   </div></div>`;
@@ -2714,10 +2722,24 @@ function queueActiveGamePublish(game) {
       const [gameId, pending] = pendingActiveGames.entries().next().value;
       pendingActiveGames.delete(gameId);
       try {
+        if (activeGameChatMembershipSyncs.has(gameId)) {
+          await ensureActiveGameChat(pending);
+          activeGameChatMembershipSyncs.delete(gameId);
+          ensuredActiveGameChats.add(gameId);
+        }
         await Promise.all([
           saveActiveCommunityGame(app.authUser, app.hostProfile, pending),
           saveActiveGameBackup(app.authUser, pending)
         ]);
+        if (!ensuredActiveGameChats.has(gameId)) {
+          try {
+            await ensureActiveGameChat(pending);
+            ensuredActiveGameChats.add(gameId);
+          } catch (error) {
+            app.gameChatsState = { status: 'error', error: error?.message || 'Не вдалося автоматично створити чат гри' };
+            console.error(error);
+          }
+        }
       } catch (error) {
         pendingActiveGames.set(gameId, pending);
         app.cloudArchive = { status: 'error', error: cloudArchiveError(error), fromCache: false };
@@ -3765,7 +3787,17 @@ async function publishFinishedGame(game) {
 
 function upsertGameChat(chat) {
   app.gameChats = [chat, ...app.gameChats.filter(item => item.id !== chat.id)]
-    .sort((left, right) => String(right.endedAt).localeCompare(String(left.endedAt)));
+    .sort((left, right) => String(right.endedAt || right.startedAt).localeCompare(String(left.endedAt || left.startedAt)));
+}
+
+async function ensureActiveGameChat(game) {
+  if (!app.authUser || game?.status !== 'active') return null;
+  const chat = LOCAL_AUTH_TEST
+    ? { ...createGameChatDocument(app.authUser, app.hostProfile, game), createdAt: Date.now() }
+    : await ensureGameChat(app.authUser, app.hostProfile, game);
+  upsertGameChat(chat);
+  app.gameChatsState = { status: 'online', error: '' };
+  return chat;
 }
 
 async function ensureFinishedGameChat(game) {
@@ -3774,6 +3806,8 @@ async function ensureFinishedGameChat(game) {
     ? { ...createGameChatDocument(app.authUser, app.hostProfile, game), createdAt: Date.now() }
     : await ensureGameChat(app.authUser, app.hostProfile, game);
   upsertGameChat(chat);
+  ensuredActiveGameChats.delete(game.id);
+  activeGameChatMembershipSyncs.delete(game.id);
   app.gameChatsState = { status: 'online', error: '' };
   return chat;
 }
@@ -3837,15 +3871,29 @@ async function openGameChat(chat) {
 
 async function openAppGameChat(gameId) {
   let chat = gameChatForGame(gameId);
-  if (!chat) {
-    const game = gameById(gameId) || (app.game?.id === gameId ? app.game : null);
-    if (!game || !canManageGame(game)) return toast('Чат ще створюється. Спробуйте трохи пізніше');
+  const game = gameById(gameId) || (app.game?.id === gameId ? app.game : null);
+  if (!game) return toast('Гру не знайдено');
+  if (game.status === 'active' && !canJoinActiveGameChat(app.authUser, game)) {
+    return toast('Активні гравці отримають доступ до чату після вибуття або завершення гри');
+  }
+  if (!chat || !chat.participantUids.includes(app.authUser?.uid)) {
     app.chatBusy = true;
     render();
     try {
-      chat = await ensureFinishedGameChat(game);
+      if (canManageGame(game)) {
+        chat = game.status === 'active' ? await ensureActiveGameChat(game) : await ensureFinishedGameChat(game);
+      } else if (LOCAL_AUTH_TEST) {
+        chat = { ...createGameChatDocument(app.authUser, app.hostProfile, game), participantUids: [app.authUser.uid], createdAt: Date.now() };
+        upsertGameChat(chat);
+      } else {
+        chat = await joinGameChat(app.authUser, game.id);
+        upsertGameChat(chat);
+      }
+    } catch (error) {
+      toast(error?.message || 'Не вдалося приєднатися до чату гри');
     } finally {
       app.chatBusy = false;
+      render();
     }
   }
   if (chat) await openGameChat(chat);
@@ -4125,6 +4173,7 @@ async function flushPendingActiveGameDeletes() {
   const remaining = [];
   for (const gameId of app.pendingActiveGameDeletes) {
     try {
+      try { await deleteGameChat(app.authUser, gameId); } catch { /* Older games might not have a chat. */ }
       await deleteActiveCommunityGame(app.authUser, gameId);
       app.cloudGames = app.cloudGames.filter(game => !(game.id === gameId && game.status === 'active'));
     } catch (error) {
@@ -4141,6 +4190,7 @@ async function cleanUpCanceledActiveGame(user, gameId) {
   try {
     await flushActiveGamePublish(gameId);
     if (!navigator.onLine) return;
+    try { await deleteGameChat(user, gameId); } catch { /* The live game still has to be canceled. */ }
     await deleteActiveCommunityGame(user, gameId);
     await deleteActiveGameBackup(user, gameId);
     await forgetActiveGameDelete(gameId);
@@ -4154,6 +4204,8 @@ async function cancelActiveGame(game) {
   if (!canManageGame(game)) throw new Error('Скасувати гру може лише її ведучий');
   if (app.game?.id === game.id) stopTimer();
   pendingActiveGames.delete(game.id);
+  ensuredActiveGameChats.delete(game.id);
+  activeGameChatMembershipSyncs.delete(game.id);
   const cleanupUser = app.authUser;
   if (!LOCAL_AUTH_TEST) await rememberActiveGameDelete(game.id);
 
@@ -4165,6 +4217,8 @@ async function cancelActiveGame(game) {
   if (app.localGames.some(item => item.id === game.id)) await deleteOne('games', game.id);
   app.localGames = app.localGames.filter(item => item.id !== game.id);
   app.cloudGames = app.cloudGames.filter(item => item.id !== game.id);
+  app.gameChats = app.gameChats.filter(chat => chat.gameId !== game.id);
+  if (app.modal?.type === 'game-chat' && app.modal.chatId === game.id) app.modal = null;
   if (app.game?.id === game.id) app.game = null;
   app.undo = [];
   mergeGameSources();
@@ -5145,7 +5199,7 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'nominate') await nominate(number);
   else if (action === 'remove-nomination') await removeNomination(number);
   else if (action === 'manual-eliminate') { pushUndo(); app.modal = null; await eliminate(number, 'рішення ведучого', false); }
-  else if (action === 'restore-seat') { const seat = seatByNo(app.modal.seat); pushUndo(); seat.status = 'alive'; seat.eliminatedReason = ''; addLog(`№${seat.number} повернуто за стіл ведучим.`); app.modal = null; await saveGame(); render(); }
+  else if (action === 'restore-seat') { const seat = seatByNo(app.modal.seat); pushUndo(); seat.status = 'alive'; seat.eliminatedReason = ''; addLog(`№${seat.number} повернуто за стіл ведучим.`); app.modal = null; ensuredActiveGameChats.delete(app.game.id); activeGameChatMembershipSyncs.add(app.game.id); await saveGame(); render(); }
   else if (action === 'start-vote') await startVote();
   else if (action === 'vote-plus' || action === 'vote-minus') { adjustVote(number, action === 'vote-plus' ? 1 : -1); await saveGame(); render(); }
   else if (action === 'fill-remainder') { fillRemainder(); await saveGame(); render(); }
@@ -5201,6 +5255,8 @@ async function handleAction(action, element, sourceEvent) {
     stopTimer();
     app.game = normalizeGameState(app.undo.pop(), DEFAULT_SETTINGS, { closeReveal: true });
     if (finishedGameId) await removeFinishedResultForReopen(finishedGameId);
+    ensuredActiveGameChats.delete(app.game.id);
+    if (!finishedGameId) activeGameChatMembershipSyncs.add(app.game.id);
     await saveGame(); render(); toast(finishedGameId ? 'Результат скасовано · гру відновлено' : 'Останню дію скасовано');
   } else if (action === 'copy-protocol') await copyText(protocolText(element.dataset.id ? gameById(element.dataset.id) : app.game), 'Протокол скопійовано');
   else if (action === 'view-protocol') { app.modal = { type: 'protocol', gameId: element.dataset.id }; render(); }
@@ -5453,6 +5509,8 @@ function clearAuthenticatedState() {
   cloudArchiveMigrationStarted = false;
   pendingActiveGames.clear();
   activeGameRecoveryAttempts.clear();
+  ensuredActiveGameChats.clear();
+  activeGameChatMembershipSyncs.clear();
   handledHostTransfers.clear();
   if (activeGamePublishRetryHandle) clearTimeout(activeGamePublishRetryHandle);
   activeGamePublishRetryHandle = null;

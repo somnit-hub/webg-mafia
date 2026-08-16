@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  authorizedGameParticipantUids, createGameChatDocument,
+  activeAuthorizedPlayerUids, authorizedGameParticipantUids, canJoinActiveGameChat, createGameChatDocument,
   gameChatFromSnapshot, gameChatMessageFromSnapshot, telegramDiscussionLinks
 } from '../src/game-chat.js';
 
@@ -21,12 +21,22 @@ function finishedGame() {
   };
 }
 
+function activeGame() {
+  const game = finishedGame();
+  game.status = 'active';
+  game.startedAt = '2026-08-16T20:00:00.000Z';
+  game.endedAt = null;
+  game.seats[1].status = 'dead';
+  game.cloudOwnerUid = 'host_uid';
+  return game;
+}
+
 test('game chat includes the host and every unique authorized seated player', () => {
   const participantUids = authorizedGameParticipantUids({ uid: 'host_uid' }, finishedGame());
   assert.deepEqual(participantUids, ['host_uid', 'player_one', 'player_two']);
 });
 
-test('game chat document is tied to one finished game and excludes guests', () => {
+test('finished game chat includes every authorized participant and excludes guests', () => {
   const document = createGameChatDocument(
     { uid: 'host_uid', googleName: 'Google Host' },
     { nickname: 'Ведучий' },
@@ -36,7 +46,26 @@ test('game chat document is tied to one finished game and excludes guests', () =
   assert.equal(document.ownerUid, 'host_uid');
   assert.equal(document.hostName, 'Ведучий');
   assert.deepEqual(document.participantUids, ['host_uid', 'player_one', 'player_two']);
-  assert.equal(document.schemaVersion, 1);
+  assert.equal(document.status, 'finished');
+  assert.equal(document.schemaVersion, 2);
+});
+
+test('active game chat starts with the host while tracking who may join', () => {
+  const game = activeGame();
+  const document = createGameChatDocument(
+    { uid: 'host_uid', googleName: 'Google Host' },
+    { nickname: 'Ведучий' },
+    game
+  );
+  assert.deepEqual(document.participantUids, ['host_uid']);
+  assert.equal(document.status, 'active');
+  assert.equal(document.startedAt, '2026-08-16T20:00:00.000Z');
+  assert.equal(document.endedAt, '');
+  assert.deepEqual(activeAuthorizedPlayerUids(game), ['player_one']);
+  assert.equal(canJoinActiveGameChat({ uid: 'host_uid' }, game), true);
+  assert.equal(canJoinActiveGameChat({ uid: 'player_one' }, game), false);
+  assert.equal(canJoinActiveGameChat({ uid: 'player_two' }, game), true);
+  assert.equal(canJoinActiveGameChat({ uid: 'viewer_uid' }, game), true);
 });
 
 test('Telegram discussion exposes native group creation and a prepared share link', () => {
@@ -56,7 +85,9 @@ test('chat snapshots normalize timestamps and pending messages', () => {
     data: () => ({
       gameId: 'game_chat_test', ownerUid: 'host_uid', hostName: 'Ведучий',
       participantUids: ['host_uid', 'player_one'], gameTitle: 'Гра', venue: 'Enjoy',
-      endedAt: '2026-08-16T20:45:00.000Z', createdAt: { seconds: 100, nanoseconds: 500000000 }
+      status: 'finished', startedAt: '2026-08-16T20:00:00.000Z',
+      endedAt: '2026-08-16T20:45:00.000Z', schemaVersion: 2,
+      createdAt: { seconds: 100, nanoseconds: 500000000 }
     })
   });
   const message = gameChatMessageFromSnapshot({
@@ -68,6 +99,7 @@ test('chat snapshots normalize timestamps and pending messages', () => {
     metadata: { hasPendingWrites: true }
   });
   assert.equal(chat.createdAt, 100500);
+  assert.equal(chat.status, 'finished');
   assert.equal(message.createdAt, Date.parse('2026-08-16T20:46:00.000Z'));
   assert.equal(message.pending, true);
 });

@@ -1,7 +1,7 @@
 import { getCommunityFirestore } from './cloud-profiles.js';
 import { ACTIVE_GAME_PHASES } from './game-engine.js';
 import { getFirebaseIdToken } from './auth.js';
-import { authorizedGameParticipantUids } from './game-chat.js';
+import { activeAuthorizedPlayerUids, authorizedGameParticipantUids } from './game-chat.js';
 
 const COMMUNITY_ID = 'enjoy';
 const ACTIVE_PHASES = new Set(ACTIVE_GAME_PHASES);
@@ -123,6 +123,14 @@ function sharedEvent(event) {
   };
 }
 
+function sharedBestMove(game) {
+  const seat = integer(game?.bestMove?.seat, 0, 10);
+  const selected = [...new Set((game?.bestMove?.selected || [])
+    .map(Number)
+    .filter(number => Number.isInteger(number) && number >= 1 && number <= 10))].slice(0, 3);
+  return { seat, selected };
+}
+
 function hostName(user, profile, game) {
   return clean(profile?.nickname, 60)
     || clean(profile?.displayName, 60)
@@ -136,6 +144,8 @@ export function createActiveGameDocument(user, profile, game) {
     throw new Error('До live-переліку можна додати лише активну гру');
   }
   const timer = game.timer || {};
+  const participantUids = authorizedGameParticipantUids(user, game);
+  const activePlayerUids = activeAuthorizedPlayerUids(game).filter(uid => uid !== user.uid);
   return {
     id: clean(game.id, 160),
     communityId: COMMUNITY_ID,
@@ -146,6 +156,8 @@ export function createActiveGameDocument(user, profile, game) {
     startedAt: clean(game.startedAt, 40),
     gameUpdatedAt: clean(game.updatedAt || game.startedAt, 40),
     status: 'active',
+    participantUids,
+    activePlayerUids,
     phase: game.phase,
     subphase: clean(game.subphase, 40),
     day: integer(game.day, 1, 100),
@@ -366,6 +378,7 @@ export function createFinishedGameDocument(user, profile, game) {
     day: integer(game.day, 1, 100),
     participantUids: authorizedGameParticipantUids(user, game),
     seats: (game.seats || []).slice(0, 10).map(sharedSeat),
+    bestMove: sharedBestMove(game),
     history: (game.history || []).slice(0, 500).map(sharedEvent),
     schemaVersion: 1
   };
@@ -389,6 +402,7 @@ function finishedGameFromSnapshot(snapshot) {
       ? [...new Set(data.participantUids.map(value => clean(value, 128)).filter(Boolean))].slice(0, 11)
       : [],
     seats: Array.isArray(data.seats) ? data.seats.slice(0, 10).map(sharedSeat) : [],
+    bestMove: sharedBestMove(data),
     history: Array.isArray(data.history) ? data.history.slice(0, 500).map(sharedEvent) : [],
     cloudOwnerUid: clean(data.ownerUid, 160),
     cloudHostName: clean(data.hostName, 60),
@@ -408,6 +422,12 @@ function activeGameFromSnapshot(snapshot) {
     endedAt: null,
     updatedAt: clean(data.gameUpdatedAt || data.startedAt, 40),
     status: 'active',
+    participantUids: Array.isArray(data.participantUids)
+      ? [...new Set(data.participantUids.map(value => clean(value, 128)).filter(Boolean))].slice(0, 11)
+      : [],
+    activePlayerUids: Array.isArray(data.activePlayerUids)
+      ? [...new Set(data.activePlayerUids.map(value => clean(value, 128)).filter(Boolean))].slice(0, 10)
+      : [],
     phase: ACTIVE_PHASES.has(data.phase) ? data.phase : 'day',
     subphase: clean(data.subphase, 40),
     winner: null,

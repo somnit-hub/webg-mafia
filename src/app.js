@@ -957,6 +957,10 @@ function randomActionIcon(kind) {
   return '<svg class="button-random-icon button-shuffle-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2.5c4.5 0 6.5 12 11 12H21"/><path d="m18 15 3 3-3 3"/><path d="M4 18h2.5c1.8 0 3.1-2 4.3-4.4M13.2 9.8C14.4 7.7 15.7 6 17.5 6H21"/><path d="m18 3 3 3-3 3"/></svg>';
 }
 
+function clearSeatingIcon() {
+  return '<svg class="button-clear-seating-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5"/></svg>';
+}
+
 function externalAppIcon(name) {
   if (name === 'instagram') return `<svg class="external-app-icon instagram-app-icon" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="instagram-app-gradient" x1="3" y1="21" x2="21" y2="3" gradientUnits="userSpaceOnUse"><stop stop-color="#ffd600"/><stop offset=".46" stop-color="#ff0169"/><stop offset="1" stop-color="#7638fa"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#instagram-app-gradient)"/><rect x="5.7" y="5.7" width="12.6" height="12.6" rx="4" fill="none" stroke="white" stroke-width="1.8"/><circle cx="12" cy="12" r="3.1" fill="none" stroke="white" stroke-width="1.8"/><circle cx="17.1" cy="6.9" r="1.1" fill="white"/></svg>`;
   return `<svg class="external-app-icon maps-app-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285f4" d="M12 1.5a7.4 7.4 0 0 1 7.4 7.4c0 5.4-7.4 13.6-7.4 13.6S4.6 14.3 4.6 8.9A7.4 7.4 0 0 1 12 1.5Z"/><path fill="#34a853" d="M4.6 8.9c0 3.2 2.7 7.4 4.8 10.2l2.6-4.4-4.1-7.1-3.3 1.3Z"/><path fill="#fbbc04" d="m9.4 19.1 2.6 3.4 2.8-3.7-2.8-4.1-2.6 4.4Z"/><path fill="#ea4335" d="M12 1.5a7.4 7.4 0 0 1 6.4 3.7L12 8.9 8 3.1A7.3 7.3 0 0 1 12 1.5Z"/><circle cx="12" cy="8.9" r="2.8" fill="white"/></svg>`;
@@ -971,6 +975,7 @@ function headerControlIcon(name) {
     bluetooth: '<path d="M7 7l10 10-5 4V3l5 4L7 17"/><path d="m4 8 8 8m-8 0 8-8"/>',
     play: '<path d="m8 5 11 7-11 7V5Z"/>',
     pause: '<path d="M8 5v14m8-14v14"/>',
+    share: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/>',
     order: '<path d="M4 16h16M6 16a6 6 0 0 1 12 0M3 20h18M12 6v2"/><circle cx="12" cy="4" r="1"/>',
     cancelGame: '<circle cx="12" cy="12" r="8"/><path d="m9 9 6 6m0-6-6 6"/>'
   };
@@ -1012,18 +1017,20 @@ function headerHtml() {
   const hasTrack = Boolean(app.media.trackName);
   const bluetoothLabel = 'Bluetooth і музика';
   const canInstall = ['native', 'ios-guide'].includes(currentPwaInstallMode());
+  const showHeaderShare = !['game', 'reveal'].includes(app.route);
   const cancelableGame = app.game?.status === 'active' && canManageGame(app.game)
     ? app.game
     : activeGames().find(game => canManageGame(game));
   const cancelGameButton = cancelableGame
     ? `<button class="icon-btn header-media-btn cancel-game-btn" type="button" data-action="cancel-active-game" data-id="${esc(cancelableGame.id)}" aria-label="Скасувати активну гру" title="Скасувати активну гру" aria-haspopup="dialog">${headerControlIcon('cancelGame')}</button>`
     : '';
-  return `<header class="shell-header ${canInstall && !['game', 'reveal'].includes(app.route) ? 'has-install' : ''} ${cancelableGame ? 'has-cancel-game' : ''}">
+  return `<header class="shell-header ${canInstall && showHeaderShare ? 'has-install' : ''} ${showHeaderShare ? 'has-share' : ''} ${cancelableGame ? 'has-cancel-game' : ''}">
     <a class="brand" href="#home" aria-label="Mafia — головна">
       <img class="brand-mark" src="./assets/logo-mafia.webp" alt="" width="44" height="44" aria-hidden="true">
     </a>
     <div class="header-actions">
-      ${canInstall && !['game', 'reveal'].includes(app.route) ? pwaInstallButtonHtml() : ''}
+      ${canInstall && showHeaderShare ? pwaInstallButtonHtml() : ''}
+      ${showHeaderShare ? `<button class="icon-btn share-btn" type="button" data-action="share-app" aria-label="Поділитися застосунком" title="Поділитися застосунком">${headerControlIcon('share')}</button>` : ''}
       <button class="icon-btn order-btn" type="button" data-action="open-order-panel" aria-label="Замовити напій" title="Замовити напій" aria-haspopup="dialog">${headerControlIcon('order')}</button>
       <div class="header-media-controls" role="group" aria-label="Bluetooth і музика">
         <button class="icon-btn header-media-btn play-btn ${app.media.playing ? 'active' : ''}" data-action="media-play" aria-label="Відтворити музику" title="Відтворити музику" ${!hasTrack || app.media.playing ? 'disabled' : ''}>${headerControlIcon('play')}</button>
@@ -1432,7 +1439,7 @@ function setupView() {
       ${collapsiblePanel('setupTimers', 'Правила й таймери', 'Ці значення можна змінити й під час гри.', `
         <div class="setup-options">
           ${numberField('Промова, сек', 'speech', app.draft.settings.speech, 'Основний час промови гравця.')}
-          ${numberField('Автокатастрофа, сек', 'tieSpeech', app.draft.settings.tieSpeech, 'Додаткова промова кандидатів після нічиєї.')}
+          ${numberField('Попіл, сек', 'tieSpeech', app.draft.settings.tieSpeech, 'Додаткова промова кандидатів після нічиєї.')}
           ${numberField('Останнє слово, сек', 'lastWord', app.draft.settings.lastWord, 'Час гравця, який залишає стіл.')}
           ${numberField('Нічна дія, сек', 'nightCheck', app.draft.settings.nightCheck, 'Час на постріл або одну перевірку Дона чи Шерифа.')}
           ${numberField('Знайомство мафії, сек', 'mafiaMeet', app.draft.settings.mafiaMeet, 'У нульову ніч Дон представляється команді та задає порядок відстрілу.')}
@@ -1445,7 +1452,7 @@ function setupView() {
       `)}
     </div>
     ${collapsiblePanel('setupMusic', 'Музика гри', 'Автоматизація фонової музики під час роздачі ролей, нульової ночі, нічних дій та оголошення результату.', setupMusicHtml(), 'setup-music-panel', `<span class="badge ${app.draft.settings.music.enabled ? 'green' : ''}">${app.draft.settings.music.enabled ? 'Увімкнено' : 'Вимкнено'}</span>`)}
-    ${collapsiblePanel('setupSeating', 'Розсадка', seatingHelp, `<div class="actions panel-actions"><div class="setup-deal-action"><div class="setup-deal-caption"><span>Спосіб роздачі ролей</span>${helpIcon('За обраною цифрою: гравці по черзі жестом показують число в межах карт, що залишилися, а суддя відкриває відповідну карту. Якщо число завелике — гравець обирає повторно; остання карта видається автоматично.', 'Пояснення: Спосіб роздачі ролей')}</div><select class="select" data-draft-setting="dealMode" aria-label="Спосіб роздачі ролей"><option value="number" ${app.draft.settings.dealMode !== 'automatic' ? 'selected' : ''}>За обраною цифрою</option><option value="automatic" ${app.draft.settings.dealMode === 'automatic' ? 'selected' : ''}>Автоматично</option></select></div><button class="btn small secondary setup-random-action" data-action="shuffle-seats">${randomActionIcon('shuffle')}<span>Перемішати місця</span></button></div><div class="seat-setup">${app.draft.seats.map(setupSeat).join('')}</div><div class="actions panel-footer-actions"><button class="btn secondary" data-action="new-player">+ Новий профіль</button><button class="btn danger" data-action="start-game">Роздати ролі</button></div>`, 'setup-seating-panel')}
+    ${collapsiblePanel('setupSeating', 'Розсадка', seatingHelp, `<div class="actions panel-actions"><div class="setup-deal-action"><div class="setup-deal-caption"><span>Спосіб роздачі ролей</span>${helpIcon('За обраною цифрою: гравці по черзі жестом показують число в межах карт, що залишилися, а суддя відкриває відповідну карту. Якщо число завелике — гравець обирає повторно; остання карта видається автоматично.', 'Пояснення: Спосіб роздачі ролей')}</div><select class="select" data-draft-setting="dealMode" aria-label="Спосіб роздачі ролей"><option value="number" ${app.draft.settings.dealMode !== 'automatic' ? 'selected' : ''}>За обраною цифрою</option><option value="automatic" ${app.draft.settings.dealMode === 'automatic' ? 'selected' : ''}>Автоматично</option></select></div><div class="setup-seating-actions"><button class="btn small secondary setup-random-action" data-action="shuffle-seats">${randomActionIcon('shuffle')}<span>Перемішати місця</span></button><button class="icon-btn setup-clear-seating-action" type="button" data-action="clear-setup-seats" aria-label="Очистити розсадку" title="Очистити розсадку">${clearSeatingIcon()}</button></div></div><div class="seat-setup">${app.draft.seats.map(setupSeat).join('')}</div><div class="actions panel-footer-actions"><button class="btn secondary" data-action="new-player">+ Новий профіль</button><button class="btn danger" data-action="start-game">Роздати ролі</button></div>`, 'setup-seating-panel')}
     ${collapsiblePanel('setupRules', 'Правила спортивної «Мафії»', 'Регламент, жести ведучого та турнірні процедури. Перед турніром звіряйте редакцію з регламентом організатора.', `<div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div>`, 'setup-rules-panel')}
     <div class="setup-fab-group" role="group" aria-label="Дії нової гри"><button class="mobile-fab primary-fab" type="button" data-action="new-player" aria-label="Додати гравця" title="Додати гравця">${addPlayerIcon()}</button><button class="mobile-fab danger-fab" type="button" data-action="start-game" aria-label="Роздати ролі" title="Роздати ролі">${dealRolesIcon()}</button></div>
   </main>`;
@@ -1652,7 +1659,7 @@ function phaseLabel(game = app.game) {
   if (!game) return 'Немає гри';
   const labels = {
     reveal: 'Роздача ролей', zeroNight: 'Нульова ніч', day: `День ${game.day}`,
-    vote: `Голосування · день ${game.day}`, tieSpeech: 'Автокатастрофа · промови', tieVote: 'Автокатастрофа · голосування',
+    vote: `Голосування · день ${game.day}`, tieSpeech: 'Попіл · промови', tieVote: 'Попіл · голосування',
     allTie: 'Вихід усіх кандидатів', lastWord: 'Останнє слово', bestMove: 'Кращий хід', night: `Ніч ${game.day}`, finished: 'Гру завершено'
   };
   return labels[game.phase] || game.phase;
@@ -1810,7 +1817,7 @@ function voteControlHtml() {
 function tieSpeechHtml() {
   const number = app.game.vote.tied[app.game.speakerIndex];
   const seat = seatByNo(number);
-  return `<section class="card control-card"><div class="speaker-row"><div><div class="eyebrow">Автокатастрофа · додаткова промова</div><h2>№${number} · ${esc(seat?.name)}</h2></div><span class="badge gold">${app.game.speakerIndex + 1}/${app.game.vote.tied.length}</span></div>${timerControls('next-tie-speaker', app.game.speakerIndex >= app.game.vote.tied.length - 1 ? 'Голосувати' : 'Наступний →')}</section>`;
+  return `<section class="card control-card"><div class="speaker-row"><div><div class="eyebrow">Попіл · додаткова промова</div><h2>№${number} · ${esc(seat?.name)}</h2></div><span class="badge gold">${app.game.speakerIndex + 1}/${app.game.vote.tied.length}</span></div>${timerControls('next-tie-speaker', app.game.speakerIndex >= app.game.vote.tied.length - 1 ? 'Голосувати' : 'Наступний →')}</section>`;
 }
 
 function allTieHtml() {
@@ -2068,7 +2075,7 @@ function confirmModalHtml() {
 function gameSettingsModalHtml() {
   const settings = app.game.settings;
   const labels = {
-    speech: 'Промова, сек', tieSpeech: 'Автокатастрофа, сек', lastWord: 'Останнє слово, сек',
+    speech: 'Промова, сек', tieSpeech: 'Попіл, сек', lastWord: 'Останнє слово, сек',
     nightCheck: 'Нічна дія, сек', mafiaMeet: 'Знайомство мафії, сек',
     sheriffMark: 'Позначення Шерифа, сек', freeSeating: 'Вільна посадка, сек', bestMove: 'Кращий хід, сек'
   };
@@ -2845,7 +2852,7 @@ async function finishVote() {
     app.game.phase = 'tieSpeech';
     app.game.speakerIndex = 0;
     setTimer(app.game.settings.tieSpeech, 'tie');
-    addLog(`Автокатастрофа: ${resolution.tied.map(number => `№${number}`).join(', ')}.`);
+    addLog(`Попіл: ${resolution.tied.map(number => `№${number}`).join(', ')}.`);
   }
   await saveGame(); render();
 }
@@ -2870,7 +2877,7 @@ async function finishAllTie() {
   if (app.game.vote.yes > app.game.vote.no) {
     const numbers = [...app.game.vote.tied];
     addLog(`Більшість за вихід усіх: ${numbers.map(number => `№${number}`).join(', ')}.`);
-    numbers.forEach(number => eliminateSeatOnly(number, 'автокатастрофа'));
+    numbers.forEach(number => eliminateSeatOnly(number, 'попіл'));
     app.game.pendingWinner = victoryForSeats(app.game.seats);
     app.game.phase = 'lastWord';
     app.game.lastWordSeat = numbers.shift();
@@ -4015,6 +4022,30 @@ async function copyText(text, success = 'Скопійовано') {
   toast(success);
 }
 
+function appShareUrl() {
+  const url = new URL('./', document.baseURI);
+  url.search = '';
+  url.hash = '';
+  return url.href;
+}
+
+async function shareApp() {
+  const shareData = {
+    title: document.title || 'Mafia Enjoy',
+    text: 'Mafia Enjoy — застосунок для ведення гри в спортивну «Мафію».',
+    url: appShareUrl()
+  };
+  if (typeof navigator.share === 'function') {
+    try {
+      await navigator.share(shareData);
+      return;
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+    }
+  }
+  await copyText(shareData.url, 'Посилання на Mafia Enjoy скопійовано');
+}
+
 const GUARDED_GAME_ACTIONS = new Set([
   'start-game', 'confirm-number-role', 'reveal-next', 'zero-night-sheriff', 'zero-night-free-seating', 'zero-to-day',
   'timer-toggle', 'next-speaker', 'back-to-speeches', 'start-vote', 'finish-vote',
@@ -4226,6 +4257,8 @@ async function handleAction(action, element, sourceEvent) {
     app.playerLinkBusy = false;
     app.modal = null;
     render();
+  } else if (action === 'share-app') {
+    await shareApp();
   } else if (action === 'install') {
     const mode = currentPwaInstallMode();
     if (mode === 'ios-guide') {
@@ -4545,6 +4578,16 @@ async function handleAction(action, element, sourceEvent) {
   } else if (action === 'shuffle-seats') {
     const shuffledSeats = shuffled(app.draft.seats.map(seat => ({ profileId: seat.profileId, name: seat.name, autoGuestName: seat.autoGuestName })));
     app.draft.seats.forEach((seat, index) => Object.assign(seat, shuffledSeats[index])); render();
+  } else if (action === 'clear-setup-seats') {
+    if (!app.draft) return;
+    app.draft.seats = app.draft.seats.map(seat => ({
+      number: seat.number,
+      profileId: '',
+      name: '',
+      autoGuestName: false
+    }));
+    render();
+    toast('Розсадку очищено');
   } else if (action === 'start-game') {
     const existingActiveGame = activeGames().find(game => !game.publicOnly && canManageGame(game));
     if (existingActiveGame) return toast(`Спочатку завершіть активну гру «${existingActiveGame.title}»`);
@@ -5164,7 +5207,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=166', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=168', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

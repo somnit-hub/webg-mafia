@@ -373,6 +373,8 @@ img { display: block; max-width: 100%; }
 .back-chevron-icon { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
 .install-btn { flex: 0 0 40px; }
 .install-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: square; stroke-linejoin: miter; }
+.share-btn { flex: 0 0 40px; }
+.share-btn svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .order-btn {
   flex: 0 0 40px;
   border-color: var(--primary-line);
@@ -501,6 +503,16 @@ img { display: block; max-width: 100%; }
 .button-random-icon { width: 20px; height: 20px; flex: 0 0 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 .button-dice-icon circle { fill: currentColor; stroke: none; }
 .setup-random-action span { min-width: 0; }
+.setup-seating-actions { display: flex; align-items: stretch; gap: 8px; }
+.setup-clear-seating-action {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  align-self: stretch;
+  color: var(--danger);
+}
+.setup-clear-seating-action:hover, .setup-clear-seating-action:focus-visible { border-color: var(--danger); }
+.button-clear-seating-icon { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .setup-deal-action {
   min-width: 0;
   min-height: 48px;
@@ -1846,8 +1858,11 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .shell-header { padding-right: 10px; padding-left: 10px; }
   .header-actions { min-width: 0; gap: 5px; }
   .install-btn { position: absolute; left: 64px; }
+  .share-btn { position: absolute; left: 64px; }
   .order-btn { position: absolute; left: 64px; }
-  .shell-header.has-install .order-btn { left: 109px; }
+  .shell-header.has-share .order-btn { left: 109px; }
+  .shell-header.has-install.has-share .share-btn { left: 109px; }
+  .shell-header.has-install.has-share .order-btn { left: 154px; }
   .header-media-controls { gap: 3px; }
   .profile-btn.btn.small { width: 40px; min-width: 40px; height: 40px; min-height: 40px; padding: 0; overflow: hidden; border: 0; }
   .profile-btn > span:last-child { display: none; }
@@ -1983,9 +1998,14 @@ h1, .page-head h1, .hero h1, .winner h1, .role-name, .modal h2 { font-family: va
   .night-action-panel .target-grid { margin: 5px 0 7px; }
 }
 
+@media (max-width: 479px) {
+  .shell-header.has-share .header-media-controls { display: none; }
+}
+
 @media (max-width: 379px) {
   .shell-header.has-install .install-btn { display: none; }
-  .shell-header.has-install .order-btn { left: 64px; }
+  .shell-header.has-install.has-share .share-btn { left: 64px; }
+  .shell-header.has-install.has-share .order-btn { left: 109px; }
 }
 
 @media (max-width: 359px) {

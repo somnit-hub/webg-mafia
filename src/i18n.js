@@ -306,7 +306,7 @@ Object.assign(COPY.it, {
   'Як дістатися': 'Indicazioni', 'Місто': 'Città', 'Каталог недоступний': 'Directory non disponibileble',
   'Синхронізовано': 'Sincronizzato', 'Офлайн-кеш': 'Cache offline', 'Синхронізація…': 'Sincronizzazione…', 'Помилка': 'Errore',
   'НАСТУПНА ГРА': 'PROSSIMA partita', 'без опису': 'nessuna descrizione', 'Очікує Google': 'In attesa di Google',
-  'ПРОМОВА, СЕК': 'DISCORSO, SEC', 'АВТОКАТАСТРОФА, СЕК': 'DISCORSO DI TIE, SEZ', 'ОСТАННЄ СЛОВО, СЕК': 'ULTIMA PAROLA, SEC',
+  'ПРОМОВА, СЕК': 'DISCORSO, SEC', 'ПОПІЛ, СЕК': 'DISCORSO DI TIE, SEZ', 'ОСТАННЄ СЛОВО, СЕК': 'ULTIMA PAROLA, SEC',
   'НІЧНА ДІЯ, СЕК': 'AZIONE NOTTURNA, SEC', 'СИСТЕМА ФОЛІВ': 'SISTEMA FALLOSO', 'Турнірна': 'Torneo', 'Клубна': 'Club',
   'Інші випадкові 10': 'Un altro 10 a caso', 'Тимчасовий гравець': 'Giocatore temporaneo',
   'Шериф': 'Sceriffo', 'Дон': 'Assistente', 'Мафія': 'Mafia', 'Мирний житель': 'Cittadino',
@@ -314,7 +314,7 @@ Object.assign(COPY.it, {
   'Передайте телефон особисто': 'Consegnami il telefono di persona', 'Сховати й передати далі': 'Nascondi e trasmetti', 'Показати мою роль': 'Mostra il mio ruolo',
   'Створити гру': 'Crea corrispondenza', 'Немає гри': 'Nessuna corrispondenza',
   'Роздача ролей': 'Rivelazione del ruolo', 'Нульова ніч': 'Notte zero', 'Голосування': 'Voto',
-  'Автокатастрофа · промови': 'Cravatta · discorsi', 'Автокатастрофа · голосування': 'Pareggio · voto',
+  'Попіл · промови': 'Cravatta · discorsi', 'Попіл · голосування': 'Pareggio · voto',
   'Вихід усіх кандидатів': 'Elimina tutti i candidati', 'Останнє слово': 'L\'ultima parola', 'Гру завершено': 'partita finita',
   'Місто засинає': 'La città si addormenta', 'Мафія стріляє': 'Mafia spara', 'Дон шукає Шерифа': 'Don cerca lo sceriffo',
   'Шериф перевіряє місто': 'Lo sceriffo controlla la città', 'Місто прокидається': 'La città si sveglia', 'Чорна команда знайомиться': 'La squadra nera si incontra',
@@ -337,7 +337,7 @@ Object.assign(COPY.en, {
   'Як дістатися': 'Directions', 'Місто': 'City', 'Каталог недоступний': 'Directory unavailable',
   'Синхронізовано': 'Synchronized', 'Офлайн-кеш': 'Offline cache', 'Синхронізація…': 'Synchronizing…', 'Помилка': 'Error',
   'НАСТУПНА ГРА': 'NEXT GAME', 'без опису': 'no description', 'Очікує Google': 'Awaiting Google',
-  'ПРОМОВА, СЕК': 'SPEECH, SEC', 'АВТОКАТАСТРОФА, СЕК': 'TIE SPEECH, SEC', 'ОСТАННЄ СЛОВО, СЕК': 'LAST WORD, SEC',
+  'ПРОМОВА, СЕК': 'SPEECH, SEC', 'ПОПІЛ, СЕК': 'TIE SPEECH, SEC', 'ОСТАННЄ СЛОВО, СЕК': 'LAST WORD, SEC',
   'НІЧНА ДІЯ, СЕК': 'NIGHT ACTION, SEC', 'СИСТЕМА ФОЛІВ': 'FOUL SYSTEM', 'Турнірна': 'Tournament', 'Клубна': 'Club',
   'Інші випадкові 10': 'Another random 10', 'Тимчасовий гравець': 'Temporary player',
   'Шериф': 'Sheriff', 'Дон': 'Don', 'Мафія': 'Mafia', 'Мирний житель': 'Citizen',
@@ -345,7 +345,7 @@ Object.assign(COPY.en, {
   'Передайте телефон особисто': 'Hand the phone over in person', 'Сховати й передати далі': 'Hide and pass on', 'Показати мою роль': 'Show my role',
   'Створити гру': 'Create game', 'Немає гри': 'No game',
   'Роздача ролей': 'Role reveal', 'Нульова ніч': 'Zero night', 'Голосування': 'Voting',
-  'Автокатастрофа · промови': 'Tie · speeches', 'Автокатастрофа · голосування': 'Tie · voting',
+  'Попіл · промови': 'Tie · speeches', 'Попіл · голосування': 'Tie · voting',
   'Вихід усіх кандидатів': 'Eliminate all candidates', 'Останнє слово': 'Last word', 'Гру завершено': 'Game finished',
   'Місто засинає': 'The city falls asleep', 'Мафія стріляє': 'Mafia shoots', 'Дон шукає Шерифа': 'Don searches for the Sheriff',
   'Шериф перевіряє місто': 'Sheriff checks the city', 'Місто прокидається': 'The city wakes up', 'Чорна команда знайомиться': 'The black team meets',
@@ -368,7 +368,7 @@ Object.assign(COPY.fr, {
   'Як дістатися': 'Itinéraire', 'Місто': 'Ville', 'Каталог недоступний': 'Annuaire indisponible',
   'Синхронізовано': 'Synchronisé', 'Офлайн-кеш': 'Cache hors ligne', 'Синхронізація…': 'Synchronisation…', 'Помилка': 'Erreur',
   'НАСТУПНА ГРА': 'PROCHAINE PARTIE', 'без опису': 'sans description', 'Очікує Google': 'En attente de Google',
-  'ПРОМОВА, СЕК': 'DISCOURS, S', 'АВТОКАТАСТРОФА, СЕК': 'ÉGALITÉ, S', 'ОСТАННЄ СЛОВО, СЕК': 'DERNIER MOT, S',
+  'ПРОМОВА, СЕК': 'DISCOURS, S', 'ПОПІЛ, СЕК': 'ÉGALITÉ, S', 'ОСТАННЄ СЛОВО, СЕК': 'DERNIER MOT, S',
   'НІЧНА ДІЯ, СЕК': 'ACTION DE NUIT, S', 'СИСТЕМА ФОЛІВ': 'SYSTÈME DE FAUTES', 'Турнірна': 'Tournoi', 'Клубна': 'Club',
   'Інші випадкові 10': '10 autres au hasard', 'Тимчасовий гравець': 'Joueur temporaire',
   'Шериф': 'Shérif', 'Дон': 'Don', 'Мафія': 'Mafia', 'Мирний житель': 'Citoyen',
@@ -376,7 +376,7 @@ Object.assign(COPY.fr, {
   'Передайте телефон особисто': 'Remettez le téléphone en main propre', 'Сховати й передати далі': 'Masquer et transmettre', 'Показати мою роль': 'Afficher mon rôle',
   'Створити гру': 'Créer une partie', 'Немає гри': 'Aucune partie',
   'Роздача ролей': 'Révélation des rôles', 'Нульова ніч': 'Nuit zéro', 'Голосування': 'Vote',
-  'Автокатастрофа · промови': 'Égalité · discours', 'Автокатастрофа · голосування': 'Égalité · vote',
+  'Попіл · промови': 'Égalité · discours', 'Попіл · голосування': 'Égalité · vote',
   'Вихід усіх кандидатів': 'Sortie de tous les candidats', 'Останнє слово': 'Dernier mot', 'Гру завершено': 'Partie terminée',
   'Місто засинає': 'La ville s’endort', 'Мафія стріляє': 'La mafia tire', 'Дон шукає Шерифа': 'Le Don cherche le Shérif',
   'Шериф перевіряє місто': 'Le Shérif inspecte la ville', 'Місто прокидається': 'La ville se réveille', 'Чорна команда знайомиться': 'L’équipe noire fait connaissance',
@@ -638,11 +638,11 @@ Object.assign(COPY.it, {
   'Увімкнути резервну копію': 'Attiva la copia di sicurezza', 'Відкрити публічний екран': 'Apri lo schermo pubblico',
   'Google-акаунт': 'Account Google', 'Скасувати': 'Annulla', 'Закрити': 'Chiudi',
   'Каталог недоступний': 'Directory non disponibile', 'НАСТУПНА ГРА': 'PROSSIMA PARTITA',
-  'АВТОКАТАСТРОФА, СЕК': 'PAREGGIO, SEC', 'СИСТЕМА ФОЛІВ': 'SISTEMA DEI FALLI',
+  'ПОПІЛ, СЕК': 'PAREGGIO, SEC', 'СИСТЕМА ФОЛІВ': 'SISTEMA DEI FALLI',
   'Дон': 'Don', 'Передайте телефон особисто': 'Passa il telefono di persona',
   'Сховати й передати далі': 'Nascondi e passa oltre', 'Створити гру': 'Crea partita', 'Немає гри': 'Nessuna partita',
-  'Роздача ролей': 'Distribuzione dei ruoli', 'Автокатастрофа · промови': 'Pareggio · interventi',
-  'Автокатастрофа · голосування': 'Pareggio · votazione', 'Гру завершено': 'Partita terminata',
+  'Роздача ролей': 'Distribuzione dei ruoli', 'Попіл · промови': 'Pareggio · interventi',
+  'Попіл · голосування': 'Pareggio · votazione', 'Гру завершено': 'Partita terminata',
   'Старт': 'Avvia', 'Коло завершено': 'Turno completato', 'Перейти до ночі': 'Passa alla notte',
   'Поточна промова': 'Intervento attuale', 'Завершити коло': 'Termina il turno',
   'Повторне голосування': 'Nuova votazione', 'Підсумувати': 'Conferma il risultato', 'Голосувати': 'Vota',
@@ -802,6 +802,10 @@ Object.assign(COPY.fr, {
   'Місць не знайдено': 'Aucun lieu trouvé', 'Лише для цієї гри, без збереження в каталозі': 'Pour cette partie uniquement, sans l’enregistrer dans le catalogue', 'Зберегти назву лише у профілі': 'Enregistrer le nom uniquement dans le profil',
   'Після збереження місце зможуть знайти й обрати всі авторизовані користувачі.': 'Après l’enregistrement, tous les utilisateurs autorisés pourront trouver et choisir ce lieu.'
 });
+
+Object.assign(COPY.it, { 'Поділитися застосунком': 'Condividi l’app', 'Очистити розсадку': 'Svuota i posti' });
+Object.assign(COPY.en, { 'Поділитися застосунком': 'Share app', 'Очистити розсадку': 'Clear seating' });
+Object.assign(COPY.fr, { 'Поділитися застосунком': 'Partager l’application', 'Очистити розсадку': 'Vider le placement' });
 
 const PATTERNS = {
   it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+) оцінок/g, '$1 valutazioni'], [/(\d+)% перемог/g, '$1% vittorie'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],

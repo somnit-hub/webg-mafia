@@ -228,6 +228,7 @@ const headerMediaControls = await evaluate(`({
   playInitiallyDisabled: document.querySelector('[data-action="media-play"]')?.disabled,
   pauseInitiallyDisabled: document.querySelector('[data-action="media-pause"]')?.disabled,
   controls: [...document.querySelectorAll('.header-media-controls .header-media-btn')].filter(button => button.getBoundingClientRect().width > 0).length,
+  compactlyHidden: getComputedStyle(document.querySelector('.header-media-controls')).display === 'none',
   smallest: Math.round(Math.min(...[...document.querySelectorAll('.header-media-btn')].filter(button => button.getBoundingClientRect().width > 0).map(button => button.getBoundingClientRect().width))),
   centerOffset: (() => { const box = document.querySelector('.header-media-controls').getBoundingClientRect(); return Math.abs((box.left + box.right) / 2 - innerWidth / 2); })(),
   bluetoothBesideProfile: (() => { const bluetooth = document.querySelector('.browser-bluetooth-btn').getBoundingClientRect(); const profile = document.querySelector('.profile-btn').getBoundingClientRect(); return bluetooth.right <= profile.left && profile.left - bluetooth.right <= 6; })(),
@@ -236,17 +237,40 @@ const headerMediaControls = await evaluate(`({
 })`);
 const headerOrderControl = await evaluate(`(() => {
   const order = document.querySelector('[data-action="open-order-panel"]');
-  const install = document.querySelector('[data-action="install"]');
+  const share = document.querySelector('[data-action="share-app"]');
   const orderBox = order.getBoundingClientRect();
-  const installBox = install?.getBoundingClientRect();
+  const shareBox = share?.getBoundingClientRect();
   const orderColor = getComputedStyle(order).backgroundColor.match(/\\d+/g)?.map(Number) || [];
   return {
     icon: Boolean(order.querySelector('svg')),
     label: order.getAttribute('aria-label'),
     size: Math.round(orderBox.width),
     red: orderColor.length >= 3 && orderColor[0] > orderColor[1] * 1.5 && orderColor[0] > orderColor[2] * 1.4,
-    besideInstall: !installBox || (installBox.right <= orderBox.left && orderBox.left - installBox.right <= 6),
+    besideShare: Boolean(shareBox && shareBox.right <= orderBox.left && orderBox.left - shareBox.right <= 6),
     insideViewport: orderBox.left >= 0 && orderBox.right <= innerWidth
+  };
+})()`);
+await evaluate(`Object.defineProperty(navigator, 'share', { configurable: true, value: data => { window.__sharePayload = data; return Promise.resolve(); } })`);
+await click('[data-action="share-app"]');
+await wait(50);
+const headerShareControl = await evaluate(`(() => {
+  const install = document.querySelector('[data-action="install"]');
+  const share = document.querySelector('[data-action="share-app"]');
+  const order = document.querySelector('[data-action="open-order-panel"]');
+  const controls = [...document.querySelector('.header-actions').children];
+  const shareBox = share.getBoundingClientRect();
+  const installBox = install?.getBoundingClientRect();
+  return {
+    icon: Boolean(share.querySelector('svg')),
+    label: share.getAttribute('aria-label'),
+    size: Math.round(shareBox.width),
+    betweenInstallAndOrder: controls.indexOf(install) < controls.indexOf(share) && controls.indexOf(share) < controls.indexOf(order),
+    besideInstall: Boolean(installBox && installBox.right <= shareBox.left && shareBox.left - installBox.right <= 6),
+    insideViewport: shareBox.left >= 0 && shareBox.right <= innerWidth,
+    title: window.__sharePayload?.title,
+    text: window.__sharePayload?.text,
+    url: window.__sharePayload?.url,
+    canonicalUrl: new URL('./', document.baseURI).href
   };
 })()`);
 await click('[data-action="open-media-panel"]');
@@ -812,6 +836,16 @@ const setupCompactLayout = await evaluate(`({
   rowGap: Math.round(parseFloat(getComputedStyle(document.querySelector('.seat-setup')).rowGap)),
   nativeSelectsCompact: [...document.querySelectorAll('.seat-profile-select')].every(select => getComputedStyle(select).opacity === '0' && getComputedStyle(select).position === 'absolute'),
   footerActionsHidden: getComputedStyle(document.querySelector('.panel-footer-actions')).display === 'none',
+  clearSeatingControl: (() => {
+    const button = document.querySelector('[data-action="clear-setup-seats"]');
+    const rect = button?.getBoundingClientRect();
+    return {
+      visible: Boolean(button && getComputedStyle(button).display !== 'none'),
+      width: Math.round(rect?.width || 0),
+      height: Math.round(rect?.height || 0),
+      insideViewport: Boolean(rect && rect.left >= 0 && rect.right <= innerWidth)
+    };
+  })(),
   floatingActions: (() => {
     const group = document.querySelector('.setup-fab-group');
     const actions = [...group.querySelectorAll('.mobile-fab')];
@@ -936,6 +970,10 @@ const randomTable = await evaluate(`({
     return style.color !== style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)';
   })(),
   shuffleIcon: Boolean(document.querySelector('[data-action="shuffle-seats"] .button-shuffle-icon')),
+  clearIcon: Boolean(document.querySelector('[data-action="clear-setup-seats"] .button-clear-seating-icon')),
+  clearIconOnly: Boolean(document.querySelector('[data-action="clear-setup-seats"] svg')) && !document.querySelector('[data-action="clear-setup-seats"]')?.textContent.trim(),
+  clearLabel: document.querySelector('[data-action="clear-setup-seats"]')?.getAttribute('aria-label'),
+  clearAfterShuffle: document.querySelector('[data-action="shuffle-seats"]')?.nextElementSibling?.matches('[data-action="clear-setup-seats"]'),
   iconsDecorative: [...document.querySelectorAll('.setup-random-action .button-random-icon')].every(icon => icon.getAttribute('aria-hidden') === 'true'),
   nicknameFirstOption: [...document.querySelectorAll('[data-seat-profile] option')].find(option => option.textContent.startsWith('Тестовий Нік'))?.textContent
 })`);
@@ -955,6 +993,27 @@ const seatingOptionFilter = await evaluate(`(() => {
     unassignedRemainAvailable: [...occurrences.entries()].some(([profileId, count]) => !assigned.includes(profileId) && count === selects.length)
   };
 })()`);
+await click('[data-action="clear-setup-seats"]');
+const clearedSeating = await evaluate(`(() => {
+  const selects = [...document.querySelectorAll('[data-seat-profile]')];
+  const inputs = [...document.querySelectorAll('[data-seat-name]')];
+  return {
+    seats: selects.length,
+    profilesEmpty: selects.every(select => select.value === ''),
+    namesEmpty: inputs.every(input => input.value === ''),
+    toast: document.querySelector('#toast')?.textContent.trim()
+  };
+})()`);
+await evaluate(`(() => {
+  const input = document.querySelector('[data-seat-name="1"]');
+  input.value = 'Ручний гравець';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+})()`);
+clearedSeating.manualEntry = await evaluate(`document.querySelector('[data-seat-name="1"]')?.value`);
+await evaluate(`location.hash = '#players'`);
+await wait(180);
+await click('.players-fab-group [data-action="prepare-next-game"]');
+await wait(180);
 const setupAvatarTarget = await evaluate(`(() => {
   const select = [...document.querySelectorAll('[data-seat-profile]')].find(item => item.selectedOptions[0]?.textContent.startsWith('Тестовий Нік'));
   return { seat: Number(select?.dataset.seatProfile || 0), playerId: select?.value || '' };
@@ -1352,15 +1411,17 @@ await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 568, devi
 await wait(100);
 const activeGameCompactHeader = await evaluate(`(() => {
   const header = document.querySelector('.shell-header').getBoundingClientRect();
+  const share = document.querySelector('.share-btn').getBoundingClientRect();
   const order = document.querySelector('.order-btn').getBoundingClientRect();
-  const media = document.querySelector('.header-media-controls').getBoundingClientRect();
+  const media = document.querySelector('.header-media-controls');
   const cancel = document.querySelector('.cancel-game-btn').getBoundingClientRect();
   const bluetooth = document.querySelector('.browser-bluetooth-btn').getBoundingClientRect();
   return {
     scrollWidth: document.documentElement.scrollWidth,
     headerInsideViewport: header.left >= 0 && header.right <= innerWidth,
-    orderBeforeMedia: order.right <= media.left,
-    mediaBeforeCancel: media.right <= cancel.left,
+    shareBeforeOrder: share.right <= order.left,
+    orderBeforeCancel: order.right <= cancel.left,
+    mediaHidden: getComputedStyle(media).display === 'none',
     cancelBeforeBluetooth: cancel.right <= bluetooth.left,
     cancelSize: Math.round(cancel.width)
   };
@@ -1715,7 +1776,7 @@ const chromeByTab = { home: homeChrome, players: playersChrome, setup: setupChro
 const unifiedModalFrames = { mediaModalFrame, orderModalFrame, hostProfileModalFrame, accountDeleteModalFrame, playerModalFrame, venueModalFrame, setupMoveModalFrame, setupAvatarModalFrame, gameSettingsModalFrame, seatModalFrame, confirmModalFrame, winnerModalFrame, protocolModalFrame, personalStatsModalFrame };
 const languageSupport = { languageOptions, englishLanguage, frenchLanguage, italianLanguage, restoredUkrainianLanguage };
 const gameCardSystem = { roleReadyLayout, roleOpenLayout, gameSettingsAppearance, confirmModalAppearance, winnerModalAppearance, zeroNightSheriff, zeroNightFreeSeating, bestMoveLayout, bestMoveFarewell, afterBestMove };
-const result = { authenticatedHost, enjoyBrand, initialActiveGames, homeAverageGameTime, homeActiveGamesCollapsed, homeActiveGamesExpanded, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, mediaPanel, preparedMedia, orderPanel, orderCategory, orderBack, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostClubPicker, profileVenueCreate, profileVenueReturn, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersExpanded, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupTimersMobileLayout, setupMusic, setupMusicEnabled, setupGameExpanded, venuePicker, venueModal, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, playerStatsShortcut, personalStats, personalFeedback, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, hostTransferInitial, hostTransferFiltered, runningTimerStability, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameCompactHeader, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
+const result = { authenticatedHost, enjoyBrand, initialActiveGames, homeAverageGameTime, homeActiveGamesCollapsed, homeActiveGamesExpanded, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, headerShareControl, mediaPanel, preparedMedia, orderPanel, orderCategory, orderBack, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostClubPicker, profileVenueCreate, profileVenueReturn, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersExpanded, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupTimersMobileLayout, setupMusic, setupMusicEnabled, setupGameExpanded, venuePicker, venueModal, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, clearedSeating, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, playerStatsShortcut, personalStats, personalFeedback, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, hostTransferInitial, hostTransferFiltered, runningTimerStability, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameCompactHeader, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
 console.log(JSON.stringify(result, null, 2));
 
 if (process.env.SMOKE_SCREENSHOT) {
@@ -1737,7 +1798,7 @@ verify(runningTimerAdjustment.afterMinusFive === Math.max(0, runningTimerAdjustm
 verify(timerNavigation.away === '#players' && timerNavigation.returned === '#game' && timerNavigation.stopped && timerNavigation.navRestored, 'timer pauses and persists when leaving active game');
 verify(activeProfileLocks.locked === 10 && activeProfileLocks.editable >= 3 && activeProfileLocks.lockedButtonsDisabled, 'profiles seated in active game are locked');
 verify(activeGameHome.rows === 1 && activeGameHome.resume === 1 && activeGameHome.inlineCancel === 0 && activeGameHome.headerCancel === 1 && activeGameHome.cancelIconOnly && activeGameHome.cancelLabel === 'Скасувати активну гру' && activeGameHome.cancelRed && activeGameHome.cancelBesideBluetooth && activeGameHome.watch === 0 && activeGameHome.title === 'Активні ігри' && activeGameHome.phase.includes('День 1') && activeGameStats.rows === 1 && activeGameStats.resume === 1 && activeGameStats.inlineCancel === 0 && activeGameStats.headerCancel === 1 && activeGameStats.status.toLocaleLowerCase('uk').includes('активн'), 'active game is visible on overview and statistics with a single red host-only header cancel icon');
-verify(activeGameCompactHeader.scrollWidth <= 320 && activeGameCompactHeader.headerInsideViewport && activeGameCompactHeader.orderBeforeMedia && activeGameCompactHeader.mediaBeforeCancel && activeGameCompactHeader.cancelBeforeBluetooth && activeGameCompactHeader.cancelSize >= 36, 'host cancel icon fits the compact 320px header without overlapping media controls');
+verify(activeGameCompactHeader.scrollWidth <= 320 && activeGameCompactHeader.headerInsideViewport && activeGameCompactHeader.shareBeforeOrder && activeGameCompactHeader.orderBeforeCancel && activeGameCompactHeader.mediaHidden && activeGameCompactHeader.cancelBeforeBluetooth && activeGameCompactHeader.cancelSize >= 36, 'share, order and host controls fit the compact 320px header');
 verify(cancellationFromReveal.hash === '#reveal' && cancellationFromReveal.headerCancelVisible && cancellationFromReveal.inlineCancelAbsent && cancellationFromReveal.roleHidden && cancellationModal.title === 'Скасувати гру?' && cancellationModal.explainsNoStats && cancellationModal.confirm === 'Скасувати гру' && cancelledGame.hash === '#home' && cancelledGame.activeGames === 0 && cancelledGame.finishedGames === 1 && cancelledGame.headerCancelAbsent && cancelledGame.toast === 'Гру скасовано' && cancelledGame.queuedPlayers === queueAfterGame.selected, 'host cancels an active game from the header without archive result and restores selected players');
 verify(foreignLiveHome.row && !foreignLiveHome.resume && foreignLiveHome.watch && !foreignLiveHome.cancel && !foreignLiveHome.headerCancel && foreignLiveHome.eye && foreignLiveHome.label === 'Спостерігати' && foreignObserver.hash === '#observer/foreign-live-smoke' && foreignObserver.seats === 10 && foreignObserver.seatAvatarCount === 10 && foreignObserver.minSeatAvatarSize >= 40 && foreignObserver.faultDots === 40 && foreignObserver.minFaultDotSize >= 6 && foreignObserver.seatControls === 0 && !foreignObserver.moderatorPanel && foreignObserver.publicPanel && foreignObserver.bottomNavAbsent, 'foreign live game uses readable player avatars and fouls without host controls');
 verify(authenticatedHost.name === 'Тестовий ведучий' && authenticatedHost.avatar, 'authenticated host');
@@ -1749,9 +1810,10 @@ verify(mobileLayout.heroActionsHidden && mobileLayout.homeQuickActionCount === 2
 verify(settingsHeaderBrandAbsent, 'header brand copy absent on secondary tabs');
 verify(settingsActionLayout.drive.count === 1 && settingsActionLayout.drive.fillsWidth && settingsActionLayout.drive.singleButtonFills && settingsActionLayout.observer.count === 1 && settingsActionLayout.observer.fillsWidth && settingsActionLayout.observer.singleButtonFills, 'full-width standalone settings actions');
 verify(mobileLayout.scrollWidth <= mobileLayout.viewport && mobileLayout.pagePadding <= 8 && mobileLayout.stackGap <= 8 && mobileLayout.numericFont.includes('Arial') && mobileLayout.homeStatsCentered && mobileLayout.homeStatsBackground.includes('0.86') && mobileLayout.navHeight === 72 && mobileLayout.smallestNavIcon >= 26 && mobileLayout.newGameNavEmphasized && mobileLayout.headerAvatarVisible && mobileLayout.headerAvatarFills && mobileLayout.shortestPrimaryAction >= 44 && mobileLayout.smallestHomeActionFont >= 15 && mobileLayout.smallestTextButtonFont >= 15 && mobileLayout.installIconOnly && mobileLayout.installLabel === 'Встановити застосунок' && mobileLayout.installSize >= 40 && compactLayout.scrollWidth <= compactLayout.viewport && compactLayout.headerWidth <= compactLayout.viewport, 'mobile layout with emphasized new-game navigation');
-verify(headerMediaControls.bluetooth && headerMediaControls.bluetoothMenuTrigger && headerMediaControls.play && headerMediaControls.pause && headerMediaControls.playInitiallyDisabled && headerMediaControls.pauseInitiallyDisabled && headerMediaControls.controls === 2 && headerMediaControls.smallest >= 40 && headerMediaControls.centerOffset <= 1 && headerMediaControls.bluetoothBesideProfile && headerMediaControls.profileGroupRightGap <= 10 && headerMediaControls.cancelAbsentWithoutGame && compactLayout.actionsRight <= compactLayout.viewport - 10, 'centered media controls, Bluetooth menu beside profile and no cancel control without a host game');
+verify(headerMediaControls.bluetooth && headerMediaControls.bluetoothMenuTrigger && headerMediaControls.play && headerMediaControls.pause && headerMediaControls.playInitiallyDisabled && headerMediaControls.pauseInitiallyDisabled && headerMediaControls.controls === 0 && headerMediaControls.compactlyHidden && headerMediaControls.bluetoothBesideProfile && headerMediaControls.profileGroupRightGap <= 10 && headerMediaControls.cancelAbsentWithoutGame && compactLayout.actionsRight <= compactLayout.viewport - 10, 'compact media controls move into the Bluetooth menu beside the profile');
 verify(mediaPanel.title === 'Bluetooth і музика' && mediaPanel.prompt === 'Оберіть дію' && mediaPanel.audioInput === 'audio/*' && mediaPanel.choiceCount === 2 && JSON.stringify(mediaPanel.choices) === JSON.stringify(['Підключити Bluetooth-пристрій', 'Відкрити музику з пристрою']) && mediaPanel.choiceIcons === 2 && mediaPanel.musicPickerLabel === 'music-file' && mediaPanel.detailsInitiallyCollapsed && mediaPanel.smallestChoice >= 120 && mediaPanel.closeCentered && (mediaPanel.platform !== 'android' || mediaPanel.androidSystemLink === 'intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end') && (mediaPanel.platform !== 'ios' || (mediaPanel.iosGuide?.expanded && mediaPanel.iosGuide.controlCenter && mediaPanel.iosGuide.settings)) && preparedMedia.track === 'Enjoy smoke.wav' && preparedMedia.localOnly && preparedMedia.playEnabled && preparedMedia.clearButton && preparedMedia.externalControlWarning && preparedMedia.menuStillVisible, 'two-choice Bluetooth and local music menu with centered close control on desktop, Android, and iPhone');
-verify(headerOrderControl.icon && headerOrderControl.label === 'Замовити напій' && headerOrderControl.size >= 40 && headerOrderControl.red && headerOrderControl.besideInstall && headerOrderControl.insideViewport, 'compact red order control beside install');
+verify(headerOrderControl.icon && headerOrderControl.label === 'Замовити напій' && headerOrderControl.size >= 40 && headerOrderControl.red && headerOrderControl.besideShare && headerOrderControl.insideViewport, 'compact red order control beside share');
+verify(headerShareControl.icon && headerShareControl.label === 'Поділитися застосунком' && headerShareControl.size >= 40 && headerShareControl.betweenInstallAndOrder && headerShareControl.besideInstall && headerShareControl.insideViewport && headerShareControl.title === 'Mafia Enjoy' && headerShareControl.text?.includes('Mafia Enjoy') && headerShareControl.url === headerShareControl.canonicalUrl && !headerShareControl.url.includes('#'), 'header share control between install and order with native share payload');
 verify(orderPanel.title === 'Замовлення' && orderPanel.categoryCount === 2 && JSON.stringify(orderPanel.categories) === JSON.stringify(['Кава', 'Чай']) && orderPanel.smallestCategory >= 100 && !orderPanel.recipient && orderPanel.categoryPrompt && orderCategory.title === 'Кава' && orderCategory.count === 3 && JSON.stringify(orderCategory.choices) === JSON.stringify(['Кава', 'Капучино', 'Лате']) && orderCategory.back === 'До категорій' && orderCategory.immediate && orderBack === 2 && orderResult.success && orderResult.text.includes('Telegram') && orderResult.modalOpen, 'two-level Telegram order menu with category navigation and local delivery result');
 verify(tabletLayout.scrollWidth <= tabletLayout.viewport && tabletLayout.headerHeight === 62 && tabletLayout.navHeight === 72 && tabletLayout.navItems === 5 && tabletLayout.smallestNavIcon >= 26, 'tablet app chrome');
 verify(desktopLayout.scrollWidth <= desktopLayout.viewport && desktopLayout.headerTop === 0 && desktopLayout.navTop === desktopLayout.headerBottom && desktopLayout.itemWidthSpread <= 1 && desktopLayout.navRightGap <= 1, 'desktop layout');
@@ -1780,11 +1842,12 @@ verify(venuePicker.searchable && venuePicker.expanded === 'true' && venuePicker.
 verify(JSON.stringify(setupPanelOrder) === JSON.stringify(['setupMusic', 'setupSeating', 'setupRules']), 'music, seating and rules panel order');
 verify(Object.values(setupTypography).every(font => !/(Iowan|Palatino|Book Antiqua|Georgia|ui-serif)/i.test(font)), 'readable sans-serif typography');
 verify(setupTypography.foulHelp?.includes('Турнірна') && setupTypography.foulHelp?.includes('Клубна') && setupTypography.foulHelp?.includes('4-й фол'), 'foul system help');
-verify(setupCompactLayout.scrollWidth <= setupCompactLayout.viewport && setupCompactLayout.moveButtons === 10 && setupCompactLayout.smallestMoveButton >= 44 && setupCompactLayout.playerPickers === 10 && setupCompactLayout.smallestPlayerPicker >= 44 && setupCompactLayout.pickerIcons === 10 && setupCompactLayout.seatAvatars === 10 && setupCompactLayout.avatarControls === 10 && setupCompactLayout.editableAvatarControls > 0 && setupCompactLayout.generatedAvatars > 0 && setupCompactLayout.profileAvatars > 0 && setupCompactLayout.uniqueGeneratedAvatars && setupCompactLayout.avatarSources.every(source => /(?:assets\/avatars\/|data:image|^https?:)/.test(source)) && setupCompactLayout.avatarsFill && setupCompactLayout.avatarBetweenPickerAndName && setupCompactLayout.nameInputs === 10 && setupCompactLayout.collapsedPanelMaxHeight <= 54 && setupCompactLayout.collapsedToggleMinHeight >= 44 && setupCompactLayout.maxRowHeight <= 50 && setupCompactLayout.rowBordersAbsent && setupCompactLayout.rowBackgroundsTransparent && setupCompactLayout.rowGap <= 4 && setupCompactLayout.nativeSelectsCompact && setupCompactLayout.footerActionsHidden && setupCompactLayout.floatingActions.visible && setupCompactLayout.floatingActions.count === 2 && setupCompactLayout.floatingActions.square && setupCompactLayout.floatingActions.centered && setupCompactLayout.floatingActions.aboveNavigation && setupCompactLayout.floatingActions.addPlayerIcon && setupCompactLayout.floatingActions.dealRolesIcon && setupCompactLayout.floatingActions.addLabel === 'Додати гравця' && setupCompactLayout.floatingActions.dealLabel === 'Роздати ролі' && setupCompactLayout.floatingActions.addPlayerGold && setupCompactLayout.floatingActions.dangerColor !== 'rgba(0, 0, 0, 0)', 'compact setup panels, player picker, unique real and generated avatars, controls and floating actions');
+verify(setupCompactLayout.scrollWidth <= setupCompactLayout.viewport && setupCompactLayout.moveButtons === 10 && setupCompactLayout.smallestMoveButton >= 44 && setupCompactLayout.playerPickers === 10 && setupCompactLayout.smallestPlayerPicker >= 44 && setupCompactLayout.pickerIcons === 10 && setupCompactLayout.seatAvatars === 10 && setupCompactLayout.avatarControls === 10 && setupCompactLayout.editableAvatarControls > 0 && setupCompactLayout.generatedAvatars > 0 && setupCompactLayout.profileAvatars > 0 && setupCompactLayout.uniqueGeneratedAvatars && setupCompactLayout.avatarSources.every(source => /(?:assets\/avatars\/|data:image|^https?:)/.test(source)) && setupCompactLayout.avatarsFill && setupCompactLayout.avatarBetweenPickerAndName && setupCompactLayout.nameInputs === 10 && setupCompactLayout.collapsedPanelMaxHeight <= 54 && setupCompactLayout.collapsedToggleMinHeight >= 44 && setupCompactLayout.maxRowHeight <= 50 && setupCompactLayout.rowBordersAbsent && setupCompactLayout.rowBackgroundsTransparent && setupCompactLayout.rowGap <= 4 && setupCompactLayout.nativeSelectsCompact && setupCompactLayout.footerActionsHidden && setupCompactLayout.clearSeatingControl.visible && setupCompactLayout.clearSeatingControl.width >= 44 && setupCompactLayout.clearSeatingControl.height >= 44 && setupCompactLayout.clearSeatingControl.insideViewport && setupCompactLayout.floatingActions.visible && setupCompactLayout.floatingActions.count === 2 && setupCompactLayout.floatingActions.square && setupCompactLayout.floatingActions.centered && setupCompactLayout.floatingActions.aboveNavigation && setupCompactLayout.floatingActions.addPlayerIcon && setupCompactLayout.floatingActions.dealRolesIcon && setupCompactLayout.floatingActions.addLabel === 'Додати гравця' && setupCompactLayout.floatingActions.dealLabel === 'Роздати ролі' && setupCompactLayout.floatingActions.addPlayerGold && setupCompactLayout.floatingActions.dangerColor !== 'rgba(0, 0, 0, 0)', 'compact setup panels, seating clear control, player picker, avatars and floating actions');
 verify(setupTimersMobileLayout.expanded && setupTimersMobileLayout.fields === 8 && setupTimersMobileLayout.columns === 2 && setupTimersMobileLayout.rows === 4 && setupTimersMobileLayout.equalWidths && setupTimersMobileLayout.inputsInsideColumns && setupTimersMobileLayout.foulFullWidth && setupTimersMobileLayout.scrollWidth <= 320, 'mobile game timers use two equal columns while the foul system remains full width');
 verify(setupAvatarTarget.seat > 0 && setupAvatarTarget.playerId && setupAvatarPicker.title === 'Аватар гравця' && setupAvatarPicker.profile === 'Тестовий Нік' && setupAvatarPicker.choices === 10 && setupAvatarPicker.imageChoices === 10 && setupAvatarPicker.manualHelp.includes('ручному профілі') && setupAvatarPicker.lionEnabled && setupAvatarPicker.modalClosed && setupAvatarPicker.editable && setupAvatarPicker.rowAvatar.startsWith('data:image/webp;base64,') && setupAvatarPicker.storedAvatar === setupAvatarPicker.rowAvatar && setupAvatarPicker.storedPreset === './assets/avatars/lion.webp' && temporaryAvatarLocked, 'manual-profile setup avatar picker, persistence and temporary-profile restriction');
-verify(randomTable.selected === 10 && randomTable.unique === 10 && randomTable.venue === 'Enjoy' && randomTable.title.startsWith('Enjoy · ') && randomTable.titleHasTime && randomTable.rerollAbsent && randomTable.dealModeControls === 1 && randomTable.dealModeInSeating && !randomTable.dealModeOutsideSeating && randomTable.dealModeLabel === 'Спосіб роздачі ролей' && randomTable.dealModeHelp?.includes('гравці по черзі') && randomTable.dealModeValue === 'number' && JSON.stringify(randomTable.dealModeOptions) === JSON.stringify(['За обраною цифрою', 'Автоматично']) && randomTable.dealModeOptionContrast && randomTable.shuffleIcon && randomTable.iconsDecorative && randomTable.nicknameFirstOption === 'Тестовий Нік · Тестова Гравчиня' && queuedTable.followsSelection && preferredSeatName === 'Тестовий Нік', 'nickname-first queued table with venue-date-time title, contrasting role-deal options, selector and shuffle icon');
+verify(randomTable.selected === 10 && randomTable.unique === 10 && randomTable.venue === 'Enjoy' && randomTable.title.startsWith('Enjoy · ') && randomTable.titleHasTime && randomTable.rerollAbsent && randomTable.dealModeControls === 1 && randomTable.dealModeInSeating && !randomTable.dealModeOutsideSeating && randomTable.dealModeLabel === 'Спосіб роздачі ролей' && randomTable.dealModeHelp?.includes('гравці по черзі') && randomTable.dealModeValue === 'number' && JSON.stringify(randomTable.dealModeOptions) === JSON.stringify(['За обраною цифрою', 'Автоматично']) && randomTable.dealModeOptionContrast && randomTable.shuffleIcon && randomTable.clearIcon && randomTable.clearIconOnly && randomTable.clearLabel === 'Очистити розсадку' && randomTable.clearAfterShuffle && randomTable.iconsDecorative && randomTable.nicknameFirstOption === 'Тестовий Нік · Тестова Гравчиня' && queuedTable.followsSelection && preferredSeatName === 'Тестовий Нік', 'nickname-first queued table with role-deal selector, shuffle and icon-only clear action');
 verify(seatingOptionFilter.currentPlayerPreserved && seatingOptionFilter.occupiedHiddenElsewhere && seatingOptionFilter.eachAssignedShownOnce && seatingOptionFilter.unassignedRemainAvailable, 'already seated players hidden from other seat pickers');
+verify(clearedSeating.seats === 10 && clearedSeating.profilesEmpty && clearedSeating.namesEmpty && clearedSeating.toast === 'Розсадку очищено' && clearedSeating.manualEntry === 'Ручний гравець', 'clear seating leaves ten empty seats ready for manual entry');
 verify(temporaryGuestNames.replacesNumberedPlaceholder && temporaryGuestNames.singleWord && temporaryGuestNames.manualNameSurvivesMove, 'single-word funny temporary guest names and manual override');
 verify(seatMove.dialog.title === 'Перемістити з місця 1' && seatMove.dialog.targets === 10 && seatMove.dialog.currentDisabled && seatMove.swapped && seatMove.restored, 'move player to a specific seat');
 verify(roleDealButton.label === 'Роздати ролі' && roleDealButton.danger && roleDealButton.legacyButtons === 0 && (roleDealButton.backgroundImage !== 'none' || roleDealButton.backgroundColor !== 'rgba(0, 0, 0, 0)') && roleDealButton.primaryBackground !== roleDealButton.secondaryBackground, 'unified gold, red and neutral button system');

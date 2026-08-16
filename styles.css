@@ -230,7 +230,7 @@ img { display: block; max-width: 100%; }
   padding: 18px 14px calc(var(--nav-h) + 24px + env(safe-area-inset-bottom));
 }
 .tab-page { display: grid; align-content: start; gap: 14px; }
-.tab-page > .page-head, .tab-page > .directory-status, .tab-page > .next-game-lineup, .tab-page > .search-row, .tab-page > .setup-seating-panel, .tab-page > .setup-rules-panel { margin-top: 0; margin-bottom: 0; }
+.tab-page > .page-head, .tab-page > .directory-status, .tab-page > .next-game-lineup, .tab-page > .search-row, .tab-page > .setup-music-panel, .tab-page > .setup-seating-panel, .tab-page > .setup-rules-panel { margin-top: 0; margin-bottom: 0; }
 .page.game-page { width: min(1380px, 100%); }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin: 4px 0 18px; }
 .page-head h1, .page-head h2 { margin: 0; font-size: clamp(24px, 5vw, 38px); letter-spacing: -.035em; }
@@ -1388,6 +1388,8 @@ img { display: block; max-width: 100%; }
 }
 
 @media (min-width: 620px) {
+  .bottom-nav:not(.game-nav) .nav-item { grid-template-rows: 28px auto; font-size: 12px; }
+  .bottom-nav:not(.game-nav) .nav-item svg { width: 28px; height: 28px; }
   .home-page, .players-page, .setup-page { padding-bottom: calc(var(--nav-h) + 102px + env(safe-area-inset-bottom)); }
   .home-page > .hero > .actions { display: none; }
   .players-page > .page-head > .actions, .players-page > .search-row > .btn { display: none; }
@@ -1444,9 +1446,9 @@ img { display: block; max-width: 100%; }
 @media (min-width: 900px) {
   :root { --top-h: 70px; --nav-h: 0px; }
   .shell-header { padding-right: 26px; padding-left: 26px; }
-  .bottom-nav { position: sticky; top: var(--top-h); bottom: auto; min-height: 48px; padding: 4px max(20px, calc((100vw - 1180px) / 2)); grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
-  .nav-item { padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; }
-  .nav-item svg { width: 18px; height: 18px; margin: 0; }
+  .bottom-nav { position: sticky; top: var(--top-h); bottom: auto; min-height: 58px; padding: 6px max(20px, calc((100vw - 1180px) / 2)); grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+  .bottom-nav:not(.game-nav) .nav-item { padding: 8px 12px; display: flex; align-items: center; justify-content: center; gap: 9px; font-size: 14px; }
+  .bottom-nav:not(.game-nav) .nav-item svg { width: 26px; height: 26px; margin: 0; }
   .page { padding-top: 24px; padding-bottom: 36px; }
   .home-page, .players-page, .setup-page { padding-bottom: 102px; }
   .hero { padding: 38px; }

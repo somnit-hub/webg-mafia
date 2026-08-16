@@ -62,6 +62,20 @@ async function queryChats(uid) {
   });
 }
 
+async function queryMessages(uid) {
+  return fetch(`${root}/communities/enjoy/gameChats/${gameId}:runQuery`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token(uid)}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: 'messages' }],
+        orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'ASCENDING' }],
+        limit: 200
+      }
+    })
+  });
+}
+
 const now = { timestampValue: new Date().toISOString() };
 const livePath = `communities/enjoy/liveGames/${gameId}`;
 const chatPath = `communities/enjoy/gameChats/${gameId}`;
@@ -95,6 +109,17 @@ const viewerMessage = {
   clientCreatedAt: '2026-08-16T18:02:00.000Z', schemaVersion: 1, createdAt: now
 };
 assert.equal((await request(messagePath, { uid: 'viewer_uid', method: 'PATCH', data: viewerMessage })).status, 200);
+assert.equal((await queryMessages('host_uid')).status, 200);
+assert.equal((await queryMessages('viewer_uid')).status, 200);
+assert.equal((await queryMessages('active_uid')).status, 403);
+
+await request(livePath, { method: 'DELETE' });
+assert.equal((await request(chatPath, { uid: 'host_uid' })).status, 200);
+assert.equal((await request(chatPath, { uid: 'viewer_uid' })).status, 200);
+assert.equal((await queryMessages('host_uid')).status, 200);
+assert.equal((await queryMessages('viewer_uid')).status, 200);
+assert.equal((await queryMessages('active_uid')).status, 403);
+await request(livePath, { method: 'PATCH', data: liveGame });
 
 assert.equal((await request(chatPath, {
   uid: 'host_uid', method: 'PATCH', data: { ...activeChat, participantUids: ['host_uid', 'viewer_uid', 'active_uid'] }

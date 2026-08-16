@@ -95,7 +95,7 @@ Worker працює окремо від Firebase Hosting і Firestore, тому 
 
 Власник Google-профілю може підтвердити Telegram через офіційний Telegram Login або зберегти публічний `@username` вручну. Автоматичний варіант використовує маршрути Worker-а `/telegram-profile/config` і `/telegram-profile/verify`: Firebase-сесія перевіряється першою, Telegram ID token — за офіційним JWKS і параметрами `iss`, `aud`, `exp`, а nonce підписаний сервером, прив’язаний до Firebase UID і діє 10 хвилин. Telegram-токен бота не потрапляє в браузер.
 
-Для автоматичного підключення один раз відкрийте `@BotFather` → **Bot Settings → Web Login**, залиште стандартний алгоритм **RS256** і додайте Allowed URLs `https://mafia-cafe.web.app` та `https://somnit-hub.github.io`. Worker бере числовий Client ID із початку `TELEGRAM_BOT_TOKEN`; якщо BotFather показує інше значення, передайте його Worker-у як `TELEGRAM_CLIENT_ID`. Без цієї настройки ручне поле `@username` продовжує працювати.
+Для автоматичного підключення один раз відкрийте `@BotFather` → виберіть `@mafia_coffee_order_bot` → **Bot Settings → Login Widget**, залиште стандартний алгоритм **RS256** і додайте всі production origin та redirect URL: `https://mafia-cafe.web.app`, `https://mafia-cafe.web.app/`, `https://somnit-hub.github.io` і `https://somnit-hub.github.io/webg-mafia/`. Публічний Client ID `8870972033` зберігається як `TELEGRAM_CLIENT_ID` у `cloudflare/wrangler.jsonc`; якщо бот зміниться, оновіть це значення та повторно опублікуйте Worker. Без цієї настройки ручне поле `@username` продовжує працювати.
 
 ## Публікація
 

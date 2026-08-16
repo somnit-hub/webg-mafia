@@ -2083,7 +2083,7 @@ function hostProfileModalHtml() {
     <div class="section-title section-heading">${titleHelp('h2', 'Мій профіль Enjoy', 'Ці дані допоможуть ведучим знайти вас і додати на стіл. Власний аватар стискається локально; видалення власного фото повертає фотографію Google.')}<div class="profile-modal-title-actions"><button class="icon-btn profile-stats-shortcut" type="button" data-action="open-player-stats" data-id="google_${esc(app.authUser?.uid || '')}" aria-label="Моя статистика" title="Моя статистика">${playerStatsIcon()}</button><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div></div>
     <div class="avatar-editor">${avatar({ name: profile.displayName || app.authUser?.googleName, avatar: photo }, 'large')}<div><div class="avatar-source-actions"><label class="btn primary" for="host-avatar-camera">${cameraIcon()}<span>Зробити фото</span></label><input id="host-avatar-camera" class="visually-hidden" type="file" accept="image/*" capture="environment" data-input="host-avatar-camera"><label class="btn secondary" for="host-avatar-gallery">Обрати з галереї</label><input id="host-avatar-gallery" class="visually-hidden" type="file" accept="image/*" data-input="host-avatar-gallery">${app.authUser?.googlePhotoURL && profile.avatar ? '<button class="btn secondary" type="button" data-action="host-use-google-photo">Фото Google</button>' : ''}</div>${profilePhotoSyncHtml(Boolean(profile.avatar), photoSyncStatus)}</div></div>
     <div class="stack">
-      <div class="field"><label for="host-display-name">Ім’я</label><input id="host-display-name" class="input" name="displayName" value="${esc(profile.displayName || app.authUser?.googleName || '')}" maxlength="60" autocomplete="name"></div>
+      <div class="field"><label for="host-display-name">Ім’я *</label><input id="host-display-name" class="input" name="displayName" value="${esc(profile.displayName || app.authUser?.googleName || '')}" maxlength="60" autocomplete="name" required></div>
       <div class="field"><label for="host-nickname">Нікнейм *</label><input id="host-nickname" class="input" name="nickname" value="${esc(profile.nickname || '')}" maxlength="40" autocomplete="nickname" aria-describedby="host-nickname-hint" required><small id="host-nickname-hint" class="field-hint">Використовуватиметься як основне ім’я гравця під час гри.</small></div>
       ${profileClubPickerHtml(profile)}
       <div class="field"><label for="host-description">Про себе</label><textarea id="host-description" class="textarea" name="description" maxlength="600" placeholder="Досвід ведення, улюблена кава…">${esc(profile.description || '')}</textarea></div>
@@ -4320,10 +4320,8 @@ async function saveHostProfile(form) {
     return toast('Завершіть поточну гру перед редагуванням профілю');
   }
   const data = new FormData(form);
-  const displayName = String(data.get('displayName') || '').trim()
-    || String(app.authUser?.googleName || '').trim()
-    || String(app.authUser?.email || '').split('@')[0]
-    || 'Гравець';
+  const displayName = String(data.get('displayName') || '').trim();
+  if (!displayName) return toast('Вкажіть ім’я');
   const nickname = String(data.get('nickname') || '').trim();
   if (!nickname) return toast('Вкажіть нікнейм для гри');
   const telegramInput = String(data.get('telegramUsername') || '').trim();

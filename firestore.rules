@@ -343,8 +343,7 @@ service cloud.firestore {
       let chat = get(/databases/$(database)/documents/communities/enjoy/gameChats/$(gameId)).data;
       return signedIn()
         && exists(/databases/$(database)/documents/communities/enjoy/gameChats/$(gameId))
-        && request.auth.uid in chat.participantUids
-        && (gameChatIsFinished(chat) || canEnterActiveGameChat(gameId, chat));
+        && request.auth.uid in chat.participantUids;
     }
 
     function validGameChatJoin(gameId) {
@@ -646,8 +645,7 @@ service cloud.firestore {
 
     match /communities/enjoy/gameChats/{gameId} {
       allow get: if signedIn()
-        && ((request.auth.uid in resource.data.participantUids
-            && (gameChatIsFinished(resource.data) || canEnterActiveGameChat(gameId, resource.data)))
+        && (request.auth.uid in resource.data.participantUids
           || canEnterActiveGameChat(gameId, resource.data));
       allow list: if signedIn()
         && request.auth.uid in resource.data.participantUids;

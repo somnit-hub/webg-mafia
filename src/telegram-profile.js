@@ -21,6 +21,35 @@ export function telegramManualProfile(value) {
   };
 }
 
+export function telegramLoginAuth(login, options, callback, { page = globalThis } = {}) {
+  if (!login?.auth) throw new Error('Telegram Login не завантажився');
+  const originalOpen = page?.open;
+  const pageOrigin = String(page?.location?.origin || '').trim();
+  if (typeof originalOpen !== 'function' || !/^https?:\/\//i.test(pageOrigin)) {
+    return login.auth(options, callback);
+  }
+
+  page.open = function openTelegramLogin(url, target, features) {
+    let nextUrl = url;
+    try {
+      const requestUrl = new URL(String(url), pageOrigin);
+      if (requestUrl.origin === 'https://oauth.telegram.org' && requestUrl.pathname === '/auth') {
+        requestUrl.searchParams.set('origin', pageOrigin);
+        nextUrl = requestUrl.toString();
+      }
+    } catch {
+      // Let the browser handle an unexpected URL exactly as the Telegram SDK supplied it.
+    }
+    return originalOpen.call(page, nextUrl, target, features);
+  };
+
+  try {
+    return login.auth(options, callback);
+  } finally {
+    page.open = originalOpen;
+  }
+}
+
 function loadTelegramLoginSdk() {
   if (globalThis.Telegram?.Login?.auth) return Promise.resolve(globalThis.Telegram.Login);
   if (sdkPromise) return sdkPromise;
@@ -84,7 +113,7 @@ export function connectPreparedTelegramProfile(prepared, { language = 'uk', time
     };
     const timer = setTimeout(() => finish(reject, new Error('Час підключення Telegram вичерпано')), timeoutMs);
     try {
-      login.auth({
+      telegramLoginAuth(login, {
         client_id: Number(prepared.clientId),
         scope: ['profile'],
         lang: ['uk', 'en', 'it', 'fr'].includes(language) ? language : 'uk',

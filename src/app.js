@@ -49,9 +49,10 @@ import {
 import { mafiaPlayerRankings } from './player-ranking.js';
 import { buildGameStatistics, filterGamesByPeriod, gameActivityComparison } from './game-statistics.js';
 import {
-  createCommunityVenueFields, saveCommunityVenue, subscribeCommunityVenues, stopCommunityVenues
+  createCommunityVenueFields, deleteCommunityVenue, isCommunityVenueAdmin,
+  saveCommunityVenue, subscribeCommunityVenues, stopCommunityVenues
 } from './cloud-venues.js';
-import { filterVenues, gameTitleForVenue, googleMapsVenueSuggestion } from './venue-directory.js';
+import { filterVenues, gameTitleForVenue, googleMapsVenueSuggestion, venuePickerOptions } from './venue-directory.js';
 import {
   BUILTIN_GAME_TRACKS, DEFAULT_GAME_MUSIC, GAME_MUSIC_CUES, GAME_MUSIC_DEFAULTS_VERSION, builtinGameTrack,
   customMusicChoice, migrateGameMusicSettings, musicCueForGame, normalizeGameMusicSettings
@@ -236,6 +237,7 @@ let app = {
     setupMusic: false,
     setupRules: false,
     setupSeating: true,
+    settingsVenues: false,
     statsActiveGames: false,
     statsSummary: true,
     statsTime: false,
@@ -1184,6 +1186,10 @@ function stateIcon(kind = 'empty') {
   return `<span class="state-icon" aria-hidden="true"><svg viewBox="0 0 24 24">${paths[kind] || paths.empty}</svg></span>`;
 }
 
+function trashIcon() {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 14H7L6 7m4 4v6m4-6v6"/></svg>';
+}
+
 function statePanel(kind, title, detail = '', action = '', compact = false) {
   return `<div class="ui-state state-${esc(kind)} ${compact ? 'ui-state-inline' : 'ui-state-panel'}" role="status">${stateIcon(kind)}<div class="state-copy"><b>${esc(title)}</b>${detail ? `<small>${esc(detail)}</small>` : ''}</div>${action}</div>`;
 }
@@ -1221,6 +1227,10 @@ function archiveStatusText() {
   if (app.cloudArchive.status === 'loading') return 'Спільні ігри Enjoy · синхронізація…';
   if (app.cloudArchive.status === 'error') return app.cloudArchive.error || 'Спільні ігри тимчасово недоступні';
   return 'Активні й завершені ігри Enjoy';
+}
+
+function aggregateStats() {
+  return buildGameStatistics(finishedGames()).summary;
 }
 
 function homeView() {
@@ -1419,6 +1429,36 @@ function availableVenues() {
   return filterVenues(venues);
 }
 
+function canAdministerVenues() {
+  return LOCAL_AUTH_TEST || isCommunityVenueAdmin(app.authUser);
+}
+
+function venueDirectoryManagementHtml() {
+  const venues = availableVenues();
+  const administrator = canAdministerVenues();
+  const status = app.venueDirectory.status === 'error'
+    ? statePanel('error', 'Каталог тимчасово недоступний', app.venueDirectory.error || 'Перевірте з’єднання з інтернетом.', '<button class="btn small secondary" type="button" data-action="retry-venue-directory">Повторити</button>', true)
+    : '';
+  const rows = venues.map(venue => {
+    const contacts = [venue.address, venue.phone].filter(Boolean);
+    const links = [
+      venue.googleMapsUrl ? `<a href="${esc(venue.googleMapsUrl)}" target="_blank" rel="noopener noreferrer">Google Maps ↗</a>` : '',
+      venue.website ? `<a href="${esc(venue.website)}" target="_blank" rel="noopener noreferrer">Сайт ↗</a>` : ''
+    ].filter(Boolean).join('');
+    const owner = venue.builtin ? '<span class="badge gold">Основне</span>' : venue.createdByName ? `<span>Додав: ${esc(venue.createdByName)}</span>` : '';
+    const deleteButton = administrator && !venue.builtin
+      ? `<button class="icon-btn settings-venue-delete" type="button" data-action="delete-venue" data-id="${esc(venue.id)}" aria-label="Видалити ${esc(venue.name)}" title="Видалити місце">${trashIcon()}</button>`
+      : '';
+    return `<article class="settings-venue-row"><div class="settings-venue-copy"><div class="settings-venue-name"><b>${esc(venue.name)}</b>${owner}</div>${contacts.length ? `<small>${esc(contacts.join(' · '))}</small>` : '<small>Контакти не вказано</small>'}${links ? `<div class="settings-venue-links">${links}</div>` : ''}</div>${deleteButton}</article>`;
+  }).join('');
+  return `<div class="settings-venue-directory">
+    <div class="settings-venue-toolbar"><div><b>Спільний каталог місць</b><small>Новий запис додається окремо й не замінює вже створені клуби.</small></div><button class="btn primary" type="button" data-action="open-settings-venue-create">+ Додати місце / клуб</button></div>
+    ${status}
+    <div class="settings-venue-list">${rows || statePanel('empty', 'Каталог порожній', 'Додайте перше місце або клуб.')}</div>
+    ${administrator ? '<p class="privacy-note settings-venue-admin-note">Ви адміністратор каталогу й можете видаляти користувацькі місця. Історичні ігри після видалення не змінюються.</p>' : ''}
+  </div>`;
+}
+
 function defaultGameTitle(date = new Date(), venueName = BUILTIN_ENJOY_VENUE.name) {
   return gameTitleForVenue(venueName, date);
 }
@@ -1443,9 +1483,10 @@ function focusVenueSearch() {
 
 function venuePickerHtml() {
   const query = String(app.draft.venueSearch ?? app.draft.venue ?? '');
-  const venues = filterVenues(availableVenues(), query);
-  const exact = availableVenues().some(venue => venue.name.toLocaleLowerCase('uk') === query.trim().toLocaleLowerCase('uk'));
   const open = Boolean(app.draft.venuePickerOpen);
+  const allVenues = availableVenues();
+  const venues = venuePickerOptions(allVenues, query, { open, selectedId: app.draft.venueId, selectedName: app.draft.venue });
+  const exact = allVenues.some(venue => venue.name.toLocaleLowerCase('uk') === query.trim().toLocaleLowerCase('uk'));
   const options = venues.map(venue => `<button class="venue-option" type="button" role="option" data-action="select-game-venue" data-id="${esc(venue.id)}" aria-selected="${app.draft.venueId === venue.id}"><span><b>${esc(venue.name)}</b>${venue.address ? `<small>${esc(venue.address)}</small>` : ''}</span><span aria-hidden="true">›</span></button>`).join('');
   const custom = query.trim() && !exact
     ? `<button class="venue-option venue-option-custom" type="button" role="option" data-action="use-custom-game-venue"><span><b>Використати «${esc(query.trim())}»</b><small>Лише для цієї гри, без збереження в каталозі</small></span><span aria-hidden="true">+</span></button>`
@@ -1466,9 +1507,11 @@ function focusProfileClubSearch() {
 
 function profileClubPickerHtml(profile) {
   const query = String(app.modal?.profileDraft?.clubSearch ?? profile.club ?? '');
-  const venues = filterVenues(availableVenues(), query);
-  const exact = availableVenues().some(venue => venue.name.toLocaleLowerCase('uk') === query.trim().toLocaleLowerCase('uk'));
   const open = Boolean(app.modal?.profileDraft?.clubPickerOpen);
+  const allVenues = availableVenues();
+  const selectedId = app.modal?.profileDraft?.clubSearchDirty ? '' : 'selected-profile-club';
+  const venues = venuePickerOptions(allVenues, query, { open, selectedId, selectedName: app.modal?.profileDraft?.club || profile.club });
+  const exact = allVenues.some(venue => venue.name.toLocaleLowerCase('uk') === query.trim().toLocaleLowerCase('uk'));
   const options = venues.map(venue => `<button class="venue-option" type="button" role="option" data-action="select-profile-club" data-id="${esc(venue.id)}" aria-selected="${String(profile.club || '').trim().toLocaleLowerCase('uk') === venue.name.toLocaleLowerCase('uk')}"><span><b>${esc(venue.name)}</b>${venue.address ? `<small>${esc(venue.address)}</small>` : ''}</span><span aria-hidden="true">›</span></button>`).join('');
   const custom = query.trim() && !exact
     ? `<button class="venue-option venue-option-custom" type="button" role="option" data-action="use-custom-profile-club"><span><b>Використати «${esc(query.trim())}»</b><small>Зберегти назву лише у профілі</small></span><span aria-hidden="true">+</span></button>`
@@ -1766,6 +1809,14 @@ function settingsView() {
         </div>
       </section>
     </div>
+    ${collapsiblePanel(
+      'settingsVenues',
+      'Місця та клуби',
+      'Спільний каталог доступний усім авторизованим користувачам. Кожне збереження створює окреме місце; адміністратор може прибрати помилковий або застарілий запис.',
+      venueDirectoryManagementHtml(),
+      'settings-venues-panel',
+      `<span class="badge">${availableVenues().length}</span>`
+    )}
     <section class="card card-pad">
       <div class="section-title section-heading">${titleHelp('h2', 'Резервна копія Google Drive', `Остання синхронізація: ${lastSync}. Окремий дозвіл drive.appdata надається лише після команди підключення; застосунок не бачить звичайні файли користувача.`)}<span class="badge ${drive.connected ? 'green' : ''}">${drive.connected ? 'Підключено' : 'Не підключено'}</span></div>
       <div class="actions drive-actions">${drive.connected ? '<button class="btn primary" data-action="cloud-push">Зберегти у Drive</button><button class="btn secondary" data-action="cloud-pull">Відновити з Drive</button><button class="btn secondary" data-action="drive-disconnect">Відключити Drive</button>' : '<button class="btn primary" data-action="drive-connect">Увімкнути резервну копію</button>'}</div>
@@ -2172,7 +2223,7 @@ function hostProfileModalHtml() {
   const photoDraftChanged = Boolean(app.modal?.profileDraft && Object.hasOwn(app.modal.profileDraft, 'avatar') && profile.avatar !== app.hostProfile?.avatar);
   const photoSyncStatus = photoDraftChanged ? 'pending' : app.profilePhotoSync.status;
   return `<div class="modal-backdrop host-profile-backdrop" data-action="close-modal"><form class="card modal host-profile-modal" data-form="host-profile" aria-modal="true" role="dialog" tabindex="-1">
-    <div class="section-title section-heading">${titleHelp('h2', 'Мій профіль Enjoy', 'Ці дані допоможуть ведучим знайти вас і додати на стіл. Власний аватар стискається локально; видалення власного фото повертає фотографію Google.')}<div class="profile-modal-title-actions"><button class="icon-btn profile-stats-shortcut" type="button" data-action="open-player-stats" data-id="google_${esc(app.authUser?.uid || '')}" aria-label="Моя статистика" title="Моя статистика">${playerStatsIcon()}</button><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div></div>
+    <div class="section-title section-heading">${titleHelp('h2', 'Мій профіль', 'Ці дані допоможуть ведучим знайти вас і додати на стіл. Власний аватар стискається локально; видалення власного фото повертає фотографію Google.')}<div class="profile-modal-title-actions"><button class="icon-btn profile-stats-shortcut" type="button" data-action="open-player-stats" data-id="google_${esc(app.authUser?.uid || '')}" aria-label="Моя статистика" title="Моя статистика">${playerStatsIcon()}</button><button class="icon-btn" type="button" data-action="close-modal" aria-label="Закрити це вікно">×</button></div></div>
     <div class="avatar-editor">${avatar({ name: profile.displayName || app.authUser?.googleName, avatar: photo }, 'large')}<div><div class="avatar-source-actions"><label class="btn primary" for="host-avatar-camera">${cameraIcon()}<span>Зробити фото</span></label><input id="host-avatar-camera" class="visually-hidden" type="file" accept="image/*" capture="environment" data-input="host-avatar-camera"><label class="btn secondary" for="host-avatar-gallery">Обрати з галереї</label><input id="host-avatar-gallery" class="visually-hidden" type="file" accept="image/*" data-input="host-avatar-gallery">${app.authUser?.googlePhotoURL && profile.avatar ? '<button class="btn secondary" type="button" data-action="host-use-google-photo">Фото Google</button>' : ''}</div>${profilePhotoSyncHtml(Boolean(profile.avatar), photoSyncStatus)}</div></div>
     <div class="stack">
       <div class="field"><label for="host-display-name">Ім’я *</label><input id="host-display-name" class="input" name="displayName" value="${esc(profile.displayName || app.authUser?.googleName || '')}" maxlength="60" autocomplete="name" required></div>
@@ -4604,6 +4655,7 @@ function applyGoogleMapsSuggestion() {
 async function saveVenueForm(form) {
   if (app.venueBusy || app.modal?.type !== 'venue') return;
   const returnModal = app.modal.returnModal ? clone(app.modal.returnModal) : null;
+  const source = app.modal.source || (returnModal ? 'profile' : 'setup');
   const data = new FormData(form);
   const venue = {
     name: data.get('name'),
@@ -4627,11 +4679,16 @@ async function saveVenueForm(form) {
         ...(app.modal.profileDraft || {}),
         club: saved.name,
         clubSearch: saved.name,
-        clubPickerOpen: false
+        clubPickerOpen: false,
+        clubSearchDirty: false
       };
+    } else if (source === 'settings') {
+      app.modal = null;
+      app.panelExpanded.settingsVenues = true;
     } else {
       app.modal = null;
       setDraftVenue(saved);
+      if (app.draft) app.draft.venuePickerOpen = true;
     }
     render();
     toast(`Місце «${saved.name}» додано`);
@@ -5013,9 +5070,33 @@ async function handleAction(action, element, sourceEvent) {
       type: 'venue',
       venue: { name: exact ? '' : query, googleMapsUrl: '', address: '', phone: '', website: '' },
       googleStatus: '',
-      googleStatusTone: ''
+      googleStatusTone: '',
+      source: 'setup'
     };
     render();
+  } else if (action === 'open-settings-venue-create') {
+    app.modal = {
+      type: 'venue',
+      venue: { name: '', googleMapsUrl: '', address: '', phone: '', website: '' },
+      googleStatus: '',
+      googleStatusTone: '',
+      source: 'settings'
+    };
+    render();
+  } else if (action === 'delete-venue') {
+    if (!canAdministerVenues()) return toast('Видаляти місця може лише адміністратор');
+    const venue = app.venues.find(item => item.id === element.dataset.id);
+    if (!venue) return toast('Це місце не можна видалити');
+    app.modal = {
+      type: 'confirm',
+      title: 'Видалити місце?',
+      text: `«${venue.name}» зникне зі спільного каталогу. Уже завершені й активні ігри залишаться без змін.`,
+      confirmLabel: 'Видалити місце',
+      confirm: { kind: 'venue', id: venue.id, name: venue.name }
+    };
+    render();
+  } else if (action === 'retry-venue-directory') {
+    await connectVenueDirectory();
   } else if (action === 'select-profile-club') {
     if (app.modal?.type !== 'host-profile') return;
     const venue = availableVenues().find(item => item.id === element.dataset.id);
@@ -5025,7 +5106,8 @@ async function handleAction(action, element, sourceEvent) {
       ...(app.modal.profileDraft || {}),
       club: venue.name,
       clubSearch: venue.name,
-      clubPickerOpen: false
+      clubPickerOpen: false,
+      clubSearchDirty: false
     };
     render();
   } else if (action === 'use-custom-profile-club') {
@@ -5037,7 +5119,8 @@ async function handleAction(action, element, sourceEvent) {
       ...(app.modal.profileDraft || {}),
       club: name,
       clubSearch: name,
-      clubPickerOpen: false
+      clubPickerOpen: false,
+      clubSearchDirty: false
     };
     render();
   } else if (action === 'open-profile-club-create') {
@@ -5052,6 +5135,7 @@ async function handleAction(action, element, sourceEvent) {
       venue: { name: exact ? '' : query, googleMapsUrl: '', address: '', phone: '', website: '' },
       googleStatus: '',
       googleStatusTone: '',
+      source: 'profile',
       returnModal
     };
     render();
@@ -5086,6 +5170,26 @@ async function handleAction(action, element, sourceEvent) {
     render();
   } else if (action === 'confirm-action') {
     const confirm = app.modal.confirm;
+    if (confirm.kind === 'venue') {
+      if (!canAdministerVenues()) { app.modal = null; render(); return toast('Видаляти місця може лише адміністратор'); }
+      try {
+        if (!LOCAL_AUTH_TEST) await deleteCommunityVenue(app.authUser, confirm.id);
+      } catch (error) {
+        app.modal = null;
+        render();
+        return toast(error?.message || 'Не вдалося видалити місце');
+      }
+      app.venues = app.venues.filter(venue => venue.id !== confirm.id);
+      if (app.draft?.venueId === confirm.id) {
+        app.draft.venueId = '';
+        app.draft.venueSearch = app.draft.venue;
+      }
+      app.panelExpanded.settingsVenues = true;
+      app.modal = null;
+      render();
+      toast(`Місце «${confirm.name}» видалено`);
+      return;
+    }
     if (confirm.kind === 'player') {
       if (profileIsInActiveGame(confirm.id)) { app.modal = null; render(); return toast('Профіль не можна видалити до завершення гри'); }
       if (!LOCAL_AUTH_TEST && app.authUser) {
@@ -5576,7 +5680,8 @@ async function handleInput(element) {
       ...(app.modal.profileDraft || {}),
       club: query.trim(),
       clubSearch: query,
-      clubPickerOpen: true
+      clubPickerOpen: true,
+      clubSearchDirty: true
     };
     render();
     focusProfileClubSearch();

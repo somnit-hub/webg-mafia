@@ -88,6 +88,14 @@ export function filterVenues(venues = [], search = '') {
     .sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''), 'uk', { sensitivity: 'base' }));
 }
 
+export function venuePickerOptions(venues = [], search = '', selection = {}) {
+  const query = clean(search, 200);
+  const selectedName = clean(selection.selectedName, 60);
+  const selectedQuery = Boolean(selection.open && selection.selectedId)
+    && query.toLocaleLowerCase('uk') === selectedName.toLocaleLowerCase('uk');
+  return filterVenues(venues, selectedQuery ? '' : query);
+}
+
 export function gameTitleForVenue(venueName, date = new Date()) {
   const name = clean(venueName, 60) || 'Мафія';
   const gameDate = new Intl.DateTimeFormat('uk-UA', { day: '2-digit', month: '2-digit' }).format(date);

@@ -16,6 +16,11 @@ service cloud.firestore {
         && request.auth.token.email_verified == true;
     }
 
+    function isCommunityAdmin() {
+      return hasVerifiedEmail()
+        && request.auth.token.email == 'somnit3d@gmail.com';
+    }
+
     function validPrivateActiveGame(uid, gameId) {
       return request.resource.data.keys().hasOnly([
           'id', 'ownerUid', 'gameUpdatedAt', 'stateJson', 'schemaVersion', 'updatedAt'
@@ -545,8 +550,8 @@ service cloud.firestore {
         && request.resource.data.createdByUid == resource.data.createdByUid
         && request.resource.data.createdAt == resource.data.createdAt
         && validVenue(venueId);
-      allow delete: if signedIn()
-        && resource.data.createdByUid == request.auth.uid;
+      allow delete: if isCommunityAdmin()
+        || (signedIn() && resource.data.createdByUid == request.auth.uid);
     }
 
     match /communities/enjoy/manualPlayers/{playerId} {

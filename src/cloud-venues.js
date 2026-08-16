@@ -2,6 +2,7 @@ import { getCommunityFirestore } from './cloud-profiles.js';
 import { normalizeVenueInput } from './venue-directory.js';
 
 const COMMUNITY_ID = 'enjoy';
+const COMMUNITY_ADMIN_EMAILS = new Set(['somnit3d@gmail.com']);
 let stopVenues = null;
 
 function clean(value, maximum = 120) {
@@ -47,6 +48,19 @@ export async function saveCommunityVenue(user, profile, venue) {
     updatedAt: sdk.serverTimestamp()
   });
   return fields;
+}
+
+export function isCommunityVenueAdmin(user) {
+  const email = clean(user?.email, 320).toLowerCase();
+  return Boolean(user?.emailVerified && COMMUNITY_ADMIN_EMAILS.has(email));
+}
+
+export async function deleteCommunityVenue(user, venueId) {
+  if (!isCommunityVenueAdmin(user)) throw new Error('Видаляти місця може лише адміністратор');
+  const id = clean(venueId, 160);
+  if (!id) throw new Error('Місце не знайдено');
+  const { database, sdk } = await getCommunityFirestore();
+  await sdk.deleteDoc(sdk.doc(database, 'communities', COMMUNITY_ID, 'venues', id));
 }
 
 export async function subscribeCommunityVenues(onVenues, onError) {

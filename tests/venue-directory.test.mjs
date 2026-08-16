@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createCommunityVenueFields } from '../src/cloud-venues.js';
-import { filterVenues, gameTitleForVenue, googleMapsVenueSuggestion, normalizeVenueInput } from '../src/venue-directory.js';
+import { createCommunityVenueFields, isCommunityVenueAdmin } from '../src/cloud-venues.js';
+import { filterVenues, gameTitleForVenue, googleMapsVenueSuggestion, normalizeVenueInput, venuePickerOptions } from '../src/venue-directory.js';
 
 test('venue model stores the requested public contact fields for an authorized user', () => {
   const fields = createCommunityVenueFields(
@@ -44,8 +44,30 @@ test('venue search matches names and addresses and auto-title uses selected venu
   assert.equal(gameTitleForVenue('Mafia Club', new Date(2026, 7, 16, 19, 30)), 'Mafia Club · 16.08 · 19:30');
 });
 
+test('opening a selected venue shows the full directory while typed search still filters it', () => {
+  const venues = [
+    { id: 'enjoy', name: 'Enjoy', address: 'Київ' },
+    { id: 'mafia', name: 'Mafia Club', address: 'Львів' }
+  ];
+  assert.deepEqual(
+    venuePickerOptions(venues, 'Enjoy', { open: true, selectedId: 'enjoy', selectedName: 'Enjoy' }).map(venue => venue.id),
+    ['enjoy', 'mafia']
+  );
+  assert.deepEqual(
+    venuePickerOptions(venues, 'львів', { open: true, selectedId: '', selectedName: 'Enjoy' }).map(venue => venue.id),
+    ['mafia']
+  );
+});
+
 test('venue validation rejects non-Google map links and unsafe website protocols', () => {
   assert.throws(() => normalizeVenueInput({ name: 'Club', googleMapsUrl: 'https://example.com/not-google' }), /Google Maps/);
   assert.throws(() => normalizeVenueInput({ name: 'Club', website: 'javascript:alert(1)' }), /Сайт/);
   assert.throws(() => createCommunityVenueFields({ uid: 'user-1', emailVerified: false }, {}, { name: 'Club' }, 'venue-2'), /підтверджений/);
+});
+
+test('venue administration is limited to the verified community administrator', () => {
+  assert.equal(isCommunityVenueAdmin({ email: 'somnit3d@gmail.com', emailVerified: true }), true);
+  assert.equal(isCommunityVenueAdmin({ email: 'SOMNIT3D@GMAIL.COM', emailVerified: true }), true);
+  assert.equal(isCommunityVenueAdmin({ email: 'somnit3d@gmail.com', emailVerified: false }), false);
+  assert.equal(isCommunityVenueAdmin({ email: 'member@example.com', emailVerified: true }), false);
 });

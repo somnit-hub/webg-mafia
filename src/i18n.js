@@ -83,7 +83,7 @@ const COPY = {
     'Режим оглядача': 'Modalità osservatore',
     'Відкрити публічний екран': 'Visualizzazione pubblica aperta',
     'Про застосунок': 'Informazioni sull\'app',
-    'Мій профіль Enjoy': 'Il mio profilo Enjoy',
+    'Мій профіль': 'Il mio profilo',
     'Зробити фото': 'Scatta una foto',
     'Обрати з галереї': 'Scegli dalla galleria',
     'Фото Google': 'Foto Google',
@@ -183,7 +183,7 @@ const COPY = {
     'Режим оглядача': 'Observer mode',
     'Відкрити публічний екран': 'Open public display',
     'Про застосунок': 'About the app',
-    'Мій профіль Enjoy': 'My Enjoy profile',
+    'Мій профіль': 'My profile',
     'Зробити фото': 'Take photo',
     'Обрати з галереї': 'Choose from gallery',
     'Фото Google': 'Google photo',
@@ -283,7 +283,7 @@ const COPY = {
     'Режим оглядача': 'Mode observateur',
     'Відкрити публічний екран': 'Ouvrir l’écran public',
     'Про застосунок': 'À propos',
-    'Мій профіль Enjoy': 'Mon profil Enjoy',
+    'Мій профіль': 'Mon profil',
     'Зробити фото': 'Prendre une photo',
     'Обрати з галереї': 'Choisir dans la galerie',
     'Фото Google': 'Photo Google',
@@ -807,6 +807,28 @@ Object.assign(COPY.fr, {
   'Можна ввести вручну': 'Vous pouvez la saisir manuellement', 'Зберегти місце': 'Enregistrer le lieu', 'Зберігаємо…': 'Enregistrement…',
   'Місць не знайдено': 'Aucun lieu trouvé', 'Лише для цієї гри, без збереження в каталозі': 'Pour cette partie uniquement, sans l’enregistrer dans le catalogue', 'Зберегти назву лише у профілі': 'Enregistrer le nom uniquement dans le profil',
   'Після збереження місце зможуть знайти й обрати всі авторизовані користувачі.': 'Après l’enregistrement, tous les utilisateurs autorisés pourront trouver et choisir ce lieu.'
+});
+
+Object.assign(COPY.it, {
+  'Місця та клуби': 'Luoghi e club', 'Спільний каталог місць': 'Catalogo condiviso dei luoghi', '+ Додати місце / клуб': '+ Aggiungi luogo / club',
+  'Новий запис додається окремо й не замінює вже створені клуби.': 'Ogni nuovo elemento viene aggiunto separatamente e non sostituisce i club esistenti.',
+  'Основне': 'Principale', 'Контакти не вказано': 'Contatti non indicati', 'Видалити місце': 'Elimina luogo',
+  'Каталог порожній': 'Il catalogo è vuoto', 'Додайте перше місце або клуб.': 'Aggiungi il primo luogo o club.',
+  'Каталог тимчасово недоступний': 'Il catalogo non è temporaneamente disponibile'
+});
+Object.assign(COPY.en, {
+  'Місця та клуби': 'Venues and clubs', 'Спільний каталог місць': 'Shared venue directory', '+ Додати місце / клуб': '+ Add venue / club',
+  'Новий запис додається окремо й не замінює вже створені клуби.': 'Each new entry is added separately and does not replace existing clubs.',
+  'Основне': 'Primary', 'Контакти не вказано': 'No contact details', 'Видалити місце': 'Delete venue',
+  'Каталог порожній': 'The directory is empty', 'Додайте перше місце або клуб.': 'Add the first venue or club.',
+  'Каталог тимчасово недоступний': 'The directory is temporarily unavailable'
+});
+Object.assign(COPY.fr, {
+  'Місця та клуби': 'Lieux et clubs', 'Спільний каталог місць': 'Catalogue partagé des lieux', '+ Додати місце / клуб': '+ Ajouter un lieu / club',
+  'Новий запис додається окремо й не замінює вже створені клуби.': 'Chaque nouvelle entrée est ajoutée séparément et ne remplace pas les clubs existants.',
+  'Основне': 'Principal', 'Контакти не вказано': 'Coordonnées non indiquées', 'Видалити місце': 'Supprimer le lieu',
+  'Каталог порожній': 'Le catalogue est vide', 'Додайте перше місце або клуб.': 'Ajoutez le premier lieu ou club.',
+  'Каталог тимчасово недоступний': 'Le catalogue est temporairement indisponible'
 });
 
 Object.assign(COPY.it, { 'Поділитися застосунком': 'Condividi l’app', 'Очистити розсадку': 'Svuota i posti' });

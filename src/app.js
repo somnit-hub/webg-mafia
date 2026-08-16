@@ -149,6 +149,7 @@ const BUILTIN_ENJOY_VENUE = Object.freeze({
 
 const THEMES = ['dark', 'light', 'cafe'];
 const THEME_COLORS = { dark: '#0d0c0b', light: '#e9e2d6', cafe: '#1a100b' };
+const PWA_VERSION = 191;
 const ANDROID_BLUETOOTH_SETTINGS_URL = 'intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end';
 const CLIENT_PLATFORM = /Android/i.test(navigator.userAgent)
   ? 'android'
@@ -238,6 +239,7 @@ let app = {
     setupRules: false,
     setupSeating: true,
     settingsVenues: false,
+    settingsAbout: false,
     statsActiveGames: false,
     statsSummary: true,
     statsTime: false,
@@ -1197,12 +1199,15 @@ function statePanel(kind, title, detail = '', action = '', compact = false) {
 function collapsiblePanel(id, title, explanation, content, className = '', headerAction = '') {
   const expanded = Boolean(app.panelExpanded[id]);
   const contentId = `panel-${id}`;
+  const headerTools = explanation || headerAction
+    ? `<div class="collapsible-head-tools">${explanation ? helpIcon(explanation, `Пояснення: ${title}`) : ''}${headerAction}</div>`
+    : '';
   return `<section class="card card-pad collapsible-panel ${expanded ? 'expanded' : 'collapsed'} ${className}" data-panel="${id}">
     <div class="collapsible-head section-heading">
       <button class="collapsible-toggle" type="button" data-action="toggle-panel" data-panel="${id}" aria-expanded="${expanded}" aria-controls="${contentId}">
         <span class="panel-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></span><h2>${title}</h2>
       </button>
-      <div class="collapsible-head-tools">${helpIcon(explanation, `Пояснення: ${title}`)}${headerAction}</div>
+      ${headerTools}
     </div>
     <div id="${contentId}" class="collapsible-content" ${expanded ? '' : 'hidden'}>${content}</div>
   </section>`;
@@ -1822,7 +1827,14 @@ function settingsView() {
       <div class="section-title section-heading">${titleHelp('h2', 'Резервна копія Google Drive', `Остання синхронізація: ${lastSync}. Окремий дозвіл drive.appdata надається лише після команди підключення; застосунок не бачить звичайні файли користувача.`)}<span class="badge ${drive.connected ? 'green' : ''}">${drive.connected ? 'Підключено' : 'Не підключено'}</span></div>
       <div class="actions drive-actions">${drive.connected ? '<button class="btn primary" data-action="cloud-push">Зберегти у Drive</button><button class="btn secondary" data-action="cloud-pull">Відновити з Drive</button><button class="btn secondary" data-action="drive-disconnect">Відключити Drive</button>' : '<button class="btn primary" data-action="drive-connect">Увімкнути резервну копію</button>'}</div>
     </section>
-    <section class="card card-pad"><div class="section-title section-heading">${titleHelp('h2', 'Про застосунок', 'Версія 3.1 · Enjoy Editorial. Створено для мафія-спільноти кав’ярні Enjoy. PWA працює на GitHub Pages і кешує оболонку, Google-сесію, профілі та спільний архів для офлайн-запуску після першого входу.')}</div><div class="divider"></div><div class="section-title section-heading rules-title">${titleHelp('h3', 'Правила спортивної «Мафії»', 'Тут доступні регламент, жести ведучого та турнірні процедури. Основне посилання веде на актуальні правила iMafia українською; перед турніром звіряйте редакцію з регламентом організатора.')}</div><div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div></section>
+    <section class="card card-pad"><div class="section-title section-heading rules-title">${titleHelp('h2', 'Правила спортивної «Мафії»', 'Тут доступні регламент, жести ведучого та турнірні процедури. Основне посилання веде на актуальні правила iMafia українською; перед турніром звіряйте редакцію з регламентом організатора.')}</div><div class="actions rules-links"><a class="btn primary" href="${RULES_LINKS.ukrainian}" target="_blank" rel="noopener noreferrer">Правила iMafia українською</a><a class="btn secondary" href="${RULES_LINKS.international}" target="_blank" rel="noopener noreferrer">Міжнародний регламент ФІІМ</a></div></section>
+    ${collapsiblePanel(
+      'settingsAbout',
+      'Про застосунок',
+      '',
+      `<div class="about-app-copy"><p><strong>Поточна версія: PWA v${PWA_VERSION}.</strong> Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.</p><p>Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.</p></div>`,
+      'settings-about-panel'
+    )}
   </main>`;
 }
 
@@ -6128,7 +6140,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=190', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register(`./sw.js?v=${PWA_VERSION}`, { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

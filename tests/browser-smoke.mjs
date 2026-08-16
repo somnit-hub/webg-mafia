@@ -626,6 +626,33 @@ const rulesLinks = await evaluate(`({
   externalSafety: [...document.querySelectorAll('.rules-links a')].every(link => link.target === '_blank' && link.rel.includes('noopener')),
   arrowsAbsent: ![...document.querySelectorAll('a, button')].some(element => element.textContent.includes('↗'))
 })`);
+const settingsAboutDefault = await evaluate(`(() => {
+  const panel = document.querySelector('[data-panel="settingsAbout"]');
+  const content = panel?.querySelector('.collapsible-content');
+  return {
+    last: panel === document.querySelector('main')?.lastElementChild,
+    expanded: panel?.querySelector('[data-action="toggle-panel"]')?.getAttribute('aria-expanded'),
+    hidden: content?.hidden,
+    helpAbsent: !panel?.querySelector('.help[data-tooltip]')
+  };
+})()`);
+await click('[data-action="toggle-panel"][data-panel="settingsAbout"]');
+const settingsAboutExpanded = await evaluate(`(() => {
+  const panel = document.querySelector('[data-panel="settingsAbout"]');
+  const content = panel?.querySelector('.collapsible-content');
+  const text = content?.textContent || '';
+  return {
+    expanded: panel?.querySelector('[data-action="toggle-panel"]')?.getAttribute('aria-expanded'),
+    hidden: content?.hidden,
+    paragraphs: content?.querySelectorAll('p').length,
+    version: text.includes('PWA v191'),
+    cache: text.includes('кешуються оболонка застосунку'),
+    session: text.includes('Google-сесія'),
+    profiles: text.includes('Профілі'),
+    archives: text.includes('спільні архіви'),
+    githubAbsent: !/github/i.test(text)
+  };
+})()`);
 const compactHelp = await evaluate(`({
   count: document.querySelectorAll('.help[data-tooltip]').length,
   visiblePageDescriptions: document.querySelectorAll('.page-head p').length,
@@ -1949,7 +1976,7 @@ const chromeByTab = { home: homeChrome, players: playersChrome, setup: setupChro
 const unifiedModalFrames = { mediaModalFrame, orderModalFrame, hostProfileModalFrame, accountDeleteModalFrame, playerModalFrame, venueModalFrame, setupMoveModalFrame, setupAvatarModalFrame, gameSettingsModalFrame, seatModalFrame, confirmModalFrame, winnerModalFrame, protocolModalFrame, personalStatsModalFrame };
 const languageSupport = { languageOptions, englishLanguage, frenchLanguage, italianLanguage, restoredUkrainianLanguage };
 const gameCardSystem = { roleReadyLayout, roleOpenLayout, gameSettingsAppearance, confirmModalAppearance, winnerModalAppearance, zeroNightSheriff, zeroNightFreeSeating, bestMoveLayout, bestMoveFarewell, afterBestMove };
-const result = { authenticatedHost, enjoyBrand, initialActiveGames, homeAverageGameTime, homeActiveGamesCollapsed, homeActiveGamesExpanded, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, headerShareControl, mediaPanel, preparedMedia, orderPanel, orderCategory, orderBack, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostProfileRenderStability, hostClubPicker, profileVenueCreate, profileVenueReturn, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsSummaryDefault, statsSummaryCollapsed, statsAnalysisPanels, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersExpanded, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelSpacing, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupTimersMobileLayout, setupMusic, setupMusicEnabled, setupGameExpanded, venuePicker, venueModal, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, clearedSeating, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, playerStatsShortcut, personalStats, personalFeedback, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, hostTransferInitial, hostTransferFiltered, runningTimerStability, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameCompactHeader, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, selfNomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
+const result = { authenticatedHost, enjoyBrand, initialActiveGames, homeAverageGameTime, homeActiveGamesCollapsed, homeActiveGamesExpanded, chromeByTab, mobileLayout, headerMediaControls, headerOrderControl, headerShareControl, mediaPanel, preparedMedia, orderPanel, orderCategory, orderBack, orderResult, compactLayout, tabletLayout, desktopLayout, ownerDatabases, hostProfileControls, hostProfileRenderStability, hostClubPicker, profileVenueCreate, profileVenueReturn, hostAvatarDraft, savedHostAvatar, editedHostName, profilePhotoSyncStatus, languageSupport, settingsHeaderBrandAbsent, settingsActionLayout, settingsTechnicalTermsAbsent, enjoyInfo, manualJsonTransferAbsent, themeOptions, darkPalette, lightPalette, cafeTheme, rulesLinks, settingsAboutDefault, settingsAboutExpanded, compactHelp, helpPopover, accountDeletion, unifiedModalFrames, statsSummaryDefault, statsSummaryCollapsed, statsAnalysisPanels, statsPanelDefault, statsPanelExpanded, statsPlayersDefault, statsPlayersExpanded, emptySharedStats, telegramImportAbsent, cameraControl, profile, presenceStatuses, lineupSelection, playersLayout, playersCompactLayout, setupPanelsDefault, setupPanelSpacing, setupPanelOrder, setupRulesLinks, setupTypography, setupCompactLayout, setupTimersMobileLayout, setupMusic, setupMusicEnabled, setupGameExpanded, venuePicker, venueModal, setupTimersCollapsed, setupSeatingCollapsed, randomTable, queuedTable, seatingOptionFilter, clearedSeating, setupAvatarPicker, temporaryAvatarLocked, temporaryGuestNames, seatMove, roleDealButton, preferredSeatName, playerStatsShortcut, personalStats, personalFeedback, gameCardSystem, roleSignals: [...new Set(roleAssignments.map(item => item.source))], zeroNightSignals, firstDay, hostTransferInitial, hostTransferFiltered, runningTimerStability, runningTimerAdjustment, timerNavigation, activeProfileLocks, activeGameHome, activeGameCompactHeader, activeGameStats, cancellationFromReveal, cancellationModal, cancelledGame, foreignLiveHome, foreignObserver, nomination, selfNomination, seatVisualStates, offlineShell, offlineReload, nightSignals, finishedSharedStats, protocolModal, queueAfterGame, browserErrors };
 console.log(JSON.stringify(result, null, 2));
 
 if (process.env.SMOKE_SCREENSHOT) {
@@ -2000,6 +2027,7 @@ verify(enjoyInfo.descriptionAbsent && enjoyInfo.instagramIcon && enjoyInfo.mapsI
 verify(manualJsonTransferAbsent, 'manual JSON import and export controls removed');
 verify(settingsTechnicalTermsAbsent, 'technical storage terms absent from settings');
 verify(rulesLinks.count === 2 && rulesLinks.ukrainian?.includes('imafia.org/game-rules') && rulesLinks.international?.includes('fiim.world/fiim-rules') && rulesLinks.externalSafety && rulesLinks.arrowsAbsent, 'rules links');
+verify(settingsAboutDefault.last && settingsAboutDefault.expanded === 'false' && settingsAboutDefault.hidden && settingsAboutDefault.helpAbsent && settingsAboutExpanded.expanded === 'true' && !settingsAboutExpanded.hidden && settingsAboutExpanded.paragraphs === 2 && settingsAboutExpanded.version && settingsAboutExpanded.cache && settingsAboutExpanded.session && settingsAboutExpanded.profiles && settingsAboutExpanded.archives && settingsAboutExpanded.githubAbsent, 'collapsible About app section is last, has no help icon, and exposes PWA v191 storage details');
 verify(compactHelp.count >= 8 && compactHelp.visiblePageDescriptions === 0 && compactHelp.visibleSectionDescriptions === 0 && compactHelp.visibleFieldHints === 0 && compactHelp.circular && helpPopover.visible && helpPopover.role === 'tooltip' && helpPopover.text.includes('Спільнота') && helpPopover.insideViewport, 'compact help tooltips');
 verify(accountDeletion.trashIconOnly && accountDeletion.trashButtonSize >= 40 && accountDeletion.dialog && accountDeletion.title === 'Видалити профіль Mafia?' && accountDeletion.retentionCopyAbsent && accountDeletion.confirm === 'Видалити профіль' && accountDeletion.focused && accountDeletion.scrollTop === 0 && accountDeletion.top >= 6 && accountDeletion.top <= 8 && accountDeletion.left === 6 && accountDeletion.rightGap === 6 && accountDeletion.bottomWithinViewport && accountDeletion.backdropAlign === 'start' && accountDeletion.bordered, 'account deletion controls');
 verify(Object.values(unifiedModalFrames).length === 14 && Object.values(unifiedModalFrames).every(isUnifiedModal), 'unified mobile modal frames');

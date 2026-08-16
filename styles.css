@@ -788,6 +788,9 @@ img { display: block; max-width: 100%; }
 .migration-stats .stat-card { border: 1px solid var(--line); border-radius: 13px; background: var(--row-bg); }
 .rules-title { margin-bottom: 10px; }
 .rules-links .btn { flex: 1 1 240px; }
+.about-app-copy { display: grid; gap: 8px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.about-app-copy p { margin: 0; }
+.about-app-copy strong { color: var(--text); }
 
 .seat-setup { display: grid; gap: 5px; }
 .seat-setup-row { min-width: 0; padding: 0; display: grid; grid-template-columns: 34px 44px 40px minmax(0, 1fr) 44px; align-items: center; gap: 8px; border: 0; border-radius: 0; background: transparent; }

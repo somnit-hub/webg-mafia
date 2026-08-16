@@ -965,6 +965,22 @@ Object.assign(COPY.fr, {
   'Результати за місцями': 'Résultats par lieu', 'перші 5 за кількістю ігор': 'top 5 par nombre de parties'
 });
 
+Object.assign(COPY.en, {
+  'Поточна версія: PWA v191.': 'Current version: PWA v191.',
+  'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'The app shell, styles, icons, and built-in music are cached for a fast start.',
+  'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'The Google session is stored on this device. Profiles and shared archives synchronize after sign-in, while local data helps the app keep working during a brief network outage.'
+});
+Object.assign(COPY.fr, {
+  'Поточна версія: PWA v191.': 'Version actuelle : PWA v191.',
+  'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'La structure de l’application, les styles, les icônes et la musique intégrée sont mis en cache pour un démarrage rapide.',
+  'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'La session Google est conservée sur cet appareil. Les profils et les archives partagées se synchronisent après la connexion, tandis que les données locales permettent de continuer lors d’une brève coupure réseau.'
+});
+Object.assign(COPY.it, {
+  'Поточна версія: PWA v191.': 'Versione attuale: PWA v191.',
+  'Для швидкого запуску кешуються оболонка застосунку, стилі, іконки та вбудована музика.': 'La struttura dell’app, gli stili, le icone e la musica integrata vengono memorizzati nella cache per un avvio rapido.',
+  'Google-сесія зберігається на цьому пристрої. Профілі та спільні архіви синхронізуються після входу, а локальні дані допомагають продовжити роботу під час короткої втрати мережі.': 'La sessione Google viene conservata su questo dispositivo. I profili e gli archivi condivisi si sincronizzano dopo l’accesso, mentre i dati locali consentono di continuare durante una breve interruzione della rete.'
+});
+
 const PATTERNS = {
   it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+) оцінок/g, '$1 valutazioni'], [/(\d+)% перемог/g, '$1% vittorie'], [/(\d+) учасн\./g, '$1 partecipanti'], [/(\d+) авторизованих профілів/g, '$1 profili autenticati'], [/(\d+) гостей без доступу/g, '$1 ospiti senza accesso'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Ранг (\d+)/g, 'Posizione $1'], [/(\d+(?:[,.]\d+)?) балів/g, '$1 punti'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
   en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+) оцінок/g, '$1 ratings'], [/(\d+)% перемог/g, '$1% wins'], [/(\d+) учасн\./g, '$1 participants'], [/(\d+) авторизованих профілів/g, '$1 signed-in profiles'], [/(\d+) гостей без доступу/g, '$1 guests without access'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Ранг (\d+)/g, 'Rank $1'], [/(\d+(?:[,.]\d+)?) балів/g, '$1 points'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],

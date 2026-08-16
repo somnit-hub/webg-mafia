@@ -101,6 +101,18 @@ export function canLiftTiedCandidates({ day = 1, aliveCount = 10, tiedCount = 0 
   return true;
 }
 
+export function nominationIsAllowed(game, targetNumber, speakerNumber) {
+  const target = Number(targetNumber);
+  const speaker = Number(speakerNumber);
+  if (!game || game.phase !== 'day' || game.subphase !== 'speeches') return false;
+  if (!Number.isInteger(target) || !Number.isInteger(speaker)) return false;
+  const targetSeat = game.seats?.find(seat => seat.number === target);
+  const speakerSeat = game.seats?.find(seat => seat.number === speaker);
+  if (targetSeat?.status !== 'alive' || speakerSeat?.status !== 'alive') return false;
+  if ((game.nominations || []).map(Number).includes(target)) return false;
+  return !game.seats.some(seat => Number(seat.nominatedBy) === speaker);
+}
+
 export function nightTargetIsAllowed(game, number) {
   const seatNumber = Number(number);
   if (!game || game.phase !== 'night' || ![1, 2, 3].includes(game.night?.step)) return false;

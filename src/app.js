@@ -31,7 +31,7 @@ import {
 } from './cloud-games.js?v=156';
 import { adjustTimerBy, crossedCountdownWarning, timerRemainingAt } from './timer.js';
 import {
-  canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, normalizeGameState, resolveVote,
+  canLiftTiedCandidates, createNumberRoleDeal, gameStateErrors, nightTargetIsAllowed, nominationIsAllowed, normalizeGameState, resolveVote,
   secureShuffle, selectNumberRoleCard, takeNumberRoleCard, toggleBestMoveCandidate, victoryForSeats
 } from './game-engine.js';
 import {
@@ -2052,7 +2052,7 @@ function playerLinkOfferModalHtml() {
 function seatModalHtml() {
   const seat = seatByNo(app.modal.seat);
   const role = roleOf(seat);
-  const canNominate = app.game.phase === 'day' && app.game.subphase === 'speeches' && seat.status === 'alive' && currentSpeaker()?.number !== seat.number && !app.game.nominations.includes(seat.number);
+  const canNominate = nominationIsAllowed(app.game, seat.number, currentSpeaker()?.number);
   return `<div class="modal-backdrop" data-action="close-modal"><div class="card modal game-modal seat-control-modal ${seat.status === 'alive' ? 'seat-alive-modal' : 'seat-dead-modal'}" aria-modal="true" role="dialog" aria-label="Керування гравцем на місці ${seat.number}">
     <button class="icon-btn modal-close" type="button" data-action="close-modal" aria-label="Закрити">×</button>
     <div class="seat-sheet-head ${seat.status === 'alive' ? 'alive' : 'dead'}"><div class="seat-sheet-number"><span>Місце</span><strong>${seat.number}</strong></div><div class="seat-sheet-player">${avatar({ ...(seat.profileId ? playerById(seat.profileId) : {}), name: seat.name }, '')}<div class="seat-sheet-copy"><h2>${esc(seat.name)}</h2><span class="badge ${seat.status === 'alive' ? 'green' : ''}">${seat.status === 'alive' ? 'За столом' : 'Вибув'}</span></div></div></div>
@@ -2763,9 +2763,9 @@ async function nominate(number) {
   const target = seatByNo(number);
   const speaker = currentSpeaker();
   if (!target || target.status !== 'alive' || !speaker) return;
-  if (target.number === speaker.number) return toast('Себе виставляти не можна');
   if (app.game.nominations.includes(number)) return toast('Гравця вже виставлено');
   if (app.game.seats.some(seat => seat.nominatedBy === speaker.number)) return toast('Поточний гравець уже зробив номінацію');
+  if (!nominationIsAllowed(app.game, number, speaker.number)) return;
   pushUndo();
   app.game.nominations.push(number);
   target.nominatedBy = speaker.number;
@@ -5210,7 +5210,7 @@ async function init() {
   void refreshBluetoothState();
   void refreshOrderMenu();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('./sw.js?v=174', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('./sw.js?v=175', { updateViaCache: 'none' }).catch(() => {});
   }
   try {
     if (LOCAL_AUTH_TEST) {

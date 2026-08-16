@@ -888,6 +888,61 @@ Object.assign(COPY.fr, {
   'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; −0,8 за дискваліфікацію через 4-й фол. КР — сума балів останніх 100 ігор, поділена на 100.': 'Partie automatique du système FIIM/MWT : 1,3 point pour une victoire, 0,3 pour une défaite, 0 pour un nul ; +0,5/+0,7 pour un meilleur coup 2/3 ou 3/3 ; −0,8 pour une disqualification au quatrième avertissement. CR est la somme des points des 100 dernières parties divisée par 100.'
 });
 
+Object.assign(COPY.it, {
+  'Період аналізу': 'Periodo di analisi', 'Період статистики': 'Periodo delle statistiche', 'Увесь час': 'Tutto il periodo',
+  '30 днів': '30 giorni', '90 днів': '90 giorni', '12 місяців': '12 mesi', 'Ключові показники': 'Indicatori chiave',
+  'нічиїх': 'pareggi', 'максимальний ігровий день': 'giornata massima di gioco', 'унікальних гравців': 'giocatori unici',
+  'Час і темп гри': 'Durata e ritmo', 'медіанний час': 'durata mediana', 'найкоротша гра': 'partita più breve',
+  'найдовша гра': 'partita più lunga', 'середній інтервал між стартами': 'intervallo medio tra gli inizi',
+  'Фази за протоколом': 'Fasi dal registro', 'Ураховано лише відрізки з повними часовими мітками': 'Sono inclusi solo gli intervalli con marcatori temporali completi',
+  'Підготовка столу': 'Preparazione del tavolo', 'від створення гри до першого дня': 'dalla creazione al primo giorno',
+  'Ігровий день': 'Giorno di gioco', 'від початку дня до оголошення ночі': 'dall’inizio del giorno all’annuncio della notte',
+  'Ніч': 'Notte', 'від оголошення ночі до наступного дня або фінішу': 'dall’annuncio della notte al giorno successivo o alla fine',
+  'Активність і динаміка': 'Attività e andamento', 'Останні 7 днів': 'Ultimi 7 giorni', 'Останні 30 днів': 'Ultimi 30 giorni',
+  'без змін': 'nessuna variazione', 'Середній фінальний день': 'Giorno finale medio', 'Найдовша пауза між стартами': 'Pausa più lunga tra gli inizi',
+  'Динаміка за 6 місяців': 'Andamento su 6 mesi', 'кількість завершених ігор': 'partite concluse',
+  'Місця, розклад і дисципліна': 'Luoghi, orari e disciplina', 'найактивніший день тижня': 'giorno più attivo',
+  'найчастіший час старту': 'fascia di inizio più frequente', 'місць / клубів': 'luoghi / club',
+  'фолів у середньому за гру': 'falli medi per partita', 'дискваліфікацій за 4-й фол': 'squalifiche al quarto fallo',
+  'Результати за місцями': 'Risultati per luogo', 'перші 5 за кількістю ігор': 'primi 5 per numero di partite'
+});
+Object.assign(COPY.en, {
+  'Період аналізу': 'Analysis period', 'Період статистики': 'Statistics period', 'Увесь час': 'All time',
+  '30 днів': '30 days', '90 днів': '90 days', '12 місяців': '12 months', 'Ключові показники': 'Key indicators',
+  'нічиїх': 'draws', 'максимальний ігровий день': 'latest game day', 'унікальних гравців': 'unique players',
+  'Час і темп гри': 'Game time and pace', 'медіанний час': 'median duration', 'найкоротша гра': 'shortest game',
+  'найдовша гра': 'longest game', 'середній інтервал між стартами': 'average gap between starts',
+  'Фази за протоколом': 'Phases from the game log', 'Ураховано лише відрізки з повними часовими мітками': 'Only intervals with complete timestamps are included',
+  'Підготовка столу': 'Table setup', 'від створення гри до першого дня': 'from game creation to day one',
+  'Ігровий день': 'Game day', 'від початку дня до оголошення ночі': 'from the start of the day to the night announcement',
+  'Ніч': 'Night', 'від оголошення ночі до наступного дня або фінішу': 'from the night announcement to the next day or finish',
+  'Активність і динаміка': 'Activity and trends', 'Останні 7 днів': 'Last 7 days', 'Останні 30 днів': 'Last 30 days',
+  'без змін': 'no change', 'Середній фінальний день': 'Average final day', 'Найдовша пауза між стартами': 'Longest gap between starts',
+  'Динаміка за 6 місяців': 'Six-month trend', 'кількість завершених ігор': 'completed games',
+  'Місця, розклад і дисципліна': 'Venues, schedule and discipline', 'найактивніший день тижня': 'most active weekday',
+  'найчастіший час старту': 'most common start window', 'місць / клубів': 'venues / clubs',
+  'фолів у середньому за гру': 'average fouls per game', 'дискваліфікацій за 4-й фол': 'fourth-foul disqualifications',
+  'Результати за місцями': 'Results by venue', 'перші 5 за кількістю ігор': 'top 5 by game count'
+});
+Object.assign(COPY.fr, {
+  'Період аналізу': 'Période d’analyse', 'Період статистики': 'Période des statistiques', 'Увесь час': 'Toute la période',
+  '30 днів': '30 jours', '90 днів': '90 jours', '12 місяців': '12 mois', 'Ключові показники': 'Indicateurs clés',
+  'нічиїх': 'matchs nuls', 'максимальний ігровий день': 'jour de jeu maximal', 'унікальних гравців': 'joueurs uniques',
+  'Час і темп гри': 'Durée et rythme', 'медіанний час': 'durée médiane', 'найкоротша гра': 'partie la plus courte',
+  'найдовша гра': 'partie la plus longue', 'середній інтервал між стартами': 'intervalle moyen entre les débuts',
+  'Фази за протоколом': 'Phases du compte rendu', 'Ураховано лише відрізки з повними часовими мітками': 'Seuls les intervalles avec horodatage complet sont inclus',
+  'Підготовка столу': 'Préparation de la table', 'від створення гри до першого дня': 'de la création au premier jour',
+  'Ігровий день': 'Jour de jeu', 'від початку дня до оголошення ночі': 'du début du jour à l’annonce de la nuit',
+  'Ніч': 'Nuit', 'від оголошення ночі до наступного дня або фінішу': 'de l’annonce de la nuit au jour suivant ou à la fin',
+  'Активність і динаміка': 'Activité et tendances', 'Останні 7 днів': '7 derniers jours', 'Останні 30 днів': '30 derniers jours',
+  'без змін': 'sans changement', 'Середній фінальний день': 'Jour final moyen', 'Найдовша пауза між стартами': 'Plus longue pause entre les débuts',
+  'Динаміка за 6 місяців': 'Tendance sur 6 mois', 'кількість завершених ігор': 'parties terminées',
+  'Місця, розклад і дисципліна': 'Lieux, horaires et discipline', 'найактивніший день тижня': 'jour le plus actif',
+  'найчастіший час старту': 'plage de départ la plus fréquente', 'місць / клубів': 'lieux / clubs',
+  'фолів у середньому за гру': 'fautes moyennes par partie', 'дискваліфікацій за 4-й фол': 'disqualifications à la quatrième faute',
+  'Результати за місцями': 'Résultats par lieu', 'перші 5 за кількістю ігор': 'top 5 par nombre de parties'
+});
+
 const PATTERNS = {
   it: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 h'], [/(\d+) ігор/g, '$1 partite'], [/(\d+) оцінок/g, '$1 valutazioni'], [/(\d+)% перемог/g, '$1% vittorie'], [/(\d+) учасн\./g, '$1 partecipanti'], [/(\d+) авторизованих профілів/g, '$1 profili autenticati'], [/(\d+) гостей без доступу/g, '$1 ospiti senza accesso'], [/тимчасових (\d+)/g, '$1 temporanei'], [/черга (\d+)/g, 'coda $1'], [/ · ведучий /g, ' · conduttore '], [/(\d+) гравців за столом/g, '$1 giocatori al tavolo'], [/(\d+)\/10 живих/g, '$1/10 vivi'], [/Ранг (\d+)/g, 'Posizione $1'], [/(\d+(?:[,.]\d+)?) балів/g, '$1 punti'], [/Екран бачить лише гравець №(\d+)/g, 'Solo il giocatore n. $1 può vedere lo schermo'], [/Змінити аватар/g, 'Cambia avatar']],
   en: [[/(\d+) хв/g, '$1 min'], [/(\d+) год/g, '$1 hr'], [/(\d+) ігор/g, '$1 games'], [/(\d+) оцінок/g, '$1 ratings'], [/(\d+)% перемог/g, '$1% wins'], [/(\d+) учасн\./g, '$1 participants'], [/(\d+) авторизованих профілів/g, '$1 signed-in profiles'], [/(\d+) гостей без доступу/g, '$1 guests without access'], [/тимчасових (\d+)/g, '$1 temporary'], [/черга (\d+)/g, 'queue $1'], [/ · ведучий /g, ' · host '], [/(\d+) гравців за столом/g, '$1 players at the table'], [/(\d+)\/10 живих/g, '$1/10 alive'], [/Ранг (\d+)/g, 'Rank $1'], [/(\d+(?:[,.]\d+)?) балів/g, '$1 points'], [/Екран бачить лише гравець №(\d+)/g, 'Only player #$1 can see the screen'], [/Змінити аватар/g, 'Change avatar']],

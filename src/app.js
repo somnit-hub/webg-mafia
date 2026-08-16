@@ -47,13 +47,14 @@ import {
   GAME_EMOTIONS, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
 import { mafiaPlayerRankings } from './player-ranking.js';
+import { buildGameStatistics, filterGamesByPeriod, gameActivityComparison } from './game-statistics.js';
 import {
   createCommunityVenueFields, saveCommunityVenue, subscribeCommunityVenues, stopCommunityVenues
 } from './cloud-venues.js';
 import { filterVenues, gameTitleForVenue, googleMapsVenueSuggestion } from './venue-directory.js';
 import {
-  BUILTIN_GAME_TRACKS, DEFAULT_GAME_MUSIC, GAME_MUSIC_CUES, builtinGameTrack,
-  customMusicChoice, musicCueForGame, normalizeGameMusicSettings
+  BUILTIN_GAME_TRACKS, DEFAULT_GAME_MUSIC, GAME_MUSIC_CUES, GAME_MUSIC_DEFAULTS_VERSION, builtinGameTrack,
+  customMusicChoice, migrateGameMusicSettings, musicCueForGame, normalizeGameMusicSettings
 } from './game-music.js';
 import {
   GAME_CHAT_EMOTIONS, authorizedGameParticipantUids, canJoinActiveGameChat, createGameChatDocument, deleteGameChat, ensureGameChat,
@@ -129,6 +130,7 @@ const DEFAULT_SETTINGS = {
   lastGetsRemainder: true,
   dealMode: 'number',
   penaltyMode: 'tournament',
+  musicDefaultsVersion: GAME_MUSIC_DEFAULTS_VERSION,
   music: DEFAULT_GAME_MUSIC
 };
 
@@ -184,6 +186,7 @@ let app = {
   wakeLock: null,
   toastHandle: null,
   search: '',
+  statsPeriod: 'all',
   nextGameQueue: [],
   authReady: false,
   authConfigured: false,
@@ -234,6 +237,10 @@ let app = {
     setupRules: false,
     setupSeating: true,
     statsActiveGames: false,
+    statsSummary: true,
+    statsTime: false,
+    statsActivity: false,
+    statsVenues: false,
     statsRoles: false,
     statsPlayers: false,
     statsArchiveGames: false
@@ -249,6 +256,10 @@ let cloudArchiveMigrationStarted = false;
 let activeGamePublishPromise = null;
 let activeGamePublishRetryHandle = null;
 let profilePresenceHandle = null;
+let renderedRoute = '';
+let renderedModalKey = '';
+let renderRevision = 0;
+let passiveRenderPending = false;
 const pendingActiveGames = new Map();
 const activeGameRecoveryAttempts = new Set();
 const ensuredActiveGameChats = new Set();
@@ -1039,6 +1050,7 @@ function headerControlIcon(name) {
     bluetooth: '<path d="M7 7l10 10-5 4V3l5 4L7 17"/><path d="m4 8 8 8m-8 0 8-8"/>',
     play: '<path d="m8 5 11 7-11 7V5Z"/>',
     pause: '<path d="M8 5v14m8-14v14"/>',
+    file: '<path d="M4 5h6l2 2h8v12H4V5Z"/><path d="M12 16v-6m-3 3 3-3 3 3"/>',
     share: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.4M8.2 13.2l7.6 4.4"/>',
     order: '<path d="M4 16h16M6 16a6 6 0 0 1 12 0M3 20h18M12 6v2"/><circle cx="12" cy="4" r="1"/>',
     cancelGame: '<circle cx="12" cy="12" r="8"/><path d="m9 9 6 6m0-6-6 6"/>'
@@ -1495,7 +1507,7 @@ function setupMusicCueHtml(cue, settings) {
   return `<article class="setup-music-cue" data-music-cue-card="${cue.id}">
     <div class="setup-music-cue-copy"><b>${esc(cue.label)}</b><small>${esc(cue.description)}</small></div>
     <div class="field"><label for="setup-music-choice-${cue.id}">Мелодія</label><select id="setup-music-choice-${cue.id}" class="select" data-input="setup-music-choice" data-music-cue="${cue.id}">${options}<option value="${customValue}" ${choice === customValue ? 'selected' : ''}>${esc(customLabel)}</option></select></div>
-    <div class="setup-music-actions"><button class="btn small secondary" type="button" data-action="preview-setup-music" data-music-cue="${cue.id}">${headerControlIcon('play')}<span>Прослухати</span></button><button class="btn small secondary setup-music-pause-action" type="button" data-action="pause-setup-music" data-music-cue="${cue.id}" aria-label="Призупинити музику" title="Призупинити музику" ${previewPlaying ? '' : 'disabled'}>${headerControlIcon('pause')}</button><label class="btn small secondary setup-music-file-button" for="${inputId}">Файл з пристрою</label></div>
+    <div class="setup-music-actions" role="group" aria-label="Керування мелодією ${esc(cue.label)}"><button class="btn small secondary" type="button" data-action="preview-setup-music" data-music-cue="${cue.id}" aria-label="Прослухати" title="Прослухати">${headerControlIcon('play')}</button><button class="btn small secondary setup-music-pause-action" type="button" data-action="pause-setup-music" data-music-cue="${cue.id}" aria-label="Пауза" title="Пауза" ${previewPlaying ? '' : 'disabled'}>${headerControlIcon('pause')}</button><button class="btn small secondary setup-music-file-button" type="button" data-action="choose-setup-music-file" data-music-cue="${cue.id}" aria-label="Файл з пристрою" title="Файл з пристрою">${headerControlIcon('file')}</button></div>
     <input id="${inputId}" class="visually-hidden" type="file" accept="audio/*" data-input="setup-music-file" data-music-cue="${cue.id}">
     ${customMissing ? '<small class="setup-music-warning">Після перезавантаження виберіть файл повторно. До цього гратиме вбудована мелодія.</small>' : custom ? `<small class="setup-music-local">${esc(custom.name)} · лише на цьому пристрої</small>` : ''}
   </article>`;
@@ -1574,45 +1586,124 @@ function draftSeatLabel(seat) {
   return preferredPlayerName(playerById(seat?.profileId)) || String(seat?.name || '').trim() || 'Тимчасовий гравець';
 }
 
-function aggregateStats() {
-  const games = finishedGames();
-  const totalSeconds = games.reduce((sum, game) => sum + (game.durationSeconds || 0), 0);
-  const averageSeconds = games.length ? Math.round(totalSeconds / games.length) : 0;
-  const redWins = games.filter(game => game.winner === 'red').length;
-  const blackWins = games.filter(game => game.winner === 'black').length;
-  const redWinRate = games.length ? Math.round(redWins / games.length * 100) : 0;
-  return { games: games.length, totalSeconds, averageSeconds, redWinRate, blackWinRate: games.length ? Math.round(blackWins / games.length * 100) : 0 };
-}
-
 function sharedLeaderboard(games) {
   return mafiaPlayerRankings(games, playerById);
 }
 
+function statisticsPeriodPicker() {
+  const periods = [
+    { key: 'all', label: 'Увесь час' },
+    { key: '30d', label: '30 днів' },
+    { key: '90d', label: '90 днів' },
+    { key: '365d', label: '12 місяців' }
+  ];
+  return `<section class="card stats-period-bar"><div><span class="eyebrow">Період аналізу</span><b>${esc(periods.find(period => period.key === app.statsPeriod)?.label || periods[0].label)}</b></div><div class="stats-period-options" role="group" aria-label="Період статистики">${periods.map(period => `<button class="btn small ${app.statsPeriod === period.key ? 'primary' : 'secondary'}" type="button" data-action="set-stats-period" data-stats-period="${period.key}" aria-pressed="${app.statsPeriod === period.key}">${period.label}</button>`).join('')}</div></section>`;
+}
+
+function formatStatisticsDuration(seconds) {
+  return seconds > 0 ? formatDuration(seconds) : '—';
+}
+
+function formatStatisticsGap(seconds) {
+  if (!(seconds > 0)) return '—';
+  const hours = Math.round(seconds / 3600);
+  if (hours < 48) return formatDuration(seconds);
+  const days = Math.floor(hours / 24);
+  const remainder = hours % 24;
+  return `${days} дн${remainder ? ` ${remainder} год` : ''}`;
+}
+
+function statisticsDelta(value) {
+  if (!value) return '<span class="stats-delta neutral">без змін</span>';
+  return `<span class="stats-delta ${value > 0 ? 'positive' : 'negative'}">${value > 0 ? '+' : '−'}${Math.abs(value)}</span>`;
+}
+
+function statisticsMonthLabel(item) {
+  return new Intl.DateTimeFormat(languageLocale(app.settings.language), { month: 'short', year: '2-digit' })
+    .format(new Date(item.year, item.month, 1));
+}
+
+function statisticsWeekdayLabel(index) {
+  if (!Number.isInteger(index)) return '—';
+  const referenceSunday = new Date(2026, 7, 16);
+  referenceSunday.setDate(referenceSunday.getDate() + index);
+  return new Intl.DateTimeFormat(languageLocale(app.settings.language), { weekday: 'long' }).format(referenceSunday);
+}
+
+function statisticsStartWindowLabel(index) {
+  return ['00:00–05:59', '06:00–11:59', '12:00–17:59', '18:00–23:59'][index] || '—';
+}
+
+function statisticsMetric(value, label) {
+  return `<article class="stats-mini-card"><b>${value}</b><span>${label}</span></article>`;
+}
+
+function statisticsPhaseRow(label, detail, phase) {
+  return `<div class="stats-phase-row"><div><b>${label}</b><span>${detail}</span></div><strong>${formatStatisticsDuration(phase.averageSeconds)}</strong><small>${phase.samples ? `${phase.samples} вимір.` : 'немає міток'}</small></div>`;
+}
+
 function statsView() {
-  const games = finishedGames();
+  const allGames = finishedGames();
+  const games = filterGamesByPeriod(allGames, app.statsPeriod);
   const active = activeGames();
-  const aggregate = aggregateStats();
+  const statistics = buildGameStatistics(games);
+  const aggregate = statistics.summary;
+  const activity = gameActivityComparison(allGames);
   const leaderboard = sharedLeaderboard(games);
   const roles = ['citizen', 'sheriff', 'mafia', 'don'].map(key => {
     const appearances = games.flatMap(game => game.seats.map(seat => ({ game, seat }))).filter(item => item.seat.role === key);
     const wins = appearances.filter(item => item.game.winner === teamOf(item.seat)).length;
     return { label: ROLE_DECK.find(role => role.key === key)?.label || key, games: appearances.length, rate: appearances.length ? Math.round(wins / appearances.length * 100) : 0 };
   });
+  const maximumMonthGames = Math.max(1, ...statistics.months.map(month => month.games));
+  const timePanel = `<div class="stats-detail-grid">
+    ${statisticsMetric(formatStatisticsDuration(aggregate.medianSeconds), 'медіанний час')}
+    ${statisticsMetric(formatStatisticsDuration(aggregate.shortestSeconds), 'найкоротша гра')}
+    ${statisticsMetric(formatStatisticsDuration(aggregate.longestSeconds), 'найдовша гра')}
+    ${statisticsMetric(formatStatisticsGap(statistics.cadence.averageGapSeconds), 'середній інтервал між стартами')}
+  </div><div class="stats-subheading"><b>Фази за протоколом</b><span>Ураховано лише відрізки з повними часовими мітками</span></div><div class="stats-phase-list">
+    ${statisticsPhaseRow('Підготовка столу', 'від створення гри до першого дня', statistics.phases.setup)}
+    ${statisticsPhaseRow('Ігровий день', 'від початку дня до оголошення ночі', statistics.phases.day)}
+    ${statisticsPhaseRow('Ніч', 'від оголошення ночі до наступного дня або фінішу', statistics.phases.night)}
+  </div>`;
+  const activityPanel = `<div class="stats-compare-grid">
+    <article><span>Останні 7 днів</span><b>${activity.current7} ігор</b>${statisticsDelta(activity.delta7)}<small>попередні 7: ${activity.previous7}</small></article>
+    <article><span>Останні 30 днів</span><b>${activity.current30} ігор</b>${statisticsDelta(activity.delta30)}<small>попередні 30: ${activity.previous30}</small></article>
+    <article><span>Середній фінальний день</span><b>${aggregate.averageDays || '—'}</b><small>максимальний: ${aggregate.maxDays || '—'}</small></article>
+    <article><span>Найдовша пауза між стартами</span><b>${formatStatisticsGap(statistics.cadence.maxGapSeconds)}</b><small>${statistics.cadence.gapSamples} інтерв.</small></article>
+  </div><div class="stats-subheading"><b>Динаміка за 6 місяців</b><span>кількість завершених ігор</span></div><div class="bar-chart stats-month-chart">${statistics.months.map(month => `<div class="bar-row"><span>${esc(statisticsMonthLabel(month))}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round(month.games / maximumMonthGames * 100)}%"></div></div><span class="bar-value">${month.games}</span></div>`).join('')}</div>`;
+  const venuesPanel = `<div class="stats-detail-grid stats-schedule-grid">
+    ${statisticsMetric(statisticsWeekdayLabel(statistics.cadence.peakWeekday), 'найактивніший день тижня')}
+    ${statisticsMetric(statisticsStartWindowLabel(statistics.cadence.peakStartWindow), 'найчастіший час старту')}
+    ${statisticsMetric(aggregate.uniqueVenues, 'місць / клубів')}
+    ${statisticsMetric(aggregate.averageFaults, 'фолів у середньому за гру')}
+    ${statisticsMetric(aggregate.disqualifications, 'дискваліфікацій за 4-й фол')}
+  </div><div class="stats-subheading"><b>Результати за місцями</b><span>перші 5 за кількістю ігор</span></div>${statistics.venues.length ? `<div class="list stats-venue-list">${statistics.venues.slice(0, 5).map(venue => `<div class="list-row"><div class="list-main"><b>${esc(venue.name)}</b><span>${venue.games} ігор · ${formatStatisticsDuration(venue.averageSeconds)} у середньому${venue.draws ? ` · нічиї: ${venue.draws}` : ''}</span></div><div class="stats-venue-results"><span class="badge red">Місто ${venue.redWinRate}%</span><span class="badge">Мафія ${venue.blackWinRate}%</span></div></div>`).join('')}</div>` : statePanel('empty', 'Місця ще не вказували', 'Оберіть місце або клуб у налаштуваннях нової гри.', '', true)}`;
   return `<main class="page tab-page">
-    ${pageHeader('Статистика', 'Активні ігри та спільні результати завершених ігор усіх ведучих.', '<button class="btn small secondary" data-action="cloud-games-refresh">Оновити</button>')}
-    ${statusStrip(app.cloudArchive.status, archiveStatusText(), app.cloudArchive.error, `${active.length} активних і ${games.length} завершених ігор доступно всім авторизованим учасникам.`)}
+    ${pageHeader('Статистика', 'Результати, темп, фази, активність, місця та рейтинг завершених ігор усіх ведучих.', '<button class="btn small secondary" data-action="cloud-games-refresh">Оновити</button>')}
+    ${statusStrip(app.cloudArchive.status, archiveStatusText(), app.cloudArchive.error, `${active.length} активних і ${allGames.length} завершених ігор доступно всім авторизованим учасникам.`)}
     ${activeGamesPanel(active, false, 'statsActiveGames')}
-    <section class="stat-grid stats-summary-grid">
+    ${statisticsPeriodPicker()}
+    ${collapsiblePanel('statsSummary', 'Ключові показники', 'Числовий підсумок за вибраний період можна сховати або розгорнути цією кнопкою.', `<section class="stat-grid stats-summary-grid">
       <article class="card stat-card"><b>${aggregate.games}</b><span>ігор</span></article>
       <article class="card stat-card"><b>${aggregate.redWinRate}%</b><span>перемог міста</span></article>
       <article class="card stat-card"><b>${aggregate.blackWinRate}%</b><span>перемог мафії</span></article>
+      <article class="card stat-card"><b>${aggregate.drawRate}%</b><span>нічиїх</span></article>
+      <article class="card stat-card"><b>${formatStatisticsDuration(aggregate.averageSeconds)}</b><span>середній час гри</span></article>
       <article class="card stat-card"><b>${formatDuration(aggregate.totalSeconds)}</b><span>загальний час</span></article>
-    </section>
+      <article class="card stat-card"><b>${aggregate.maxDays || '—'}</b><span>максимальний ігровий день</span></article>
+      <article class="card stat-card"><b>${aggregate.uniquePlayers}</b><span>унікальних гравців</span></article>
+    </section>`, 'stats-summary-panel')}
+    <div class="grid two stats-analysis-panels">
+      ${collapsiblePanel('statsTime', 'Час і темп гри', 'Тривалість і фазові відрізки обчислюються з фактичних часових міток протоколу. Старі ігри без міток не спотворюють середні значення.', timePanel)}
+      ${collapsiblePanel('statsActivity', 'Активність і динаміка', 'Порівняння останніх періодів, ігрові дні та частота проведення столів.', activityPanel)}
+    </div>
+    ${collapsiblePanel('statsVenues', 'Місця, розклад і дисципліна', 'Зріз за клубами, типовим часом старту та зафіксованими фолами у вибраному періоді.', venuesPanel)}
     <div class="grid two stats-panels">
       ${collapsiblePanel('statsRoles', 'Результативність ролей', 'Показано частку перемог команди гравця для кожної ролі.', `<div class="bar-chart">${roles.map(role => `<div class="bar-row"><span>${esc(role.label)}</span><div class="bar-track"><div class="bar-fill" style="width:${role.rate}%"></div></div><span class="bar-value">${role.rate}%</span></div>`).join('')}</div>`)}
       ${collapsiblePanel('statsPlayers', 'Рейтинг гравців', 'Автоматична частина системи FIIM/MWT: 1,3 бала за перемогу, 0,3 за поразку, 0 за нічию; +0,5/+0,7 за Кращий хід 2/3 або 3/3; −0,8 за дискваліфікацію через 4-й фол. КР — сума балів останніх 100 ігор, поділена на 100.', leaderboard.length ? `<div class="list player-ranking-list">${leaderboard.map(row => `<div class="list-row player-ranking-row"><div class="player-ranking-person"><b class="ranking-place" aria-label="Ранг ${row.rank}">#${row.rank}</b>${avatar(row.player, 'small')}<div class="list-main"><b>${esc(row.player.name)}</b><span>${row.games} ігор · ${row.winRate}% перемог · КР ${formatRatingCoefficient(row.coefficient)}</span></div></div><div class="ranking-score"><b>${formatRatingPoints(row.points)}</b><span>балів</span></div></div>`).join('')}</div><a class="ranking-method-link" href="https://fiim.world/scoring" target="_blank" rel="noopener noreferrer">Методика FIIM/MWT ↗</a>` : statePanel('empty', 'Рейтинг ще порожній', 'Завершіть першу гру, щоб побачити результати.'))}
     </div>
-    ${collapsiblePanel('statsArchiveGames', 'Спільний архів ігор', 'Протоколи, чати та анонімні оцінки синхронізуються між пристроями. Розподіл відповідей відкривається після трьох оцінок.', games.length ? `<div class="list archive-games-list">${games.map(game => `<article class="archive-game-entry">${gameRow(game)}${archiveGameFeedbackHtml(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${discussionButtonForGame(game, 'small secondary')}${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div></article>`).join('')}</div>` : statePanel('empty', 'Архів ігор порожній', 'Завершені ігри з’являться тут автоматично.'))}
+    ${collapsiblePanel('statsArchiveGames', 'Спільний архів ігор', 'Протоколи, чати та анонімні оцінки синхронізуються між пристроями. Архів також враховує вибраний період; розподіл відповідей відкривається після трьох оцінок.', games.length ? `<div class="list archive-games-list">${games.map(game => `<article class="archive-game-entry">${gameRow(game)}${archiveGameFeedbackHtml(game)}<div class="actions archive-game-actions"><button class="btn small secondary" data-action="view-protocol" data-id="${game.id}">Протокол</button>${discussionButtonForGame(game, 'small secondary')}${canManageGame(game) ? `<button class="btn small danger" data-action="delete-game" data-id="${game.id}">Видалити</button>` : ''}</div></article>`).join('')}</div>` : statePanel('empty', 'За цей період ігор немає', 'Оберіть довший період або завершіть нову гру.'))}
   </main>`;
 }
 
@@ -2198,7 +2289,7 @@ function confirmModalHtml() {
 }
 
 function gameSettingsModalHtml() {
-  const settings = app.game.settings;
+  const settings = { ...app.game.settings, ...(app.modal.settingsDraft || {}) };
   const labels = {
     speech: 'Промова, сек', tieSpeech: 'Попіл, сек', lastWord: 'Останнє слово, сек',
     nightCheck: 'Нічна дія, сек', mafiaMeet: 'Знайомство мафії, сек',
@@ -2558,15 +2649,109 @@ function modalHtml() {
   return '';
 }
 
+const RENDER_FOCUS_ATTRIBUTES = Object.freeze([
+  'id', 'name', 'data-input', 'data-action', 'data-draft', 'data-draft-setting',
+  'data-seat-name', 'data-seat-profile', 'data-id', 'data-seat', 'data-panel',
+  'data-value', 'data-music-cue', 'data-theme-choice', 'data-language'
+]);
+
+function modalRenderKey(modal = app.modal) {
+  if (!modal?.type) return '';
+  const identity = modal.chatId || modal.gameId || modal.playerId || modal.player?.id || modal.seat || '';
+  return `${modal.type}:${identity || 'current'}`;
+}
+
+function renderFocusSelector(element) {
+  if (!(element instanceof Element)) return '';
+  const attributes = RENDER_FOCUS_ATTRIBUTES
+    .filter(attribute => element.hasAttribute(attribute))
+    .map(attribute => `[${attribute}="${String(element.getAttribute(attribute)).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`)
+    .join('');
+  return attributes ? `${element.localName}${attributes}` : '';
+}
+
+function captureRenderUiState(nextModalKey) {
+  const sameRoute = renderedRoute === app.route;
+  const sameModal = renderedModalKey === nextModalKey;
+  const activeElement = document.activeElement;
+  const activeRoot = modalRoot.contains(activeElement) ? 'modal' : appRoot.contains(activeElement) ? 'app' : '';
+  const canRestoreFocus = activeRoot === 'modal' ? sameModal && Boolean(nextModalKey) : activeRoot === 'app' ? sameRoute && !nextModalKey : false;
+  const focusedControl = canRestoreFocus ? {
+    root: activeRoot,
+    selector: renderFocusSelector(activeElement),
+    value: 'value' in activeElement ? activeElement.value : undefined,
+    checked: 'checked' in activeElement ? activeElement.checked : undefined,
+    selectionStart: typeof activeElement.selectionStart === 'number' ? activeElement.selectionStart : null,
+    selectionEnd: typeof activeElement.selectionEnd === 'number' ? activeElement.selectionEnd : null
+  } : null;
+  const dialog = sameModal && nextModalKey ? modalRoot.querySelector('.modal') : null;
+  const chatMessages = sameModal && nextModalKey ? modalRoot.querySelector('[data-chat-messages]') : null;
+  return {
+    sameRoute,
+    sameModal,
+    pageX: sameRoute ? window.scrollX : 0,
+    pageY: sameRoute ? window.scrollY : 0,
+    dialogScrollLeft: dialog?.scrollLeft || 0,
+    dialogScrollTop: dialog?.scrollTop || 0,
+    chatScroll: chatMessages ? {
+      top: chatMessages.scrollTop,
+      nearBottom: chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 48
+    } : null,
+    focusedControl
+  };
+}
+
+function restoreRenderUiState(state, revision, nextModalKey) {
+  const activeDialog = modalRoot.querySelector('.modal');
+  if (activeDialog) {
+    if (!activeDialog.hasAttribute('tabindex')) activeDialog.setAttribute('tabindex', '-1');
+    if (state.sameModal) {
+      activeDialog.scrollLeft = state.dialogScrollLeft;
+      activeDialog.scrollTop = state.dialogScrollTop;
+    } else {
+      activeDialog.scrollTop = 0;
+    }
+  }
+
+  const focusState = state.focusedControl;
+  const focusRoot = focusState?.root === 'modal' ? modalRoot : appRoot;
+  const focusTarget = focusState?.selector ? focusRoot.querySelector(focusState.selector) : null;
+  if (focusTarget) {
+    if (focusState.value !== undefined && 'value' in focusTarget) focusTarget.value = focusState.value;
+    if (focusState.checked !== undefined && 'checked' in focusTarget) focusTarget.checked = focusState.checked;
+    focusTarget.focus({ preventScroll: true });
+    if (focusState.selectionStart !== null && typeof focusTarget.setSelectionRange === 'function') {
+      focusTarget.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);
+    }
+  } else if (activeDialog && (!state.sameModal || !focusState?.selector)) {
+    activeDialog.focus({ preventScroll: true });
+  }
+
+  if (activeDialog && state.sameModal) activeDialog.scrollTop = state.dialogScrollTop;
+  requestAnimationFrame(() => {
+    if (revision !== renderRevision) return;
+    if (state.sameRoute) window.scrollTo({ left: state.pageX, top: state.pageY, behavior: 'instant' });
+    const messages = modalRoot.querySelector('[data-chat-messages]');
+    if (!messages || modalRenderKey() !== nextModalKey) return;
+    if (!state.sameModal || !state.chatScroll?.nearBottom) {
+      messages.scrollTop = state.sameModal && state.chatScroll ? state.chatScroll.top : messages.scrollHeight;
+    } else {
+      messages.scrollTop = messages.scrollHeight;
+    }
+  });
+}
+
 function render() {
-  const restoreChatComposerFocus = app.modal?.type === 'game-chat'
-    && document.activeElement?.dataset.input === 'game-chat-message';
+  passiveRenderPending = false;
+  const revision = ++renderRevision;
   if (app.route !== 'observer') syncObserverTimer();
   if (!app.authReady) {
     appRoot.innerHTML = authLoadingView();
     modalRoot.innerHTML = '';
     localizeDom(appRoot, app.settings.language);
     appRoot.setAttribute('aria-busy', 'true');
+    renderedRoute = app.route;
+    renderedModalKey = '';
     return;
   }
   if (!app.authConfigured) {
@@ -2574,6 +2759,8 @@ function render() {
     modalRoot.innerHTML = '';
     localizeDom(appRoot, app.settings.language);
     appRoot.setAttribute('aria-busy', 'false');
+    renderedRoute = app.route;
+    renderedModalKey = '';
     return;
   }
   if (!app.authUser) {
@@ -2581,10 +2768,14 @@ function render() {
     modalRoot.innerHTML = '';
     localizeDom(appRoot, app.settings.language);
     appRoot.setAttribute('aria-busy', 'false');
+    renderedRoute = app.route;
+    renderedModalKey = '';
     return;
   }
   showIncomingHostTransfer();
   showPlayerLinkOffer();
+  const nextModalKey = modalRenderKey();
+  const uiState = captureRenderUiState(nextModalKey);
   const observer = app.route === 'observer' || Boolean(app.game?.publicOnly) || (app.route === 'game' && !canManageGame(app.game));
   let content = '';
   if (app.route === 'home') content = homeView();
@@ -2598,25 +2789,12 @@ function render() {
   modalRoot.innerHTML = modalHtml();
   localizeDom(appRoot, app.settings.language);
   localizeDom(modalRoot, app.settings.language);
-  const activeDialog = modalRoot.querySelector('.modal');
-  if (activeDialog) {
-    if (!activeDialog.hasAttribute('tabindex')) activeDialog.setAttribute('tabindex', '-1');
-    activeDialog.scrollTop = 0;
-    if (restoreChatComposerFocus) {
-      const composer = modalRoot.querySelector('[data-input="game-chat-message"]');
-      composer?.focus({ preventScroll: true });
-      composer?.setSelectionRange(app.chatDraft.length, app.chatDraft.length);
-    } else {
-      activeDialog.focus({ preventScroll: true });
-    }
-  }
+  restoreRenderUiState(uiState, revision, nextModalKey);
+  renderedRoute = app.route;
+  renderedModalKey = nextModalKey;
   appRoot.setAttribute('aria-busy', 'false');
   syncObserverTimer();
   if (['game', 'reveal'].includes(app.route)) requestAnimationFrame(requestGameWakeLock);
-  if (app.modal?.type === 'game-chat') requestAnimationFrame(() => {
-    const messages = modalRoot.querySelector('[data-chat-messages]');
-    if (messages) messages.scrollTop = messages.scrollHeight;
-  });
   queueAutomaticMusicSync();
 }
 
@@ -3366,6 +3544,18 @@ function captureHostProfileDraft() {
   };
 }
 
+function captureGameSettingsDraft() {
+  const form = document.querySelector('[data-form="game-settings"]');
+  if (!form || app.modal?.type !== 'game-settings') return;
+  const data = new FormData(form);
+  app.modal.settingsDraft = {
+    ...(app.modal.settingsDraft || {}),
+    ...Object.fromEntries(['speech', 'tieSpeech', 'lastWord', 'nightCheck', 'mafiaMeet', 'sheriffMark', 'freeSeating', 'bestMove']
+      .map(key => [key, Math.max(5, Math.min(180, Number(data.get(key)) || DEFAULT_SETTINGS[key]))])),
+    penaltyMode: data.get('penaltyMode') === 'club' ? 'club' : 'tournament'
+  };
+}
+
 async function savePlayer(form) {
   const data = new FormData(form);
   const name = String(data.get('name') || '').trim();
@@ -3764,7 +3954,16 @@ function renderPassiveCloudUpdate() {
     && app.game
     && !app.game.publicOnly
     && canManageGame(app.game);
-  if (!hostingOwnGame) render();
+  if (hostingOwnGame) return;
+  const activeElement = document.activeElement;
+  const editing = activeElement instanceof Element
+    && (activeElement.matches('input, textarea, select, [contenteditable="true"]') || activeElement.isContentEditable)
+    && (appRoot.contains(activeElement) || modalRoot.contains(activeElement));
+  if (editing) {
+    passiveRenderPending = true;
+    return;
+  }
+  render();
 }
 
 async function publishFinishedGame(game) {
@@ -5037,7 +5236,7 @@ async function handleAction(action, element, sourceEvent) {
       toast(error?.message || 'Не вдалося прийняти ведення');
     }
   } else if (action === 'game-settings') {
-    app.modal = { type: 'game-settings' }; render();
+    app.modal = { type: 'game-settings', settingsDraft: { ...app.game.settings } }; render();
   } else if (action === 'toggle-draft-music') {
     if (!app.draft) return;
     app.draft.settings.music = normalizeGameMusicSettings(app.draft.settings.music);
@@ -5047,6 +5246,16 @@ async function handleAction(action, element, sourceEvent) {
     await previewSetupMusic(element.dataset.musicCue);
   } else if (action === 'pause-setup-music') {
     if (app.media.playing && app.media.cue === element.dataset.musicCue) pauseMusic();
+  } else if (action === 'choose-setup-music-file') {
+    const cue = element.dataset.musicCue;
+    if (!GAME_MUSIC_CUES.some(item => item.id === cue)) return;
+    document.querySelector(`[data-input="setup-music-file"][data-music-cue="${cue}"]`)?.click();
+  } else if (action === 'set-stats-period') {
+    const period = element.dataset.statsPeriod;
+    if (!['all', '30d', '90d', '365d'].includes(period) || app.statsPeriod === period) return;
+    app.statsPeriod = period;
+    render();
+    requestAnimationFrame(() => document.querySelector(`[data-stats-period="${period}"]`)?.focus());
   } else if (action === 'toggle-panel') {
     const panel = element.dataset.panel;
     if (Object.hasOwn(app.panelExpanded, panel)) {
@@ -5396,6 +5605,10 @@ async function handleInput(element) {
       seat.autoGuestName = false;
     }
   }
+  const formType = element.closest?.('[data-form]')?.dataset.form;
+  if (formType === 'host-profile') captureHostProfileDraft();
+  else if (formType === 'player') captureManualPlayerDraft();
+  else if (formType === 'game-settings') captureGameSettingsDraft();
 }
 
 async function handleChange(element) {
@@ -5435,6 +5648,7 @@ async function handleChange(element) {
   } else if (['avatar-camera', 'avatar-gallery'].includes(element.dataset.input) && element.files?.[0]) {
     try {
       toast(element.dataset.input === 'avatar-camera' ? 'Обробляю знімок…' : 'Обробляю фото…');
+      captureManualPlayerDraft();
       app.modal.player.avatar = await compressImage(element.files[0]);
       app.modal.player.avatarPreset = '';
       render();
@@ -5456,6 +5670,10 @@ async function handleChange(element) {
   } else if (element.dataset.input === 'setup-music-file' && element.files?.[0] && app.draft) {
     setupMusicFile(element.dataset.musicCue, element.files[0]);
   }
+  const formType = element.closest?.('[data-form]')?.dataset.form;
+  if (formType === 'host-profile') captureHostProfileDraft();
+  else if (formType === 'player') captureManualPlayerDraft();
+  else if (formType === 'game-settings') captureGameSettingsDraft();
 }
 
 async function checkLegacyMigration() {
@@ -5589,8 +5807,13 @@ async function loadAppData() {
   app.chatBusy = false;
   app.game = null;
   app.draft = null;
-  app.settings = { ...DEFAULT_SETTINGS, ...(await getSetting('appSettings', {})) };
-  app.settings.music = normalizeGameMusicSettings(app.settings.music);
+  const storedSettings = await getSetting('appSettings', {});
+  app.settings = { ...DEFAULT_SETTINGS, ...storedSettings };
+  app.settings.music = migrateGameMusicSettings(app.settings.music, storedSettings.musicDefaultsVersion);
+  app.settings.musicDefaultsVersion = GAME_MUSIC_DEFAULTS_VERSION;
+  if (Number(storedSettings.musicDefaultsVersion || 0) < GAME_MUSIC_DEFAULTS_VERSION) {
+    await setSetting('appSettings', app.settings);
+  }
   app.settings.theme = applyTheme(app.settings.theme);
   app.settings.language = applyLanguage(app.settings.language);
   app.nextGameQueue = normalizeLineup(await getSetting('nextGameQueue', []));
@@ -5657,6 +5880,17 @@ document.addEventListener('click', async event => {
 
 document.addEventListener('input', event => handleInput(event.target));
 document.addEventListener('change', event => handleChange(event.target));
+document.addEventListener('focusout', () => {
+  if (!passiveRenderPending) return;
+  setTimeout(() => {
+    if (!passiveRenderPending) return;
+    const activeElement = document.activeElement;
+    const stillEditing = activeElement instanceof Element
+      && (activeElement.matches('input, textarea, select, [contenteditable="true"]') || activeElement.isContentEditable)
+      && (appRoot.contains(activeElement) || modalRoot.contains(activeElement));
+    if (!stillEditing) renderPassiveCloudUpdate();
+  }, 0);
+});
 document.addEventListener('focusin', event => {
   if (event.target.dataset.input === 'venue-search' && app.draft && !app.draft.venuePickerOpen) {
     app.draft.venuePickerOpen = true;

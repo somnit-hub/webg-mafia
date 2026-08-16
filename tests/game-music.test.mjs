@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BUILTIN_GAME_TRACKS, DEFAULT_GAME_MUSIC, GAME_MUSIC_CUES, builtinGameTrack,
-  customMusicChoice, musicCueForGame, normalizeGameMusicSettings
+  BUILTIN_GAME_TRACKS, DEFAULT_GAME_MUSIC, GAME_MUSIC_CUES, GAME_MUSIC_DEFAULTS_VERSION, builtinGameTrack,
+  customMusicChoice, migrateGameMusicSettings, musicCueForGame, normalizeGameMusicSettings
 } from '../src/game-music.js';
 
 test('built-in music catalog exposes four local MP3 tracks', () => {
@@ -18,6 +18,8 @@ test('built-in music catalog exposes four local MP3 tracks', () => {
 });
 
 test('music settings normalize invalid values and preserve valid custom choices', () => {
+  assert.equal(DEFAULT_GAME_MUSIC.nightActions, 'mafia-ambient');
+  assert.equal(DEFAULT_GAME_MUSIC.nightResult, 'mafia-ambient');
   assert.deepEqual(normalizeGameMusicSettings(), DEFAULT_GAME_MUSIC);
   assert.deepEqual(normalizeGameMusicSettings({
     enabled: 1,
@@ -33,6 +35,13 @@ test('music settings normalize invalid values and preserve valid custom choices'
     nightResult: DEFAULT_GAME_MUSIC.nightResult
   });
   assert.equal(customMusicChoice('unknown'), '');
+});
+
+test('legacy night-action default migrates to Mafia atmosphere without replacing a custom choice', () => {
+  assert.equal(GAME_MUSIC_DEFAULTS_VERSION, 2);
+  assert.equal(migrateGameMusicSettings({ nightActions: 'pink-panther-night' }, 0).nightActions, 'mafia-ambient');
+  assert.equal(migrateGameMusicSettings({ nightActions: 'mafia-2-theme' }, 0).nightActions, 'mafia-2-theme');
+  assert.equal(migrateGameMusicSettings({ nightActions: 'pink-panther-night' }, 2).nightActions, 'pink-panther-night');
 });
 
 test('game phases map to the intended automatic music cue', () => {

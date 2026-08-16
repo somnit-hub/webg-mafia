@@ -48,9 +48,11 @@ export const DEFAULT_GAME_MUSIC = Object.freeze({
   enabled: false,
   roleDeal: 'mafia-2-theme',
   zeroNight: 'night-intro',
-  nightActions: 'pink-panther-night',
+  nightActions: 'mafia-ambient',
   nightResult: 'mafia-ambient'
 });
+
+export const GAME_MUSIC_DEFAULTS_VERSION = 2;
 
 const TRACK_IDS = new Set(BUILTIN_GAME_TRACKS.map(track => track.id));
 const CUE_IDS = new Set(GAME_MUSIC_CUES.map(cue => cue.id));
@@ -67,6 +69,14 @@ export function normalizeGameMusicSettings(value = {}) {
     normalized[cue.id] = TRACK_IDS.has(choice) || choice === customMusicChoice(cue.id)
       ? choice
       : DEFAULT_GAME_MUSIC[cue.id];
+  }
+  return normalized;
+}
+
+export function migrateGameMusicSettings(value = {}, storedVersion = 0) {
+  const normalized = normalizeGameMusicSettings(value);
+  if (Number(storedVersion) < GAME_MUSIC_DEFAULTS_VERSION && normalized.nightActions === 'pink-panther-night') {
+    normalized.nightActions = DEFAULT_GAME_MUSIC.nightActions;
   }
   return normalized;
 }

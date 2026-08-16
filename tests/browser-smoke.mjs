@@ -648,7 +648,7 @@ const settingsAboutExpanded = await evaluate(`(() => {
     expanded: panel?.querySelector('[data-action="toggle-panel"]')?.getAttribute('aria-expanded'),
     hidden: content?.hidden,
     paragraphs: content?.querySelectorAll('p').length,
-    version: text.includes('PWA v192'),
+    version: text.includes('PWA v193'),
     cache: text.includes('кешуються оболонка застосунку'),
     session: text.includes('Google-сесія'),
     profiles: text.includes('Профілі'),
@@ -2030,7 +2030,7 @@ verify(enjoyInfo.descriptionAbsent && enjoyInfo.instagramIcon && enjoyInfo.mapsI
 verify(manualJsonTransferAbsent, 'manual JSON import and export controls removed');
 verify(settingsTechnicalTermsAbsent, 'technical storage terms absent from settings');
 verify(rulesLinks.count === 2 && rulesLinks.ukrainian?.includes('imafia.org/game-rules') && rulesLinks.international?.includes('fiim.world/fiim-rules') && rulesLinks.externalSafety && rulesLinks.arrowsAbsent, 'rules links');
-verify(settingsAboutDefault.last && settingsAboutDefault.expanded === 'false' && settingsAboutDefault.hidden && settingsAboutDefault.helpAbsent && settingsAboutExpanded.expanded === 'true' && !settingsAboutExpanded.hidden && settingsAboutExpanded.paragraphs === 2 && settingsAboutExpanded.version && settingsAboutExpanded.cache && settingsAboutExpanded.session && settingsAboutExpanded.profiles && settingsAboutExpanded.archives && settingsAboutExpanded.githubAbsent, 'collapsible About app section is last, has no help icon, and exposes PWA v192 storage details');
+verify(settingsAboutDefault.last && settingsAboutDefault.expanded === 'false' && settingsAboutDefault.hidden && settingsAboutDefault.helpAbsent && settingsAboutExpanded.expanded === 'true' && !settingsAboutExpanded.hidden && settingsAboutExpanded.paragraphs === 2 && settingsAboutExpanded.version && settingsAboutExpanded.cache && settingsAboutExpanded.session && settingsAboutExpanded.profiles && settingsAboutExpanded.archives && settingsAboutExpanded.githubAbsent, 'collapsible About app section is last, has no help icon, and exposes PWA v193 storage details');
 verify(compactHelp.count >= 8 && compactHelp.visiblePageDescriptions === 0 && compactHelp.visibleSectionDescriptions === 0 && compactHelp.visibleFieldHints === 0 && compactHelp.circular && helpPopover.visible && helpPopover.role === 'tooltip' && helpPopover.text.includes('Спільнота') && helpPopover.insideViewport, 'compact help tooltips');
 verify(accountDeletion.trashIconOnly && accountDeletion.trashButtonSize >= 40 && accountDeletion.dialog && accountDeletion.title === 'Видалити профіль Mafia?' && accountDeletion.retentionCopyAbsent && accountDeletion.confirm === 'Видалити профіль' && accountDeletion.focused && accountDeletion.scrollTop === 0 && accountDeletion.top >= 6 && accountDeletion.top <= 8 && accountDeletion.left === 6 && accountDeletion.rightGap === 6 && accountDeletion.bottomWithinViewport && accountDeletion.backdropAlign === 'start' && accountDeletion.bordered, 'account deletion controls');
 verify(Object.values(unifiedModalFrames).length === 14 && Object.values(unifiedModalFrames).every(isUnifiedModal), 'unified mobile modal frames');

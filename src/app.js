@@ -46,7 +46,7 @@ import { selectHostTransferCandidates, sortDirectoryPlayers } from './player-dir
 import {
   GAME_EMOTIONS, loadGameFeedbackBatch, loadGameFeedbackSummaryBatch, personalPlayerStats, saveGameFeedback
 } from './game-feedback.js';
-import { mafiaPlayerRankings } from './player-ranking.js';
+import { canonicalRankingGames, mafiaPlayerRankings } from './player-ranking.js';
 import { buildGameStatistics, filterGamesByPeriod, gameActivityComparison } from './game-statistics.js';
 import {
   createCommunityVenueFields, deleteCommunityVenue, isCommunityVenueAdmin,
@@ -149,7 +149,7 @@ const BUILTIN_ENJOY_VENUE = Object.freeze({
 
 const THEMES = ['dark', 'light', 'cafe'];
 const THEME_COLORS = { dark: '#0d0c0b', light: '#e9e2d6', cafe: '#1a100b' };
-const PWA_VERSION = 192;
+const PWA_VERSION = 193;
 const ANDROID_BLUETOOTH_SETTINGS_URL = 'intent:#Intent;action=android.settings.BLUETOOTH_SETTINGS;end';
 const CLIENT_PLATFORM = /Android/i.test(navigator.userAgent)
   ? 'android'
@@ -1636,7 +1636,7 @@ function draftSeatLabel(seat) {
 }
 
 function sharedLeaderboard(games) {
-  return mafiaPlayerRankings(games, playerById);
+  return mafiaPlayerRankings(canonicalRankingGames(games, app.cloudGames), playerById);
 }
 
 function statisticsPeriodPicker() {

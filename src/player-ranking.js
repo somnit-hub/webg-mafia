@@ -26,6 +26,16 @@ function playerKey(seat = {}) {
   return `guest:${String(seat.name || '').trim().toLocaleLowerCase('uk')}`;
 }
 
+export function canonicalRankingGames(games = [], sharedGames = []) {
+  const sharedFinishedById = new Map((Array.isArray(sharedGames) ? sharedGames : [])
+    .filter(game => game?.id && game.status === 'finished')
+    .map(game => [String(game.id), game]));
+  return (Array.isArray(games) ? games : []).map(game => {
+    if (game?.status !== 'finished' || !game.id) return game;
+    return sharedFinishedById.get(String(game.id)) || game;
+  });
+}
+
 function structuredBestMove(game = {}) {
   const seat = Number(game.bestMove?.seat);
   const selected = Array.isArray(game.bestMove?.selected)

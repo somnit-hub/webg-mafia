@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bestMoveScore, FIIM_RATING_RULES, mafiaGamePoints, mafiaPlayerRankings } from '../src/player-ranking.js';
+import {
+  bestMoveScore, canonicalRankingGames, FIIM_RATING_RULES, mafiaGamePoints, mafiaPlayerRankings
+} from '../src/player-ranking.js';
 
 function game({ id = 'game', winner = 'red', endedAt = '2026-08-16T20:00:00.000Z', bestMove, history = [], seats } = {}) {
   return { id, status: 'finished', winner, endedAt, bestMove, history, seats };
@@ -66,4 +68,21 @@ test('performance coefficient ignores games older than the latest 100', () => {
   const [ranking] = mafiaPlayerRankings(games);
   assert.equal(ranking.games, 101);
   assert.equal(ranking.coefficient, 1.3);
+});
+
+test('ranking prefers the canonical shared protocol over a stale local guest copy', () => {
+  const local = game({
+    id: 'merged-game',
+    seats: [{ number: 1, profileId: 'deleted-guest', name: 'Гість', role: 'citizen', eliminatedReason: '' }]
+  });
+  const shared = game({
+    id: 'merged-game',
+    seats: [{ number: 1, profileId: 'google-user', name: 'Гість', role: 'citizen', eliminatedReason: '' }]
+  });
+  const canonical = canonicalRankingGames([local], [shared]);
+  const ranking = mafiaPlayerRankings(canonical, id => ({ id, name: id === 'google-user' ? 'Авторизований' : 'Видалений гість' }));
+
+  assert.equal(canonical[0], shared);
+  assert.deepEqual(ranking.map(row => row.player.id), ['google-user']);
+  assert.equal(ranking[0].games, 1);
 });
